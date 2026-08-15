@@ -36,8 +36,9 @@ instrumented development harness, but it is not the product boundary.
 - Bounded classic and cross-reference-stream PDF revisions with object-stream
   resolution, invisible signature fields, fixed byte ranges, repeat-signing
   support, and qpdf compatibility checks
-- One-shot PAdES-B-B orchestration that binds the exact card certificate,
-  signed attributes, verified card signature, and prepared PDF revision
+- One-shot PAdES-B-B orchestration plus an owned post-card capability that binds
+  the exact card certificate, signed attributes, verified signature, and
+  prepared PDF revision
 - Independent OpenSSL, qpdf, and Poppler validation for synthetic RSA-3072 and
   P-384 end-to-end PAdES output, including signed-byte tamper rejection
 - Bounded canonical RFC 3161 request/response binding with an explicitly
@@ -58,6 +59,9 @@ instrumented development harness, but it is not the product boundary.
 - Bounded live TSA, AIA, OCSP, and CRL transport with public-address and
   redirect policy, exact response limits, injected time/randomness, and
   verify-before-use RFC 3161 trust promotion
+- Injected synchronous PAdES-B-LTA completion in the fixed signature-timestamp,
+  validation, DSS, and archive-timestamp order, with exact digest checks and
+  clearing of all intermediate owners
 - Debug-only terse PDF choose/save/PIN2 harness; release stays hidden until the
   trust configuration, retry policy, and off-main signing orchestration are wired
 - Secure, debug-only on-device signing harness; no manual harness in release

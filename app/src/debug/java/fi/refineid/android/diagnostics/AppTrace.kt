@@ -16,6 +16,8 @@ import fi.refineid.android.core.NativePin2PreflightResult
 import fi.refineid.android.core.NativeQualifiedCertificate
 import fi.refineid.android.core.NativeQualifiedSignResult
 import fi.refineid.android.core.QualifiedSigningAlgorithm
+import fi.refineid.android.document.QualifiedPdfArchivalResult
+import fi.refineid.android.document.QualifiedPdfArchivalStage
 import fi.refineid.android.document.QualifiedPdfSigningResult
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
@@ -308,6 +310,35 @@ internal object AppTrace {
             }
         debug(
             "qualified-pdf:signing-completed " + outcome +
+                " duration-us=" + elapsedMicroseconds(startedAt),
+        )
+    }
+
+    fun qualifiedPdfArchivalStarted(): Long =
+        System.nanoTime().also {
+            debug("qualified-pdf:archival-started")
+        }
+
+    fun qualifiedPdfArchivalStage(stage: QualifiedPdfArchivalStage) {
+        debug("qualified-pdf:archival-stage stage=" + stage)
+    }
+
+    fun qualifiedPdfArchivalCompleted(
+        startedAt: Long,
+        result: QualifiedPdfArchivalResult,
+    ) {
+        val outcome =
+            when (result) {
+                is QualifiedPdfArchivalResult.Success -> {
+                    "success document-length=" + result.document.length
+                }
+
+                is QualifiedPdfArchivalResult.Failure -> {
+                    "failure kind=" + result.kind
+                }
+            }
+        debug(
+            "qualified-pdf:archival-completed " + outcome +
                 " duration-us=" + elapsedMicroseconds(startedAt),
         )
     }

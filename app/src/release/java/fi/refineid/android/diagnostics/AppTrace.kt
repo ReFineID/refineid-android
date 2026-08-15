@@ -15,6 +15,8 @@ import fi.refineid.android.core.NativePin2PreflightResult
 import fi.refineid.android.core.NativeQualifiedCertificate
 import fi.refineid.android.core.NativeQualifiedSignResult
 import fi.refineid.android.core.QualifiedSigningAlgorithm
+import fi.refineid.android.document.QualifiedPdfArchivalResult
+import fi.refineid.android.document.QualifiedPdfArchivalStage
 import fi.refineid.android.document.QualifiedPdfSigningResult
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
@@ -122,6 +124,15 @@ internal object AppTrace {
     fun qualifiedPdfSigningCompleted(
         startedAt: Long,
         result: QualifiedPdfSigningResult,
+    ) = Unit
+
+    fun qualifiedPdfArchivalStarted(): Long = 0L
+
+    fun qualifiedPdfArchivalStage(stage: QualifiedPdfArchivalStage) = Unit
+
+    fun qualifiedPdfArchivalCompleted(
+        startedAt: Long,
+        result: QualifiedPdfArchivalResult,
     ) = Unit
 
     fun authenticationSignatureVerificationCompleted(
