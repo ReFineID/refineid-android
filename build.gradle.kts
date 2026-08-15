@@ -31,12 +31,17 @@ spotless {
 }
 
 val rustCrateDirectory = layout.projectDirectory.dir("native/refineid-android-core")
+val aospProviderContractVerifier = "Scripts/verify-aosp-provider-contract.sh"
+val aospProviderContractPatch =
+    "platform/aosp/android-13.0.0_r31/patches/packages-apps-KeyChain/" +
+        "0005-Bind-statically-trusted-external-key-provider.patch"
 val repositoryShellScripts =
     listOf(
         "Scripts/apply-aosp-patches.sh",
         "Scripts/build-aosp-flame.sh",
         "Scripts/stamp-version.sh",
         "Scripts/stage-aosp-prebuilt.sh",
+        aospProviderContractVerifier,
     )
 
 val rustFormatCheck =
@@ -73,6 +78,22 @@ val shellCheck =
         commandLine("shellcheck", "--shell=bash", *repositoryShellScripts.toTypedArray())
     }
 
+val verifyAospProviderContract =
+    tasks.register<Exec>("verifyAospProviderContract") {
+        group = "verification"
+        description = "Verify the application and AOSP private provider wire contract."
+        inputs.files(
+            aospProviderContractVerifier,
+            "app/src/main/aidl/com/android/keychain/external/ExternalKeyProviderIdentity.aidl",
+            "app/src/main/aidl/com/android/keychain/external/ExternalKeyProviderResult.aidl",
+            "app/src/main/aidl/com/android/keychain/external/IExternalKeyProviderService.aidl",
+            "app/src/main/java/com/android/keychain/external/ExternalKeyProviderIdentity.java",
+            "app/src/main/java/com/android/keychain/external/ExternalKeyProviderResult.java",
+            aospProviderContractPatch,
+        )
+        commandLine(aospProviderContractVerifier)
+    }
+
 tasks.named("check") {
-    dependsOn(":app:check", rustClippy, shellCheck)
+    dependsOn(":app:check", rustClippy, shellCheck, verifyAospProviderContract)
 }

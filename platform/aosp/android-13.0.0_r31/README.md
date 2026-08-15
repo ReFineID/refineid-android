@@ -78,6 +78,9 @@ repository.
   Android-runtime validation on the physical Pixel covers the opaque Binder
   token and provider parcelables, including sender-side byte clearing for
   returned values, using synthetic data only.
+- Release staging proves that the independently compiled application and
+  KeyChain copies of the private AIDL and parcelable wire contract remain
+  identical, allowing only their required SDK annotation dialect difference.
 - The app-side service and backend pass Kotlin unit tests and nine synthetic
   Binder, Compose UI, and manifest tests on the physical Pixel. The tests cover
   stale generations, card-session replacement, removal suppression, caller

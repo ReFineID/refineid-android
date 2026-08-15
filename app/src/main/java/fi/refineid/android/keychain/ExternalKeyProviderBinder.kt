@@ -271,19 +271,19 @@ internal class ExternalKeyProviderBinder(
 
     private fun Int.toAuthenticationSigningAlgorithm(): AuthenticationSigningAlgorithm? =
         when (this) {
-            SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256 -> {
+            IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256 -> {
                 AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256
             }
 
-            SIGNATURE_ALGORITHM_RSA_PSS_SHA256 -> {
+            IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PSS_SHA256 -> {
                 AuthenticationSigningAlgorithm.RSA_PSS_SHA256
             }
 
-            SIGNATURE_ALGORITHM_ECDSA_P384_SHA256 -> {
+            IExternalKeyProviderService.SIGNATURE_ALGORITHM_ECDSA_P384_SHA256 -> {
                 AuthenticationSigningAlgorithm.ECDSA_P384_SHA256
             }
 
-            SIGNATURE_ALGORITHM_ECDSA_P384_SHA384 -> {
+            IExternalKeyProviderService.SIGNATURE_ALGORITHM_ECDSA_P384_SHA384 -> {
                 AuthenticationSigningAlgorithm.ECDSA_P384_SHA384
             }
 
@@ -297,10 +297,6 @@ internal class ExternalKeyProviderBinder(
     ): ExternalKeyProviderResult = ExternalKeyProviderResult.failure(failure)
 
     private companion object {
-        const val SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256 = 1
-        const val SIGNATURE_ALGORITHM_RSA_PSS_SHA256 = 2
-        const val SIGNATURE_ALGORITHM_ECDSA_P384_SHA256 = 3
-        const val SIGNATURE_ALGORITHM_ECDSA_P384_SHA384 = 4
         const val CLEARED_BYTE: Byte = 0
     }
 }

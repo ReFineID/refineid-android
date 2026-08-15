@@ -151,6 +151,13 @@ package names. The provider accepts such fields only from the statically bound
 KeyChain service after independently enforcing the binding permission and
 KeyChain's system UID; an ordinary process cannot submit caller attribution.
 
+The private AIDL interface owns the provider algorithm vocabulary. KeyChain
+maps each framework signature algorithm to its named provider counterpart
+instead of forwarding an assumed integer value. Release staging also compares
+the independently compiled AIDL and parcelable wire implementations, allowing
+only the Android platform versus AndroidX annotation dialect required by their
+two build environments.
+
 The liveness token is not caller identity and grants no authority. The
 ReFineID service links to its death while an operation or secure prompt is
 pending, allowing browser-process death to cancel and clear that work without

@@ -24,6 +24,10 @@ import com.android.keychain.external.ExternalKeyProviderResult;
 @PermissionManuallyEnforced
 interface IExternalKeyProviderService {
     const int PROTOCOL_VERSION = 1;
+    const int SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256 = 1;
+    const int SIGNATURE_ALGORITHM_RSA_PSS_SHA256 = 2;
+    const int SIGNATURE_ALGORITHM_ECDSA_P384_SHA256 = 3;
+    const int SIGNATURE_ALGORITHM_ECDSA_P384_SHA384 = 4;
 
     int getProtocolVersion();
 

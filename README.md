@@ -127,8 +127,9 @@ no signing key or signed platform artifact belongs in this repository.
 
 The `check` task treats Kotlin compiler and Android Lint warnings as errors,
 runs Detekt and ktlint, tests and lints the Rust bridge with rustfmt and Clippy,
-runs ShellCheck, builds the minimized release APK, and verifies that release
-bytecode contains no logging calls or diagnostic trace literals.
+runs ShellCheck, proves that the application and AOSP provider wire contracts
+match, builds the minimized release APK, and verifies that release bytecode
+contains no logging calls or diagnostic trace literals.
 
 ## Security
 

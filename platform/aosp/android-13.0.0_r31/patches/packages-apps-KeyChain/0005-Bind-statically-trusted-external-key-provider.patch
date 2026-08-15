@@ -6,7 +6,7 @@ Subject: [PATCH 5/5] Bind statically trusted external key provider
 ---
  Android.bp                                    |   5 +-
  AndroidManifest.xml                           |   6 +
- .../keychain/BoundExternalKeyProvider.java    | 222 +++++++++
+ .../keychain/BoundExternalKeyProvider.java    | 239 +++++++++
  src/com/android/keychain/KeyChainService.java |   2 +-
  .../TrustedExternalKeyProviderConnection.java | 342 +++++++++++++
  .../external/ExternalKeyProviderContract.java |  35 ++
@@ -14,11 +14,11 @@ Subject: [PATCH 5/5] Bind statically trusted external key provider
  .../external/ExternalKeyProviderIdentity.java | 207 ++++++++
  .../external/ExternalKeyProviderResult.aidl   |  19 +
  .../external/ExternalKeyProviderResult.java   | 230 +++++++++
- .../external/IExternalKeyProviderService.aidl |  42 ++
- .../BoundExternalKeyProviderTest.java         | 452 ++++++++++++++++++
+ .../external/IExternalKeyProviderService.aidl |  46 ++
+ .../BoundExternalKeyProviderTest.java         | 489 +++++++++++++++++++
  .../ExternalKeyProviderParcelTest.java        | 230 +++++++++
  .../tests/BasicKeyChainServiceTest.java       |  12 +-
- 14 files changed, 1819 insertions(+), 4 deletions(-)
+ 14 files changed, 1877 insertions(+), 4 deletions(-)
  create mode 100644 src/com/android/keychain/BoundExternalKeyProvider.java
  create mode 100644 src/com/android/keychain/TrustedExternalKeyProviderConnection.java
  create mode 100644 src/com/android/keychain/external/ExternalKeyProviderContract.java
@@ -72,7 +72,7 @@ new file mode 100644
 index 0000000..f263f02
 --- /dev/null
 +++ b/src/com/android/keychain/BoundExternalKeyProvider.java
-@@ -0,0 +1,222 @@
+@@ -0,0 +1,239 @@
 +/*
 + * Copyright (C) 2026 The Android Open Source Project
 + *
@@ -186,7 +186,7 @@ index 0000000..f263f02
 +                            caller.copyPackageNames(),
 +                            request.getExternalAlias(),
 +                            request.getProviderGeneration(),
-+                            request.getAlgorithm(),
++                            toProviderAlgorithm(request.getAlgorithm()),
 +                            digest,
 +                            request.getOperationToken());
 +            if (providerResult == null) {
@@ -255,6 +255,23 @@ index 0000000..f263f02
 +        }
 +        synchronized (this) {
 +            return mClosed ? null : service;
++        }
++    }
++
++    @VisibleForTesting
++    static int toProviderAlgorithm(
++            @KeyChainExternalSignatureRequest.SignatureAlgorithm int algorithm) {
++        switch (algorithm) {
++            case KeyChainExternalSignatureRequest.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256:
++                return IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256;
++            case KeyChainExternalSignatureRequest.SIGNATURE_ALGORITHM_RSA_PSS_SHA256:
++                return IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PSS_SHA256;
++            case KeyChainExternalSignatureRequest.SIGNATURE_ALGORITHM_ECDSA_P384_SHA256:
++                return IExternalKeyProviderService.SIGNATURE_ALGORITHM_ECDSA_P384_SHA256;
++            case KeyChainExternalSignatureRequest.SIGNATURE_ALGORITHM_ECDSA_P384_SHA384:
++                return IExternalKeyProviderService.SIGNATURE_ALGORITHM_ECDSA_P384_SHA384;
++            default:
++                throw new IllegalArgumentException("Unknown external signature algorithm");
 +        }
 +    }
 +
@@ -1201,7 +1218,7 @@ new file mode 100644
 index 0000000..c011f58
 --- /dev/null
 +++ b/src/com/android/keychain/external/IExternalKeyProviderService.aidl
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,46 @@
 +/*
 + * Copyright (C) 2026 The Android Open Source Project
 + *
@@ -1228,6 +1245,10 @@ index 0000000..c011f58
 +@PermissionManuallyEnforced
 +interface IExternalKeyProviderService {
 +    const int PROTOCOL_VERSION = 1;
++    const int SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256 = 1;
++    const int SIGNATURE_ALGORITHM_RSA_PSS_SHA256 = 2;
++    const int SIGNATURE_ALGORITHM_ECDSA_P384_SHA256 = 3;
++    const int SIGNATURE_ALGORITHM_ECDSA_P384_SHA384 = 4;
 +
 +    int getProtocolVersion();
 +
@@ -1249,7 +1270,7 @@ new file mode 100644
 index 0000000..542db4d
 --- /dev/null
 +++ b/tests/src/com/android/keychain/BoundExternalKeyProviderTest.java
-@@ -0,0 +1,452 @@
+@@ -0,0 +1,489 @@
 +/*
 + * Copyright (C) 2026 The Android Open Source Project
 + *
@@ -1269,6 +1290,7 @@ index 0000000..542db4d
 +package com.android.keychain;
 +
 +import static com.google.common.truth.Truth.assertThat;
++import static org.junit.Assert.assertThrows;
 +
 +import android.content.pm.ApplicationInfo;
 +import android.content.pm.PackageManager;
@@ -1309,6 +1331,28 @@ index 0000000..542db4d
 +    private static final int SINGLE_CLOSE_CALL = 1;
 +    private static final int PROVIDER_FAILURE_INDEX = 0;
 +    private static final int KEYCHAIN_FAILURE_INDEX = 1;
++    private static final int FRAMEWORK_ALGORITHM_INDEX = 0;
++    private static final int PROVIDER_ALGORITHM_INDEX = 1;
++    private static final int UNKNOWN_SIGNATURE_ALGORITHM = Integer.MAX_VALUE;
++
++    private static final int[][] ALGORITHM_MAPPINGS = {
++        {
++            KeyChainExternalSignatureRequest.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256,
++            IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256
++        },
++        {
++            KeyChainExternalSignatureRequest.SIGNATURE_ALGORITHM_RSA_PSS_SHA256,
++            IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PSS_SHA256
++        },
++        {
++            KeyChainExternalSignatureRequest.SIGNATURE_ALGORITHM_ECDSA_P384_SHA256,
++            IExternalKeyProviderService.SIGNATURE_ALGORITHM_ECDSA_P384_SHA256
++        },
++        {
++            KeyChainExternalSignatureRequest.SIGNATURE_ALGORITHM_ECDSA_P384_SHA384,
++            IExternalKeyProviderService.SIGNATURE_ALGORITHM_ECDSA_P384_SHA384
++        }
++    };
 +
 +    private static final int[][] FAILURE_MAPPINGS = {
 +        {
@@ -1381,7 +1425,8 @@ index 0000000..542db4d
 +            assertThat(service.mObservedGeneration).isEqualTo(SYNTHETIC_PROVIDER_GENERATION);
 +            assertThat(service.mObservedAlgorithm)
 +                    .isEqualTo(
-+                            KeyChainExternalSignatureRequest.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256);
++                            IExternalKeyProviderService
++                                    .SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256);
 +            assertThat(service.mObservedDigest).isEqualTo(digest);
 +            assertThat(service.mObservedOperationToken).isEqualTo(request.getOperationToken());
 +        } finally {
@@ -1391,6 +1436,19 @@ index 0000000..542db4d
 +            provider.close();
 +        }
 +        assertThat(connection.mCloseCallCount).isEqualTo(SINGLE_CLOSE_CALL);
++    }
++
++    @Test
++    public void everyFrameworkAlgorithmMapsToTheNamedProviderAlgorithm() {
++        for (int[] mapping : ALGORITHM_MAPPINGS) {
++            assertThat(
++                            BoundExternalKeyProvider.toProviderAlgorithm(
++                                    mapping[FRAMEWORK_ALGORITHM_INDEX]))
++                    .isEqualTo(mapping[PROVIDER_ALGORITHM_INDEX]);
++        }
++        assertThrows(
++                IllegalArgumentException.class,
++                () -> BoundExternalKeyProvider.toProviderAlgorithm(UNKNOWN_SIGNATURE_ALGORITHM));
 +    }
 +
 +    @Test
@@ -1977,4 +2035,3 @@ index 22a5a71..8808394 100644
      @Test
 -- 
 2.50.1 (Apple Git-155)
-

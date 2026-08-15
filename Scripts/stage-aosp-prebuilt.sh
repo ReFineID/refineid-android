@@ -17,6 +17,7 @@ readonly PROVIDER_INTERFACE_ACTION='android:name="com.android.keychain.external.
 readonly BACKGROUND_ACTIVITY_PERMISSION='android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"'
 readonly INTERNET_PERMISSION="android.permission.INTERNET"
 
+Scripts/verify-aosp-provider-contract.sh
 ./gradlew :app:verifyReleaseNoLogging
 
 [[ -f "$RELEASE_APK" ]] || {

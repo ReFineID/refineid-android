@@ -39,7 +39,7 @@ class ExternalKeyProviderBinderInstrumentedTest {
                 arrayOf(SYNTHETIC_CALLER_HELPER_PACKAGE, SYNTHETIC_CALLER_PACKAGE),
                 ExternalKeyAlias.AUTHENTICATION.wireValue,
                 SYNTHETIC_PROVIDER_GENERATION,
-                PLATFORM_ALGORITHM_RSA_PKCS1_SHA256,
+                IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256,
                 digest,
                 Binder(),
             )
@@ -62,19 +62,19 @@ class ExternalKeyProviderBinderInstrumentedTest {
         val cases =
             listOf(
                 AlgorithmCase(
-                    PLATFORM_ALGORITHM_RSA_PKCS1_SHA256,
+                    IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256,
                     AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
                 ),
                 AlgorithmCase(
-                    PLATFORM_ALGORITHM_RSA_PSS_SHA256,
+                    IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PSS_SHA256,
                     AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
                 ),
                 AlgorithmCase(
-                    PLATFORM_ALGORITHM_ECDSA_P384_SHA256,
+                    IExternalKeyProviderService.SIGNATURE_ALGORITHM_ECDSA_P384_SHA256,
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
                 ),
                 AlgorithmCase(
-                    PLATFORM_ALGORITHM_ECDSA_P384_SHA384,
+                    IExternalKeyProviderService.SIGNATURE_ALGORITHM_ECDSA_P384_SHA384,
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
                 ),
             )
@@ -106,7 +106,7 @@ class ExternalKeyProviderBinderInstrumentedTest {
                     arrayOf(SYNTHETIC_CALLER_PACKAGE),
                     ExternalKeyAlias.AUTHENTICATION.wireValue,
                     SYNTHETIC_PROVIDER_GENERATION,
-                    PLATFORM_ALGORITHM_RSA_PKCS1_SHA256,
+                    IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256,
                     digest,
                     Binder(),
                 )
@@ -131,7 +131,7 @@ class ExternalKeyProviderBinderInstrumentedTest {
                 arrayOf(SYNTHETIC_CALLER_PACKAGE),
                 UNKNOWN_ALIAS,
                 SYNTHETIC_PROVIDER_GENERATION,
-                PLATFORM_ALGORITHM_RSA_PKCS1_SHA256,
+                IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256,
                 malformedDigest,
                 Binder(),
             )
@@ -158,7 +158,7 @@ class ExternalKeyProviderBinderInstrumentedTest {
                 arrayOf(SYNTHETIC_CALLER_PACKAGE),
                 ExternalKeyAlias.AUTHENTICATION.wireValue,
                 SYNTHETIC_PROVIDER_GENERATION,
-                PLATFORM_ALGORITHM_RSA_PKCS1_SHA256,
+                IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256,
                 cancelledDigest,
                 Binder(),
             )
@@ -190,7 +190,7 @@ class ExternalKeyProviderBinderInstrumentedTest {
                 arrayOf(SYNTHETIC_CALLER_PACKAGE),
                 ExternalKeyAlias.AUTHENTICATION.wireValue,
                 SYNTHETIC_PROVIDER_GENERATION,
-                PLATFORM_ALGORITHM_RSA_PKCS1_SHA256,
+                IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA256,
                 digest,
                 Binder(),
             )
@@ -279,10 +279,6 @@ class ExternalKeyProviderBinderInstrumentedTest {
     )
 
     private companion object {
-        const val PLATFORM_ALGORITHM_RSA_PKCS1_SHA256 = 1
-        const val PLATFORM_ALGORITHM_RSA_PSS_SHA256 = 2
-        const val PLATFORM_ALGORITHM_ECDSA_P384_SHA256 = 3
-        const val PLATFORM_ALGORITHM_ECDSA_P384_SHA384 = 4
         const val SYNTHETIC_CALLER_UID = 10_001
         const val SYNTHETIC_CALLER_PACKAGE = "com.example.browser"
         const val SYNTHETIC_CALLER_HELPER_PACKAGE = "com.example.browser.helper"
