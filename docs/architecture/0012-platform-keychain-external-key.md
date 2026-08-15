@@ -205,7 +205,9 @@ different salts and therefore do not match the lease key.
 ## Consent and security invariants
 
 - Alias selection uses the existing KeyChain chooser or an explicit
-  credential-management policy. A browser never self-grants an alias.
+  credential-management policy. The stable external alias remains provider
+  owned and is never deleted as policy-managed key material. A browser never
+  self-grants an alias.
 - Every new card operation requires fresh holder PIN1 entry. PIN values are
   neither cached nor sent through KeyChain or the browser process.
 - The secure prompt identifies the requesting application. The JCA boundary

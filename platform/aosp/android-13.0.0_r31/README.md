@@ -56,10 +56,11 @@ repository.
   fall-through, one-shot requests, generic failures, and non-exportability.
   The same JCA routing paths pass in Android's runtime on the physical Pixel 4
   with a synthetic signing operation; no reader or card command is involved.
-- Twelve service-manager tests cover certificate validation, defensive copies,
-  alias publication, generation and algorithm rejection, interrupted and
-  closed requests, caller attribution, provider failures, output shape,
-  removal, and sanitized string forms. An isolated Android-runtime harness on
+- Thirteen service-manager tests cover certificate validation, defensive
+  copies, alias publication, credential-policy ownership, generation and
+  algorithm rejection, interrupted and closed requests, caller attribution,
+  provider failures, output shape, removal, and sanitized string forms. An
+  isolated Android-runtime harness on
   the physical Pixel accepts synthetic RSA and P-384 identities, rejects
   P-256, and exercises descriptor/signing/generation paths without a reader or
   card command.
