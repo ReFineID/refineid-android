@@ -231,9 +231,16 @@ the next one depends on it:
    cancellation, detach, wrong-card generation, process death, and the matrix
    limitations above.
 
-The initial implementation targets the connected Pixel 4. A full AOSP build
-requires a separate build volume or remote builder; it is not attempted in
-the application repository's current local disk budget.
+The initial implementation targets the connected Pixel 4 build
+`TP1A.221005.002.B2`, based on AOSP tag `android-13.0.0_r31`. Reproducible
+patches live under `platform/aosp/android-13.0.0_r31`.
+
+A full Android 13 platform build requires a 64-bit Linux builder. AOSP builds
+for Android 11 and newer are unsupported on macOS, and Google's current
+[workstation guidance](https://source.android.com/docs/setup/start/requirements)
+budgets at least 400 GB of free space. The Mac remains useful for isolated
+source, AIDL, Java, application, and physical-device validation, but it is not
+the platform image builder.
 
 ## Rejected alternatives
 
