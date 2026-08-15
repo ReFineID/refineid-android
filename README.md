@@ -30,6 +30,8 @@ instrumented development harness, but it is not the product boundary.
 - Mandatory local verification against the retained authentication certificate
 - One-shot PIN2 VERIFY and SHA-384 qualified signing for RSA-3072 and P-384,
   bound to the exact qualified certificate with mandatory local verification
+- Canonical detached PAdES CMS assembly for RSA-3072 and P-384, with strict DER
+  parsing and exact signed-attribute reconstruction
 - Secure, debug-only on-device signing harness; no manual harness in release
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session
