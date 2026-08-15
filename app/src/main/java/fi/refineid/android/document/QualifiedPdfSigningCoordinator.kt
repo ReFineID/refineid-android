@@ -24,6 +24,16 @@ internal interface QualifiedPdfCryptography {
         signature: NativeQualifiedSignature,
         signerCertificate: NativeQualifiedCertificate,
     ): ByteArray
+
+    /** Returns a fresh owned SHA-384 digest over the CMS signature value. */
+    fun signatureTimestampDigest(signature: NativeQualifiedSignature): ByteArray
+
+    fun assembleTimestamped(
+        signedAttributes: ByteArray,
+        signature: NativeQualifiedSignature,
+        signerCertificate: NativeQualifiedCertificate,
+        timestampTokens: List<VerifiedTimestampToken>,
+    ): ByteArray
 }
 
 internal object ProductionQualifiedPdfCryptography : QualifiedPdfCryptography {
@@ -46,9 +56,25 @@ internal object ProductionQualifiedPdfCryptography : QualifiedPdfCryptography {
             signature = signature,
             signerCertificate = signerCertificate,
         )
+
+    override fun signatureTimestampDigest(signature: NativeQualifiedSignature): ByteArray =
+        QualifiedDocumentCms.signatureTimestampDigest(signature)
+
+    override fun assembleTimestamped(
+        signedAttributes: ByteArray,
+        signature: NativeQualifiedSignature,
+        signerCertificate: NativeQualifiedCertificate,
+        timestampTokens: List<VerifiedTimestampToken>,
+    ): ByteArray =
+        QualifiedDocumentCms.assembleTimestamped(
+            signedAttributesSet = signedAttributes,
+            signature = signature,
+            signerCertificate = signerCertificate,
+            timestampTokens = timestampTokens,
+        )
 }
 
-/** Owns one baseline PDF-signing request from local preparation through filled CMS. */
+/** Owns one PDF-signing request through the locally verified card-signature stage. */
 internal class QualifiedPdfSigningCoordinator(
     private val cardService: QualifiedCardService,
     private val cryptography: QualifiedPdfCryptography = ProductionQualifiedPdfCryptography,
@@ -60,10 +86,19 @@ internal class QualifiedPdfSigningCoordinator(
         onResult: (QualifiedPdfSigningResult) -> Unit,
     ) {
         val startedAt = AppTrace.qualifiedPdfSigningStarted(document.size)
-        val tracedResult: (QualifiedPdfSigningResult) -> Unit = { result ->
+        prepare(document = document, claim = claim, pin2 = pin2) { preparation ->
+            val result = baselineResult(preparation)
             AppTrace.qualifiedPdfSigningCompleted(startedAt = startedAt, result = result)
             onResult(result)
         }
+    }
+
+    fun prepare(
+        document: ByteArray,
+        claim: PdfSignatureClaim,
+        pin2: Pin2Submission,
+        onResult: (QualifiedPdfPreparationResult) -> Unit,
+    ) {
         val placeholder =
             try {
                 PdfIncrementalSigner.prepare(
@@ -72,15 +107,15 @@ internal class QualifiedPdfSigningCoordinator(
                 )
             } catch (failure: PdfSigningException) {
                 pin2.close()
-                tracedResult(
-                    QualifiedPdfSigningResult.Failure(
+                onResult(
+                    QualifiedPdfPreparationResult.Failure(
                         QualifiedPdfSigningFailure.Document(failure.kind),
                     ),
                 )
                 return
             } catch (_: RuntimeException) {
                 pin2.close()
-                tracedResult(internalFailure())
+                onResult(internalPreparationFailure())
                 return
             }
         cardService.requestQualifiedCertificate { certificateResult ->
@@ -88,7 +123,7 @@ internal class QualifiedPdfSigningCoordinator(
                 result = certificateResult,
                 placeholder = placeholder,
                 pin2 = pin2,
-                onResult = tracedResult,
+                onResult = onResult,
             )
         }
     }
@@ -97,14 +132,14 @@ internal class QualifiedPdfSigningCoordinator(
         result: NativeCertificateReadResult<NativeQualifiedCertificate>,
         placeholder: PdfSignaturePlaceholder,
         pin2: Pin2Submission,
-        onResult: (QualifiedPdfSigningResult) -> Unit,
+        onResult: (QualifiedPdfPreparationResult) -> Unit,
     ) {
         when (result) {
             is NativeCertificateReadResult.Failure -> {
                 placeholder.close()
                 pin2.close()
                 onResult(
-                    QualifiedPdfSigningResult.Failure(
+                    QualifiedPdfPreparationResult.Failure(
                         QualifiedPdfSigningFailure.Certificate(result.kind),
                     ),
                 )
@@ -125,7 +160,7 @@ internal class QualifiedPdfSigningCoordinator(
         placeholder: PdfSignaturePlaceholder,
         certificate: NativeQualifiedCertificate,
         pin2: Pin2Submission,
-        onResult: (QualifiedPdfSigningResult) -> Unit,
+        onResult: (QualifiedPdfPreparationResult) -> Unit,
     ) {
         val algorithm = algorithm(certificate.keyProfile)
         if (algorithm == null) {
@@ -133,7 +168,7 @@ internal class QualifiedPdfSigningCoordinator(
             certificate.close()
             pin2.close()
             onResult(
-                QualifiedPdfSigningResult.Failure(
+                QualifiedPdfPreparationResult.Failure(
                     QualifiedPdfSigningFailure.KeyProfileUnsupported,
                 ),
             )
@@ -151,7 +186,7 @@ internal class QualifiedPdfSigningCoordinator(
                 certificate.close()
                 pin2.close()
                 onResult(
-                    QualifiedPdfSigningResult.Failure(
+                    QualifiedPdfPreparationResult.Failure(
                         QualifiedPdfSigningFailure.Cms(failure.kind),
                     ),
                 )
@@ -160,7 +195,7 @@ internal class QualifiedPdfSigningCoordinator(
                 placeholder.close()
                 certificate.close()
                 pin2.close()
-                onResult(internalFailure())
+                onResult(internalPreparationFailure())
                 return
             } finally {
                 digest.fill(ZERO_BYTE)
@@ -186,71 +221,60 @@ internal class QualifiedPdfSigningCoordinator(
         placeholder: PdfSignaturePlaceholder,
         signedAttributes: ByteArray,
         certificate: NativeQualifiedCertificate,
-        onResult: (QualifiedPdfSigningResult) -> Unit,
+        onResult: (QualifiedPdfPreparationResult) -> Unit,
     ) {
-        val completion =
-            try {
-                when (result) {
-                    is QualifiedSignResult.Failure -> {
-                        QualifiedPdfSigningResult.Failure(
-                            QualifiedPdfSigningFailure.Card(result.kind),
-                        )
-                    }
-
-                    is QualifiedSignResult.Success -> {
-                        assembled(
-                            placeholder = placeholder,
-                            signedAttributes = signedAttributes,
-                            certificate = certificate,
-                            signature = result.signature,
-                        )
-                    }
-                }
-            } finally {
+        when (result) {
+            is QualifiedSignResult.Failure -> {
                 placeholder.close()
                 signedAttributes.fill(ZERO_BYTE)
                 certificate.close()
-                if (result is QualifiedSignResult.Success) {
-                    result.signature.close()
-                }
+                onResult(
+                    QualifiedPdfPreparationResult.Failure(
+                        QualifiedPdfSigningFailure.Card(result.kind),
+                    ),
+                )
             }
-        onResult(completion)
-    }
 
-    private fun assembled(
-        placeholder: PdfSignaturePlaceholder,
-        signedAttributes: ByteArray,
-        certificate: NativeQualifiedCertificate,
-        signature: NativeQualifiedSignature,
-    ): QualifiedPdfSigningResult {
-        val cms =
-            try {
-                cryptography.assemble(
-                    signedAttributes = signedAttributes,
-                    signature = signature,
-                    signerCertificate = certificate,
+            is QualifiedSignResult.Success -> {
+                onResult(
+                    QualifiedPdfPreparationResult.Success(
+                        PreparedQualifiedPdfSignature(
+                            ownedPlaceholder = placeholder,
+                            ownedSignedAttributes = signedAttributes,
+                            ownedSignature = result.signature,
+                            ownedSignerCertificate = certificate,
+                            cryptography = cryptography,
+                        ),
+                    ),
                 )
-            } catch (failure: QualifiedDocumentCmsException) {
-                return QualifiedPdfSigningResult.Failure(
-                    QualifiedPdfSigningFailure.Cms(failure.kind),
-                )
-            } catch (_: RuntimeException) {
-                return internalFailure()
             }
-        return try {
-            QualifiedPdfSigningResult.Success(
-                SignedPdfDocument(placeholder.filledWith(cms)),
-            )
-        } catch (failure: PdfSigningException) {
-            QualifiedPdfSigningResult.Failure(
-                QualifiedPdfSigningFailure.Document(failure.kind),
-            )
-        } catch (_: RuntimeException) {
-            internalFailure()
-        } finally {
-            cms.fill(ZERO_BYTE)
         }
     }
+
+    private fun baselineResult(preparation: QualifiedPdfPreparationResult): QualifiedPdfSigningResult =
+        when (preparation) {
+            is QualifiedPdfPreparationResult.Failure -> {
+                QualifiedPdfSigningResult.Failure(preparation.kind)
+            }
+
+            is QualifiedPdfPreparationResult.Success -> {
+                try {
+                    QualifiedPdfSigningResult.Success(preparation.prepared.completeBaseline())
+                } catch (failure: QualifiedDocumentCmsException) {
+                    QualifiedPdfSigningResult.Failure(
+                        QualifiedPdfSigningFailure.Cms(failure.kind),
+                    )
+                } catch (failure: PdfSigningException) {
+                    QualifiedPdfSigningResult.Failure(
+                        QualifiedPdfSigningFailure.Document(failure.kind),
+                    )
+                } catch (_: RuntimeException) {
+                    internalFailure()
+                } finally {
+                    preparation.prepared.close()
+                }
+            }
+        }
 
     private fun algorithm(profile: NativeCardKeyProfile): QualifiedSigningAlgorithm? =
         QualifiedSigningAlgorithm.entries.firstOrNull { algorithm ->
@@ -259,6 +283,9 @@ internal class QualifiedPdfSigningCoordinator(
 
     private fun internalFailure(): QualifiedPdfSigningResult.Failure =
         QualifiedPdfSigningResult.Failure(QualifiedPdfSigningFailure.InternalError)
+
+    private fun internalPreparationFailure(): QualifiedPdfPreparationResult.Failure =
+        QualifiedPdfPreparationResult.Failure(QualifiedPdfSigningFailure.InternalError)
 
     private companion object {
         const val ZERO_BYTE: Byte = 0

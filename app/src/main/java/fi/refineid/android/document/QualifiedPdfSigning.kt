@@ -39,6 +39,18 @@ internal sealed interface QualifiedPdfSigningResult {
     ) : QualifiedPdfSigningResult
 }
 
+internal sealed interface QualifiedPdfPreparationResult {
+    class Success(
+        val prepared: PreparedQualifiedPdfSignature,
+    ) : QualifiedPdfPreparationResult {
+        override fun toString(): String = "Success(" + prepared + ")"
+    }
+
+    data class Failure(
+        val kind: QualifiedPdfSigningFailure,
+    ) : QualifiedPdfPreparationResult
+}
+
 /** Mutable signed-document bytes owned by one result and cleared when released. */
 internal class SignedPdfDocument(
     private val ownedBytes: ByteArray,

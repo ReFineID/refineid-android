@@ -214,6 +214,41 @@ class QualifiedPdfSigningCoordinatorTest {
         }
     }
 
+    @Test
+    fun preparedCardSignatureOwnsEverythingNeededForLaterTimestamping() {
+        val certificate = certificate(NativeCardKeyProfile.RSA_3072)
+        val card = FakeQualifiedCardService(NativeCertificateReadResult.Success(certificate))
+        val cryptography = FakeQualifiedPdfCryptography()
+        val pin2 = Pin2Submission.from(SYNTHETIC_PIN2)
+
+        val result = prepare(card = card, cryptography = cryptography, pin2 = pin2)
+        val prepared = (result as QualifiedPdfPreparationResult.Success).prepared
+        val timestampDigest = prepared.signatureTimestampDigest()
+        try {
+            assertTrue(prepared.documentLength > PdfTestDocuments.minimalClassic().document.size)
+            assertArrayEquals(SYNTHETIC_CERTIFICATE, prepared.copySignerCertificate())
+            assertArrayEquals(SYNTHETIC_TIMESTAMP_DIGEST, timestampDigest)
+            assertFalse(prepared.toString().contains(SYNTHETIC_CERTIFICATE.decodeToString()))
+            assertArrayEquals(SYNTHETIC_CERTIFICATE, certificate.copyDer())
+            assertArrayEquals(
+                ByteArray(QualifiedSigningAlgorithm.RSA_PKCS1_SHA384.signatureLength) {
+                    SYNTHETIC_SIGNATURE_FILL
+                },
+                checkNotNull(card.returnedSignature).copyBytes(),
+            )
+            assertSubmissionClosed(pin2)
+        } finally {
+            timestampDigest.fill(ZERO_BYTE)
+            prepared.close()
+        }
+
+        assertAllZero(cryptography.returnedAttributes)
+        assertCertificateClosed(certificate)
+        assertSignatureClosed(checkNotNull(card.returnedSignature))
+        assertThrows(IllegalStateException::class.java, prepared::copySignerCertificate)
+        assertThrows(IllegalStateException::class.java, prepared::signatureTimestampDigest)
+    }
+
     private fun sign(
         card: QualifiedCardService,
         cryptography: QualifiedPdfCryptography,
@@ -226,6 +261,26 @@ class QualifiedPdfSigningCoordinatorTest {
             cryptography = cryptography,
         ).sign(
             document = document,
+            claim = VALID_CLAIM,
+            pin2 = pin2,
+        ) { result ->
+            check(completion == null)
+            completion = result
+        }
+        return checkNotNull(completion)
+    }
+
+    private fun prepare(
+        card: QualifiedCardService,
+        cryptography: QualifiedPdfCryptography,
+        pin2: Pin2Submission,
+    ): QualifiedPdfPreparationResult {
+        var completion: QualifiedPdfPreparationResult? = null
+        QualifiedPdfSigningCoordinator(
+            cardService = card,
+            cryptography = cryptography,
+        ).prepare(
+            document = PdfTestDocuments.minimalClassic().document,
             claim = VALID_CLAIM,
             pin2 = pin2,
         ) { result ->
@@ -355,6 +410,21 @@ class QualifiedPdfSigningCoordinatorTest {
             assertEquals(signerCertificate.keyProfile, signature.algorithm.keyProfile)
             return SYNTHETIC_CMS.copyOf().also { cms -> returnedCms = cms }
         }
+
+        override fun signatureTimestampDigest(signature: NativeQualifiedSignature): ByteArray {
+            assertEquals(signature.algorithm.signatureLength, signature.length)
+            return SYNTHETIC_TIMESTAMP_DIGEST.copyOf()
+        }
+
+        override fun assembleTimestamped(
+            signedAttributes: ByteArray,
+            signature: NativeQualifiedSignature,
+            signerCertificate: NativeQualifiedCertificate,
+            timestampTokens: List<VerifiedTimestampToken>,
+        ): ByteArray {
+            assertTrue(timestampTokens.isNotEmpty())
+            return assemble(signedAttributes, signature, signerCertificate)
+        }
     }
 
     private data class SupportedProfileCase(
@@ -382,6 +452,8 @@ class QualifiedPdfSigningCoordinatorTest {
         val SYNTHETIC_CERTIFICATE = "synthetic qualified certificate".encodeToByteArray()
         val SYNTHETIC_SIGNED_ATTRIBUTES = "synthetic signed attributes".encodeToByteArray()
         val SYNTHETIC_CMS = SYNTHETIC_CMS_TEXT.encodeToByteArray()
+        val SYNTHETIC_TIMESTAMP_DIGEST =
+            ByteArray(SHA384_DIGEST_LENGTH_BYTES) { SYNTHETIC_SIGNATURE_FILL }
         val SYNTHETIC_SIGNED_DOCUMENT = SYNTHETIC_DOCUMENT_TEXT.encodeToByteArray()
         val SUPPORTED_PROFILE_CASES =
             listOf(
