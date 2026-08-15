@@ -32,8 +32,9 @@ instrumented development harness, but it is not the product boundary.
 - Exact-digest signing boundary with mandatory local verification for platform
   and Gecko-style adapters
 - AOSP KeyChain descriptor, exact-digest contract, framework JCA provider,
-  service-side grant/generation bridge, and native chooser discovery patches
-  for the exact Android 13 Pixel 4 base
+  service-side grant/generation bridge, native chooser discovery,
+  browser-liveness token, and statically trusted provider-binding patches for
+  the exact Android 13 Pixel 4 base
 - Fingerprint-pinned FINEID intermediate set, present only in debug builds
 - Live diagnostic handshake verified through Chromium's holder-PIN request
 - No embedded browser, Internet permission, or logging in the release build

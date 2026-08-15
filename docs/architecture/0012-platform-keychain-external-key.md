@@ -135,12 +135,24 @@ The request carries:
 - the KeyChain-owned external alias;
 - one closed algorithm identifier;
 - an exact-length digest; and
-- the provider generation observed when the key was obtained.
+- the provider generation observed when the key was obtained; and
+- an opaque Binder token created in the calling browser process solely to
+  observe that process's liveness.
 
 It does not carry a caller UID or package as a trusted field.
 `KeyChainService` derives the Binder caller UID, verifies the alias grant and
 active generation, resolves the installed package for holder-facing consent,
 and only then proxies to the trusted ReFineID service.
+
+The private provider call includes that KeyChain-derived UID and its resolved
+package names. The provider accepts such fields only from the statically bound
+KeyChain service after independently enforcing the binding permission and
+KeyChain's system UID; an ordinary process cannot submit caller attribution.
+
+The liveness token is not caller identity and grants no authority. The
+ReFineID service links to its death while an operation or secure prompt is
+pending, allowing browser-process death to cancel and clear that work without
+trusting any browser-supplied identity claim.
 
 The result is either a signature of the algorithm's fixed shape or a coarse
 typed failure. Transport details, card status words, certificate contents,
@@ -176,7 +188,7 @@ TLS signature.
 After one locally verified result, the ReFineID service therefore retains a
 one-result replay lease keyed by:
 
-- Binder caller UID;
+- the browser UID derived and forwarded by KeyChain;
 - alias and provider generation;
 - algorithm; and
 - exact digest.
@@ -205,8 +217,9 @@ different salts and therefore do not match the lease key.
 - Every signature is verified against the currently selected authentication
   certificate before it crosses the provider boundary.
 - Card operations remain serialized and credential APDUs remain at-most-once.
-- Binder death, detach, generation mismatch, prompt cancellation, timeout, and
-  caller interruption fail closed and clear pending state.
+- Browser-token death, provider Binder death, detach, generation mismatch,
+  prompt cancellation, timeout, and caller interruption fail closed and clear
+  pending state.
 - Debug builds record only sanitized type, length, caller, timing, and outcome
   metadata. ReFineID release builds emit no logs.
 - Platform signing keys, priv-app allowlists for a particular build, and any
@@ -223,10 +236,12 @@ the next one depends on it:
 3. Add KeyChainService external aliases, grants, certificates, provider
    generation checks, and proxy signing.
 4. Extend KeyChainActivity discovery and filtering for external identities.
-5. Add the signature permission, priv-app declaration, service binding, and
-   SELinux policy.
-6. Add the ReFineID privileged service, secure prompt coordinator, and
-   one-result replay lease over the existing digest-signing boundary.
+5. Carry browser-process liveness through the request and add the
+   signature-protected, exact-component KeyChain binding with static package,
+   privilege, UID, and signing-certificate trust checks.
+6. Add the ReFineID privileged service, system-image declarations, SELinux
+   policy, secure prompt coordinator, and one-result replay lease over the
+   existing digest-signing boundary.
 7. Run independent Chrome and Firefox client-authentication tests, including
    cancellation, detach, wrong-card generation, process death, and the matrix
    limitations above.
