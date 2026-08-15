@@ -4,14 +4,16 @@ This directory carries the ReFineID AOSP patch series for the Pixel 4 build
 `TP1A.221005.002.B2`, which maps to the AOSP tag `android-13.0.0_r31`.
 
 The series currently contains the descriptor, exact-digest contract,
-browser-process JCA, and KeyChain service-policy steps from ADR 0012. It
-preserves the existing Keystore2 grant path and adds a non-exportable external
-key plus narrowly routed signature provider. KeyChain now owns a stable
-non-personal alias, grant checks, caller-package resolution, active-generation
-checks, validated certificate snapshots, signature-shape checks, and an
-injectable provider boundary. The production boundary remains unavailable
-until the signature-protected service binding and privileged ReFineID service
-land, so this series still exposes no card key.
+browser-process JCA, KeyChain service-policy, and native chooser-discovery
+steps from ADR 0012. It preserves the existing Keystore2 grant path and adds a
+non-exportable external key plus narrowly routed signature provider. KeyChain
+now owns a stable non-personal alias, grant checks, caller-package resolution,
+active-generation checks, validated certificate snapshots, signature-shape
+checks, and an injectable provider boundary. The native chooser unions active
+external aliases with AndroidKeyStore aliases before applying its existing
+user-selectability, key-type, and issuer filters. The production boundary
+remains unavailable until the signature-protected service binding and
+privileged ReFineID service land, so this series still exposes no card key.
 
 ## Upstream bases
 
@@ -26,8 +28,8 @@ Binder transaction numbers remain unchanged.
 
 ## Current verification
 
-- Both project patch sequences pass `git apply --check` in filename order from
-  their exact upstream bases.
+- Both project patch sequences pass sequential application checks and full
+  `git am` replay in filename order from their exact upstream bases.
 - The AIDL interface generates with Build Tools 36; all new warnings are
   errors. The only suppressed error is the pre-existing Android 13
   interface-wide missing-permission-annotation warning.
@@ -50,6 +52,9 @@ Binder transaction numbers remain unchanged.
   the physical Pixel accepts synthetic RSA and P-384 identities, rejects
   P-256, and exercises descriptor/signing/generation paths without a reader or
   card command.
+- The modified native chooser and its tests compile against the Android 13
+  hidden-API framework. A host semantic harness verifies external-certificate
+  issuer and key-type filtering plus ordered, deduplicated alias merging.
 - The framework and KeyChain diffs pass Gitleaks.
 
 The patch series has not yet passed a Soong platform build. Android 11 and

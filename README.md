@@ -31,9 +31,9 @@ instrumented development harness, but it is not the product boundary.
 - Card-backed JCA provider for Chromium's RSA and P-384 authentication schemes
 - Exact-digest signing boundary with mandatory local verification for platform
   and Gecko-style adapters
-- AOSP KeyChain descriptor, exact-digest contract, framework JCA provider, and
-  service-side grant/generation bridge patches for the exact Android 13 Pixel 4
-  base
+- AOSP KeyChain descriptor, exact-digest contract, framework JCA provider,
+  service-side grant/generation bridge, and native chooser discovery patches
+  for the exact Android 13 Pixel 4 base
 - Fingerprint-pinned FINEID intermediate set, present only in debug builds
 - Live diagnostic handshake verified through Chromium's holder-PIN request
 - No embedded browser, Internet permission, or logging in the release build
