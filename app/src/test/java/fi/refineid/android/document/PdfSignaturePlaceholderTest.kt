@@ -77,6 +77,23 @@ class PdfSignaturePlaceholderTest {
     }
 
     @Test
+    fun closedPlaceholderRefusesDocumentAndDigestAccess() {
+        val fixture = fixture()
+
+        fixture.placeholder.close()
+
+        assertThrows(IllegalStateException::class.java) {
+            fixture.placeholder.copyDocument().fill(CLEARED_BYTE)
+        }
+        assertThrows(IllegalStateException::class.java) {
+            fixture.placeholder.digest().fill(CLEARED_BYTE)
+        }
+        assertThrows(IllegalStateException::class.java) {
+            fixture.placeholder.filledWith(SYNTHETIC_DER).fill(CLEARED_BYTE)
+        }
+    }
+
+    @Test
     fun malformedHoleBoundsDelimitersAndPaddingAreRefused() {
         val fixture = fixture()
         val wrongPadding = fixture.document.copyOf()
@@ -197,6 +214,7 @@ class PdfSignaturePlaceholderTest {
         const val NONZERO_HEX_DIGIT: Byte = 0x31
         const val ALTERNATE_DELIMITER: Byte = 0x5B
         const val ALTERNATE_DOCUMENT_BYTE: Byte = 0x21
+        const val CLEARED_BYTE: Byte = 0
         val FIXTURE_PREFIX = "%PDF-1.7\n/Contents ".encodeToByteArray()
         val FIXTURE_SUFFIX = "\n%%EOF\n".encodeToByteArray()
         val SYNTHETIC_DER = byteArrayOf(0x30, 0x03, 0x01, 0x01, 0xFF.toByte())

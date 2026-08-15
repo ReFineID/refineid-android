@@ -14,9 +14,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
 import java.util.Comparator
+import java.util.HexFormat
 import java.util.concurrent.TimeUnit
 
-/** PAdES-B-T validation against independently generated cryptographic material. */
+/** PAdES-B-T and B-LTA validation against independently generated cryptographic material. */
 class PadesBaselineTInteropTest {
     @Test
     fun verifiedTimestampBuildsAnIndependentlyAcceptedSignature() {
@@ -35,6 +36,146 @@ class PadesBaselineTInteropTest {
                     )
                 }
             }
+        }
+    }
+
+    @Test
+    fun verifiedDocumentTimestampCoversAppendedDss() {
+        val environment = PadesInteropEnvironment.discover()
+        assumeTrue(
+            "OpenSSL, qpdf, and pdfsig are required for the document-timestamp test",
+            environment != null,
+        )
+        checkNotNull(environment).use { tools ->
+            PadesSigningFixture.create(tools).use { signing ->
+                VerifiedTimestampAuthority.create(tools).use { authority ->
+                    validateDocumentTimestamp(
+                        environment = tools,
+                        signing = signing,
+                        authority = authority,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun validateDocumentTimestamp(
+        environment: PadesInteropEnvironment,
+        signing: PadesSigningFixture,
+        authority: VerifiedTimestampAuthority,
+    ) {
+        val signatureTimestampDigest = signing.timestampDigest()
+        try {
+            val signatureTimestamp = authority.issue(signatureTimestampDigest)
+            try {
+                val timestampedPdf = timestampedDocument(environment, signing, signatureTimestamp)
+                try {
+                    validateArchiveTimestamp(
+                        environment = environment,
+                        signing = signing,
+                        authority = authority,
+                        signatureTimestamp = signatureTimestamp,
+                        timestampedPdf = timestampedPdf,
+                    )
+                } finally {
+                    timestampedPdf.fill(ZERO_BYTE)
+                }
+            } finally {
+                signatureTimestamp.close()
+            }
+        } finally {
+            signatureTimestampDigest.fill(ZERO_BYTE)
+        }
+    }
+
+    private fun timestampedDocument(
+        environment: PadesInteropEnvironment,
+        signing: PadesSigningFixture,
+        signatureTimestamp: VerifiedTimestampToken,
+    ): ByteArray {
+        val cms = signing.assemble(listOf(signatureTimestamp))
+        return try {
+            environment.validateCms(cms)
+            signing.fill(cms)
+        } finally {
+            cms.fill(ZERO_BYTE)
+        }
+    }
+
+    private fun validateArchiveTimestamp(
+        environment: PadesInteropEnvironment,
+        signing: PadesSigningFixture,
+        authority: VerifiedTimestampAuthority,
+        signatureTimestamp: VerifiedTimestampToken,
+        timestampedPdf: ByteArray,
+    ) {
+        val material = validationMaterial(environment, signing, signatureTimestamp)
+        try {
+            val prepared = PdfArchiveTimestamp.prepare(timestampedPdf, material)
+            try {
+                completeArchiveTimestamp(environment, authority, prepared)
+            } finally {
+                prepared.close()
+            }
+        } finally {
+            material.close()
+        }
+    }
+
+    private fun completeArchiveTimestamp(
+        environment: PadesInteropEnvironment,
+        authority: VerifiedTimestampAuthority,
+        prepared: PreparedPdfArchiveTimestamp,
+    ) {
+        val archiveDigest = prepared.copyDigest()
+        try {
+            val archiveTimestamp = authority.issue(archiveDigest)
+            try {
+                authority.validate(archiveTimestamp, archiveDigest)
+                val archived = prepared.complete(archiveTimestamp)
+                try {
+                    assertArchiveInspection(archived.useBytes(environment::inspectPdf))
+                } finally {
+                    archived.close()
+                }
+            } finally {
+                archiveTimestamp.close()
+            }
+        } finally {
+            archiveDigest.fill(ZERO_BYTE)
+        }
+    }
+
+    private fun assertArchiveInspection(inspection: PadesToolResult) {
+        val validSignatures =
+            inspection.output.split(PDFSIG_VALID_SIGNATURE_REPORT).size - REPORT_SPLIT_OFFSET
+        assertTrue(inspection.exitCode in PERMITTED_PDFSIG_INSPECTION_EXIT_CODES)
+        assertTrue(validSignatures >= MINIMUM_INDEPENDENTLY_VALID_SIGNATURES)
+        assertTrue(inspection.output.contains(PDFSIG_WHOLE_DOCUMENT_REPORT))
+        assertTrue(
+            validSignatures == EXPECTED_SIGNATURE_COUNT ||
+                inspection.output.contains(PDFSIG_UNVERIFIED_SIGNATURE_REPORT),
+        )
+    }
+
+    private fun validationMaterial(
+        environment: PadesInteropEnvironment,
+        signing: PadesSigningFixture,
+        timestamp: VerifiedTimestampToken,
+    ): PdfValidationMaterial {
+        val signerCertificate = signing.copySignerCertificate()
+        return try {
+            ValidationMaterialCollector.collect(
+                request =
+                    ValidationMaterialCollectionRequest(
+                        signerCertificate = signerCertificate,
+                        timestampTokens = listOf(timestamp),
+                        signerTrustCertificates = listOf(signerCertificate),
+                    ),
+                dependencies = environment.validationDependencies(timestamp.generatedAt),
+            )
+        } finally {
+            signerCertificate.fill(ZERO_BYTE)
         }
     }
 
@@ -173,8 +314,16 @@ class PadesBaselineTInteropTest {
         const val PDFSIG_WHOLE_DOCUMENT_REPORT = "Total document signed"
         const val SIGNED_DATA_FIELDS_BEFORE_SIGNERS = 4
         const val SIGNER_INFO_FIELDS_BEFORE_UNSIGNED_ATTRIBUTES = 6
+        const val EXPECTED_SIGNATURE_COUNT = 2
+        const val MINIMUM_INDEPENDENTLY_VALID_SIGNATURES = 1
+        const val REPORT_SPLIT_OFFSET = 1
+        const val PDFSIG_SUCCESS_EXIT_CODE = 0
+        const val PDFSIG_UNVERIFIED_EXIT_CODE = 1
+        const val PDFSIG_UNVERIFIED_SIGNATURE_REPORT = "Signature has not yet been verified."
         const val DIFFERENT_TIMESTAMP_DIGEST_FILL: Byte = 0x31
         const val ZERO_BYTE: Byte = 0
+        val PERMITTED_PDFSIG_INSPECTION_EXIT_CODES =
+            setOf(PDFSIG_SUCCESS_EXIT_CODE, PDFSIG_UNVERIFIED_EXIT_CODE)
     }
 }
 
@@ -196,7 +345,10 @@ private class PadesSigningFixture private constructor(
 
     fun fill(cms: ByteArray): ByteArray = placeholder.filledWith(cms)
 
+    fun copySignerCertificate(): ByteArray = ownedCertificate.copyDer()
+
     override fun close() {
+        placeholder.close()
         ownedSignedAttributes.fill(ZERO_BYTE)
         ownedSignature.close()
         ownedCertificate.close()
@@ -271,6 +423,18 @@ private class VerifiedTimestampAuthority private constructor(
         }
     }
 
+    fun validate(
+        token: VerifiedTimestampToken,
+        digest: ByteArray,
+    ) {
+        val encoding = token.copyEncoding()
+        try {
+            environment.validateTimestampToken(encoding, digest)
+        } finally {
+            encoding.fill(ZERO_BYTE)
+        }
+    }
+
     override fun close() {
         ownedTrustedCertificate.fill(ZERO_BYTE)
     }
@@ -335,6 +499,7 @@ private class PadesInteropEnvironment private constructor(
     fun generateTimestampAuthority(): ByteArray {
         generateTimestampRoot()
         generateTimestampSigner()
+        generateTimestampRevocationList()
         convertCertificate(
             input = ROOT_CERTIFICATE_PEM_FILENAME,
             output = ROOT_CERTIFICATE_DER_FILENAME,
@@ -346,6 +511,23 @@ private class PadesInteropEnvironment private constructor(
         )
         return Files.readAllBytes(directory.resolve(ROOT_CERTIFICATE_DER_FILENAME))
     }
+
+    fun validationDependencies(currentTime: Instant): ValidationMaterialCollectorDependencies =
+        ValidationMaterialCollectorDependencies(
+            get =
+                ValidationMaterialGetter { address, resource ->
+                    if (
+                        address != TIMESTAMP_REVOCATION_LIST_ADDRESS ||
+                        resource != ValidationMaterialGetResource.REVOCATION_LIST
+                    ) {
+                        throw UnexpectedValidationIoException()
+                    }
+                    Files.readAllBytes(directory.resolve(ROOT_REVOCATION_LIST_DER_FILENAME))
+                },
+            post = ValidationMaterialPoster { _, _, _ -> throw UnexpectedValidationIoException() },
+            now = { currentTime },
+            random = ValidationSecureRandom { _ -> throw UnexpectedValidationIoException() },
+        )
 
     fun issueTimestamp(digest: ByteArray): ByteArray {
         val request = Rfc3161Timestamp.request(digest, TIMESTAMP_REQUEST_NONCE)
@@ -392,6 +574,35 @@ private class PadesInteropEnvironment private constructor(
         return runTool(
             executables.pdfsig,
             listOf(PDFSIG_NO_CERTIFICATE_ARGUMENT, TIMESTAMPED_PDF_FILENAME),
+        )
+    }
+
+    fun inspectPdf(pdf: ByteArray): PadesToolResult {
+        Files.write(directory.resolve(TIMESTAMPED_PDF_FILENAME), pdf)
+        runTool(executables.qpdf, listOf(QPDF_CHECK_ARGUMENT, TIMESTAMPED_PDF_FILENAME))
+        return executeTool(
+            executables.pdfsig,
+            listOf(PDFSIG_NO_CERTIFICATE_ARGUMENT, TIMESTAMPED_PDF_FILENAME),
+        )
+    }
+
+    fun validateTimestampToken(
+        token: ByteArray,
+        digest: ByteArray,
+    ) {
+        Files.write(directory.resolve(ARCHIVE_TIMESTAMP_TOKEN_FILENAME), token)
+        runOpenSsl(
+            listOf(
+                TIMESTAMP_COMMAND,
+                TIMESTAMP_VERIFY_ARGUMENT,
+                TIMESTAMP_TOKEN_INPUT_ARGUMENT,
+                INPUT_ARGUMENT,
+                ARCHIVE_TIMESTAMP_TOKEN_FILENAME,
+                TIMESTAMP_DIGEST_ARGUMENT,
+                HexFormat.of().formatHex(digest),
+                CERTIFICATE_AUTHORITY_FILE_ARGUMENT,
+                ROOT_CERTIFICATE_PEM_FILENAME,
+            ),
         )
     }
 
@@ -466,6 +677,39 @@ private class PadesInteropEnvironment private constructor(
         )
     }
 
+    private fun generateTimestampRevocationList() {
+        Files.createDirectories(directory.resolve(ROOT_CA_NEW_CERTIFICATES_DIRECTORY))
+        Files.writeString(directory.resolve(ROOT_CA_DATABASE_FILENAME), EMPTY_CERTIFICATE_DATABASE)
+        Files.writeString(directory.resolve(ROOT_CA_SERIAL_FILENAME), INITIAL_ROOT_CA_SERIAL)
+        Files.writeString(directory.resolve(ROOT_CRL_NUMBER_FILENAME), INITIAL_ROOT_CRL_NUMBER)
+        Files.writeString(
+            directory.resolve(ROOT_CA_CONFIGURATION_FILENAME),
+            rootCaConfiguration(),
+        )
+        runOpenSsl(
+            listOf(
+                CERTIFICATE_AUTHORITY_COMMAND,
+                GENERATE_REVOCATION_LIST_ARGUMENT,
+                CONFIGURATION_ARGUMENT,
+                ROOT_CA_CONFIGURATION_FILENAME,
+                OUTPUT_ARGUMENT,
+                ROOT_REVOCATION_LIST_PEM_FILENAME,
+                BATCH_ARGUMENT,
+            ),
+        )
+        runOpenSsl(
+            listOf(
+                REVOCATION_LIST_COMMAND,
+                INPUT_ARGUMENT,
+                ROOT_REVOCATION_LIST_PEM_FILENAME,
+                OUTPUT_FORMAT_ARGUMENT,
+                DER_OUTPUT_FORMAT,
+                OUTPUT_ARGUMENT,
+                ROOT_REVOCATION_LIST_DER_FILENAME,
+            ),
+        )
+    }
+
     private fun certificateRequestArguments(
         subject: String,
         keyFilename: String,
@@ -528,12 +772,42 @@ private class PadesInteropEnvironment private constructor(
         ess_cert_id_alg = sha256
         """.trimIndent()
 
+    private fun rootCaConfiguration(): String =
+        """
+        [ ca ]
+        default_ca = local_ca
+
+        [ local_ca ]
+        database = ${directory.resolve(ROOT_CA_DATABASE_FILENAME)}
+        new_certs_dir = ${directory.resolve(ROOT_CA_NEW_CERTIFICATES_DIRECTORY)}
+        certificate = ${directory.resolve(ROOT_CERTIFICATE_PEM_FILENAME)}
+        private_key = ${directory.resolve(ROOT_PRIVATE_KEY_FILENAME)}
+        serial = ${directory.resolve(ROOT_CA_SERIAL_FILENAME)}
+        crlnumber = ${directory.resolve(ROOT_CRL_NUMBER_FILENAME)}
+        default_md = sha384
+        default_crl_days = $ROOT_CRL_VALIDITY_DAYS
+        policy = policy_any
+        unique_subject = no
+
+        [ policy_any ]
+        commonName = supplied
+        """.trimIndent()
+
     private fun runOpenSsl(arguments: List<String>): String = runTool(executables.openssl, arguments)
 
     private fun runTool(
         executable: Path,
         arguments: List<String>,
     ): String {
+        val result = executeTool(executable, arguments)
+        assertEquals(result.output, SUCCESSFUL_PROCESS_EXIT_CODE, result.exitCode)
+        return result.output
+    }
+
+    private fun executeTool(
+        executable: Path,
+        arguments: List<String>,
+    ): PadesToolResult {
         val process =
             ProcessBuilder(listOf(executable.toString()) + arguments)
                 .directory(directory.toFile())
@@ -545,8 +819,7 @@ private class PadesInteropEnvironment private constructor(
         }
         assertTrue(executable.fileName.toString() + " timed out", completed)
         val report = process.inputStream.bufferedReader().use { reader -> reader.readText() }
-        assertEquals(report, SUCCESSFUL_PROCESS_EXIT_CODE, process.exitValue())
-        return report
+        return PadesToolResult(output = report, exitCode = process.exitValue())
     }
 
     companion object {
@@ -594,18 +867,28 @@ private class PadesInteropEnvironment private constructor(
         const val ROOT_PRIVATE_KEY_FILENAME = "root-private-key.pem"
         const val ROOT_CERTIFICATE_PEM_FILENAME = "root-certificate.pem"
         const val ROOT_CERTIFICATE_DER_FILENAME = "root-certificate.der"
+        const val ROOT_CA_CONFIGURATION_FILENAME = "root-ca.cnf"
+        const val ROOT_CA_DATABASE_FILENAME = "root-ca-index.txt"
+        const val ROOT_CA_SERIAL_FILENAME = "root-ca-serial"
+        const val ROOT_CRL_NUMBER_FILENAME = "root-crl-number"
+        const val ROOT_CA_NEW_CERTIFICATES_DIRECTORY = "root-newcerts"
+        const val ROOT_REVOCATION_LIST_PEM_FILENAME = "root.crl.pem"
+        const val ROOT_REVOCATION_LIST_DER_FILENAME = "root.crl.der"
         const val TIMESTAMP_SERIAL_FILENAME = "timestamp-serial"
         const val TIMESTAMP_CONFIGURATION_FILENAME = "timestamp.cnf"
         const val TIMESTAMP_REQUEST_FILENAME = "timestamp-request.der"
         const val TIMESTAMP_RESPONSE_FILENAME = "timestamp-response.der"
         const val TIMESTAMPED_CMS_FILENAME = "timestamped-signature.der"
         const val TIMESTAMPED_PDF_FILENAME = "timestamped.pdf"
+        const val ARCHIVE_TIMESTAMP_TOKEN_FILENAME = "archive-timestamp-token.der"
 
         const val CERTIFICATE_REQUEST_COMMAND = "req"
         const val CERTIFICATE_COMMAND = "x509"
         const val TIMESTAMP_COMMAND = "ts"
         const val CMS_COMMAND = "cms"
         const val DIGEST_COMMAND = "dgst"
+        const val CERTIFICATE_AUTHORITY_COMMAND = "ca"
+        const val REVOCATION_LIST_COMMAND = "crl"
         const val SELF_SIGNED_ARGUMENT = "-x509"
         const val NEW_ARGUMENT = "-new"
         const val NEW_KEY_ARGUMENT = "-newkey"
@@ -634,7 +917,13 @@ private class PadesInteropEnvironment private constructor(
         const val CONFIGURATION_ARGUMENT = "-config"
         const val CONFIGURATION_SECTION_ARGUMENT = "-section"
         const val TIMESTAMP_QUERY_FILE_ARGUMENT = "-queryfile"
+        const val GENERATE_REVOCATION_LIST_ARGUMENT = "-gencrl"
+        const val BATCH_ARGUMENT = "-batch"
         const val TIMESTAMP_REPLY_ARGUMENT = "-reply"
+        const val TIMESTAMP_VERIFY_ARGUMENT = "-verify"
+        const val TIMESTAMP_TOKEN_INPUT_ARGUMENT = "-token_in"
+        const val TIMESTAMP_DIGEST_ARGUMENT = "-digest"
+        const val CERTIFICATE_AUTHORITY_FILE_ARGUMENT = "-CAfile"
         const val SIGN_ARGUMENT = "-sign"
         const val CMS_OUTPUT_ARGUMENT = "-cmsout"
         const val CMS_PRINT_ARGUMENT = "-print"
@@ -645,12 +934,14 @@ private class PadesInteropEnvironment private constructor(
         const val ROOT_CERTIFICATE_SUBJECT = "/CN=ReFineID synthetic timestamp root"
         const val QUALIFIED_CERTIFICATE_SUBJECT = "/CN=ReFineID synthetic qualified PDF signer"
         const val SUBJECT_KEY_IDENTIFIER_EXTENSION = "subjectKeyIdentifier=hash"
+        const val TIMESTAMP_REVOCATION_LIST_ADDRESS = "https://tsa.example/root.crl"
         const val TIMESTAMP_CERTIFICATE_EXTENSIONS =
             "basicConstraints=critical,CA:false\n" +
                 "keyUsage=critical,digitalSignature\n" +
                 "extendedKeyUsage=critical,timeStamping\n" +
                 "subjectKeyIdentifier=hash\n" +
-                "authorityKeyIdentifier=keyid,issuer\n"
+                "authorityKeyIdentifier=keyid,issuer\n" +
+                "crlDistributionPoints=URI:$TIMESTAMP_REVOCATION_LIST_ADDRESS\n"
         const val AUTHORITY_BASIC_CONSTRAINTS = "basicConstraints=critical,CA:true"
         const val AUTHORITY_KEY_USAGE = "keyUsage=critical,keyCertSign,cRLSign"
         const val TIMESTAMP_CONFIGURATION_SECTION = "timestamp_authority"
@@ -658,6 +949,10 @@ private class PadesInteropEnvironment private constructor(
         const val TIMESTAMP_ACCEPTED_DIGESTS = "sha256, sha384, sha512"
         const val TIMESTAMP_ACCURACY_SECONDS = "1"
         const val INITIAL_TIMESTAMP_SERIAL = "01\n"
+        const val INITIAL_ROOT_CA_SERIAL = "1000\n"
+        const val INITIAL_ROOT_CRL_NUMBER = "01\n"
+        const val EMPTY_CERTIFICATE_DATABASE = ""
+        const val ROOT_CRL_VALIDITY_DAYS = "2"
         private const val TIMESTAMP_REQUEST_NONCE_TEXT = "pades-baseline-t-test-nonce"
         val TIMESTAMP_REQUEST_NONCE = TIMESTAMP_REQUEST_NONCE_TEXT.encodeToByteArray()
 
@@ -665,10 +960,17 @@ private class PadesInteropEnvironment private constructor(
         const val TOOL_TIMEOUT_SECONDS = 30L
         const val ZERO_BYTE: Byte = 0
     }
+
+    private class UnexpectedValidationIoException : Exception()
 }
 
 private data class PadesInteropExecutables(
     val openssl: Path,
     val qpdf: Path,
     val pdfsig: Path,
+)
+
+private data class PadesToolResult(
+    val output: String,
+    val exitCode: Int,
 )

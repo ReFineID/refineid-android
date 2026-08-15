@@ -51,8 +51,10 @@ instrumented development harness, but it is not the product boundary.
   OCSP responses, and complete authenticated CRLs for validation evidence
 - Bounded signer/TSA path collection with explicit anchors, AIA issuer lookup,
   OCSP-first status, full-CRL fallback, and role-preserving revocation failures
+- Authenticated DSS followed by an exact-imprint RFC 3161 document timestamp,
+  with synthetic end-to-end B-LTA checks through OpenSSL, qpdf, and Poppler
 - Debug-only terse PDF choose/save/PIN2 harness; release stays hidden until the
-  complete validation-evidence and archive stages reach PAdES-B-LTA
+  live validation and timestamp transports are wired into product orchestration
 - Secure, debug-only on-device signing harness; no manual harness in release
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session

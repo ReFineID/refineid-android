@@ -237,12 +237,16 @@ internal object PdfIncrementalSigner {
                 value = values[index],
             )
         }
-        return PdfSignaturePlaceholder(
-            document = document,
-            contentsOpen = holes.contentsOpen,
-            secondSpanStart = secondSpanStart,
-            capacity = capacity,
-        )
+        return try {
+            PdfSignaturePlaceholder(
+                document = document,
+                contentsOpen = holes.contentsOpen,
+                secondSpanStart = secondSpanStart,
+                capacity = capacity,
+            )
+        } finally {
+            document.fill(CLEARED_DOCUMENT_BYTE)
+        }
     }
 
     private fun patchDecimalField(
@@ -409,6 +413,7 @@ internal object PdfIncrementalSigner {
     private const val NEW_OBJECT_GENERATION = 0
     private const val MINIMUM_BYTE_RANGE_VALUE = 0
     private const val FIRST_DOCUMENT_OFFSET = 0
+    private const val CLEARED_DOCUMENT_BYTE: Byte = 0
     private const val FIRST_TEXT_OFFSET = 0
     private const val TEXT_OFFSET_STEP = 1
     private const val SURROGATE_PAIR_TRAIL_OFFSET = 1

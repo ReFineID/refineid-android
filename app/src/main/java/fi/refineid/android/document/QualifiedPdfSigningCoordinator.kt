@@ -101,6 +101,7 @@ internal class QualifiedPdfSigningCoordinator(
     ) {
         when (result) {
             is NativeCertificateReadResult.Failure -> {
+                placeholder.close()
                 pin2.close()
                 onResult(
                     QualifiedPdfSigningResult.Failure(
@@ -128,6 +129,7 @@ internal class QualifiedPdfSigningCoordinator(
     ) {
         val algorithm = algorithm(certificate.keyProfile)
         if (algorithm == null) {
+            placeholder.close()
             certificate.close()
             pin2.close()
             onResult(
@@ -145,6 +147,7 @@ internal class QualifiedPdfSigningCoordinator(
                     signerCertificate = certificate,
                 )
             } catch (failure: QualifiedDocumentCmsException) {
+                placeholder.close()
                 certificate.close()
                 pin2.close()
                 onResult(
@@ -154,6 +157,7 @@ internal class QualifiedPdfSigningCoordinator(
                 )
                 return
             } catch (_: RuntimeException) {
+                placeholder.close()
                 certificate.close()
                 pin2.close()
                 onResult(internalFailure())
@@ -203,6 +207,7 @@ internal class QualifiedPdfSigningCoordinator(
                     }
                 }
             } finally {
+                placeholder.close()
                 signedAttributes.fill(ZERO_BYTE)
                 certificate.close()
                 if (result is QualifiedSignResult.Success) {
