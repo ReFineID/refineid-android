@@ -490,4 +490,6 @@ internal object CertificateOids {
     const val CA_ISSUERS_ACCESS_METHOD = "1.3.6.1.5.5.7.48.2"
     const val OCSP_ACCESS_METHOD = "1.3.6.1.5.5.7.48.1"
     const val CRL_DISTRIBUTION_POINTS = "2.5.29.31"
+    const val OCSP_NONCE = "1.3.6.1.5.5.7.48.1.2"
+    const val SHA1 = "1.3.14.3.2.26"
 }
