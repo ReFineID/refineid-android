@@ -16,6 +16,7 @@ import fi.refineid.android.core.NativePin2PreflightResult
 import fi.refineid.android.core.NativeQualifiedCertificate
 import fi.refineid.android.core.NativeQualifiedSignResult
 import fi.refineid.android.core.QualifiedSigningAlgorithm
+import fi.refineid.android.document.QualifiedPdfSigningResult
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
 import fi.refineid.android.usb.AuthenticationStatus
@@ -284,6 +285,31 @@ internal object AppTrace {
 
     fun qualifiedSignatureVerificationCompleted(isVerified: Boolean) {
         debug("qualified-signature:local-verification verified=" + isVerified)
+    }
+
+    fun qualifiedPdfSigningStarted(documentLength: Int): Long =
+        System.nanoTime().also {
+            debug("qualified-pdf:signing-started document-length=" + documentLength)
+        }
+
+    fun qualifiedPdfSigningCompleted(
+        startedAt: Long,
+        result: QualifiedPdfSigningResult,
+    ) {
+        val outcome =
+            when (result) {
+                is QualifiedPdfSigningResult.Success -> {
+                    "success document-length=" + result.document.length
+                }
+
+                is QualifiedPdfSigningResult.Failure -> {
+                    "failure kind=" + result.kind
+                }
+            }
+        debug(
+            "qualified-pdf:signing-completed " + outcome +
+                " duration-us=" + elapsedMicroseconds(startedAt),
+        )
     }
 
     fun authenticationSignatureVerificationCompleted(

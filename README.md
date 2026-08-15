@@ -34,6 +34,8 @@ instrumented development harness, but it is not the product boundary.
   parsing and exact signed-attribute reconstruction
 - Bounded classic-PDF incremental revisions with invisible signature fields,
   fixed byte ranges, repeat-signing support, and qpdf compatibility checks
+- One-shot PAdES-B-B orchestration that binds the exact card certificate,
+  signed attributes, verified card signature, and prepared PDF revision
 - Secure, debug-only on-device signing harness; no manual harness in release
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session
