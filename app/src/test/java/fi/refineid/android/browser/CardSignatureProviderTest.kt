@@ -178,6 +178,14 @@ class CardSignatureProviderTest {
                     AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
                 ReFineIdCardProvider.JCA_SHA256_WITH_RSA_PSS to
                     AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+                ReFineIdCardProvider.JCA_SHA384_WITH_RSA to
+                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+                ReFineIdCardProvider.JCA_SHA384_WITH_RSA_PSS to
+                    AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+                ReFineIdCardProvider.JCA_SHA512_WITH_RSA to
+                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+                ReFineIdCardProvider.JCA_SHA512_WITH_RSA_PSS to
+                    AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
             )
         val ECDSA_CASES =
             listOf(

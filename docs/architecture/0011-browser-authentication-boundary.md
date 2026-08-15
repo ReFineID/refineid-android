@@ -43,8 +43,8 @@ The diagnostic path:
    hints;
 5. passes a non-exportable `CardBackedPrivateKey` to `ClientCertRequest`;
 6. lets Chromium select one of the exact supported JCA names:
-   `SHA256withRSA`, `SHA256withRSA/PSS`, `SHA256withECDSA`, or
-   `SHA384withECDSA`;
+   `SHA256withRSA`, `SHA384withRSA`, `SHA512withRSA`, their three `/PSS`
+   counterparts, `SHA256withECDSA`, or `SHA384withECDSA`;
 7. prompts for one holder-entered PIN1 submission only when Chromium actually
    requests a signature; and
 8. serializes card use, bounds and zeroizes the message, and consumes the PIN
@@ -66,10 +66,10 @@ alias.
 
 ## Verification
 
-- Local provider tests exercise all four Chromium algorithm names, one-shot
+- Local provider tests exercise all eight Chromium algorithm names, one-shot
   use, DER conversion, bounded input, and fall-through for ordinary software
   keys.
-- Connected Android tests exercise the same four names through the device's
+- Connected Android tests exercise the same eight names through the device's
   real `java.security.Signature` implementation and load all four
   fingerprint-pinned intermediate certificates as currently valid CAs.
 - A live USB-card run reached the diagnostic server's client-certificate

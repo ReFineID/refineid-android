@@ -31,16 +31,18 @@ preflight through the final signature response. It:
    by PSO:COMPUTE DIGITAL SIGNATURE; and
 7. returns a fixed-shape RSA or raw P-384 ECDSA signature.
 
-The Android bridge supports RSA PKCS#1 v1.5 with SHA-256, RSA-PSS with SHA-256,
-and P-384 ECDSA with SHA-256 or SHA-384. Each algorithm has one stable JNI code
-and one exact output length. The bridge admits at most a 1-MiB message and
-returns either a tagged signature or one coarse failure tag. It never returns
-a raw status word, retry count, backend exception, or credential detail from
-this operation.
+The Android bridge supports RSA PKCS#1 v1.5 and RSA-PSS with SHA-256, SHA-384,
+or SHA-512, plus P-384 ECDSA with SHA-256 or SHA-384. Each algorithm has one
+stable JNI code and one exact output length. New codes are appended without
+renumbering an existing message or prehashed request. The bridge admits at most
+a 1-MiB message and returns either a tagged signature or one coarse failure
+tag. It never returns a raw status word, retry count, backend exception, or
+credential detail from this operation.
 
 `refineid-core` revision
-`6de00bfe8eaae43e383e594ad25da637d66911a9` supplies all four typed signing
-paths. The SHA-256 P-384 path was added to the public core rather than being
+`d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e` supplies all eight signing paths
+and typed SHA-256, SHA-384, and SHA-512 digest values. Missing SHA-2 operations
+and the SHA-512 refinement were added to the public core rather than being
 reimplemented in Android.
 
 ## Credential custody
@@ -68,8 +70,9 @@ The retained USB session owns the authentication certificate and selects only
 algorithms compatible with its classified public-key profile. Android parses
 a short-lived copy of that certificate and verifies the returned signature
 with the platform cryptography provider. Raw P-384 `r || s` is strictly
-converted to DER for JCA. RSA-PSS uses SHA-256 for both the message digest and
-MGF1, a SHA-256-length salt, and the standard trailer field.
+converted to DER for JCA. RSA-PSS uses the selected SHA-2 algorithm for both
+the message digest and MGF1, a digest-length salt, and the standard trailer
+field.
 
 On a key-profile mismatch, malformed signature, provider failure, or invalid
 signature, the signature owner is cleared and only a typed failure escapes.
@@ -101,3 +104,7 @@ Android 13 device with an attached CCID reader and card. One explicit on-device
 submission produced one credential exchange, one card signature, and a
 successful platform-local verification. No identifying or credential material
 was retained as evidence.
+
+The later SHA-384 and SHA-512 RSA routes pass scripted card-transport tests,
+host cryptographic verification, and synthetic Android 13 JCA tests. They are
+not yet recorded as live card-signature validation.

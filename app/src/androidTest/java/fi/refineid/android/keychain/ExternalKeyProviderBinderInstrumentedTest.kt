@@ -77,6 +77,22 @@ class ExternalKeyProviderBinderInstrumentedTest {
                     IExternalKeyProviderService.SIGNATURE_ALGORITHM_ECDSA_P384_SHA384,
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
                 ),
+                AlgorithmCase(
+                    IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA384,
+                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+                ),
+                AlgorithmCase(
+                    IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PSS_SHA384,
+                    AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+                ),
+                AlgorithmCase(
+                    IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA512,
+                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+                ),
+                AlgorithmCase(
+                    IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PSS_SHA512,
+                    AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
+                ),
             )
         cases.forEach { case ->
             val backend = RecordingBackend()
@@ -251,6 +267,10 @@ class ExternalKeyProviderBinderInstrumentedTest {
                                 when (request.algorithm) {
                                     AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
                                     AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+                                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+                                    AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+                                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+                                    AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
                                     -> SYNTHETIC_RSA_SIGNATURE.copyOf()
 
                                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,

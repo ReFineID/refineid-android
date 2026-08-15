@@ -5,14 +5,16 @@ import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.interfaces.RSAPublicKey
 
-/** RFC 8017 EMSA-PSS verification when the caller already owns the SHA-256 digest. */
+/** RFC 8017 EMSA-PSS verification when the caller already owns a SHA-2 digest. */
 internal object RsaPssPrehashedVerifier {
     fun verify(
         publicKey: PublicKey,
+        digestAlgorithm: AuthenticationDigest,
         digest: ByteArray,
         signature: ByteArray,
     ): Boolean {
-        if (digest.size != SHA256_DIGEST_LENGTH_BYTES) {
+        val digestLength = digestAlgorithm.length
+        if (digest.size != digestLength) {
             return false
         }
         val rsaPublicKey = publicKey as? RSAPublicKey ?: return false
@@ -24,7 +26,7 @@ internal object RsaPssPrehashedVerifier {
         val encodedMessageLength = byteLength(encodedMessageBitLength)
         if (
             encodedMessageLength <
-            SHA256_DIGEST_LENGTH_BYTES + PSS_SALT_LENGTH_BYTES + PSS_FIXED_LENGTH_BYTES
+            digestLength + digestLength + PSS_FIXED_LENGTH_BYTES
         ) {
             return false
         }
@@ -43,6 +45,7 @@ internal object RsaPssPrehashedVerifier {
         return verifyEncodedMessage(
             encodedMessage = encodedMessage,
             encodedMessageBitLength = encodedMessageBitLength,
+            digestAlgorithm = digestAlgorithm,
             digest = digest,
         )
     }
@@ -50,11 +53,14 @@ internal object RsaPssPrehashedVerifier {
     private fun verifyEncodedMessage(
         encodedMessage: ByteArray,
         encodedMessageBitLength: Int,
+        digestAlgorithm: AuthenticationDigest,
         digest: ByteArray,
     ): Boolean {
+        val digestLength = digestAlgorithm.length
+        val saltLength = digestLength
         val encodedMessageLength = encodedMessage.size
         val maskedDataBlockLength =
-            encodedMessageLength - SHA256_DIGEST_LENGTH_BYTES - PSS_TRAILER_LENGTH_BYTES
+            encodedMessageLength - digestLength - PSS_TRAILER_LENGTH_BYTES
         val hashOffset = maskedDataBlockLength
         val trailerOffset = encodedMessage.lastIndex
         if (encodedMessage[trailerOffset] != PSS_TRAILER_FIELD) {
@@ -67,7 +73,7 @@ internal object RsaPssPrehashedVerifier {
         val hash =
             encodedMessage.copyOfRange(
                 hashOffset,
-                hashOffset + SHA256_DIGEST_LENGTH_BYTES,
+                hashOffset + digestLength,
             )
         encodedMessage.fill(ZERO_BYTE)
         val unusedBitCount = encodedMessageLength * Byte.SIZE_BITS - encodedMessageBitLength
@@ -77,7 +83,12 @@ internal object RsaPssPrehashedVerifier {
             return false
         }
 
-        val dataBlockMask = maskGenerationFunction(hash, maskedDataBlockLength)
+        val dataBlockMask =
+            maskGenerationFunction(
+                seed = hash,
+                outputLength = maskedDataBlockLength,
+                digestAlgorithm = digestAlgorithm,
+            )
         val dataBlock =
             ByteArray(maskedDataBlockLength) { index ->
                 (maskedDataBlock[index].toUnsignedInt() xor dataBlockMask[index].toUnsignedInt())
@@ -89,8 +100,8 @@ internal object RsaPssPrehashedVerifier {
 
         val paddingLength =
             encodedMessageLength -
-                SHA256_DIGEST_LENGTH_BYTES -
-                PSS_SALT_LENGTH_BYTES -
+                digestLength -
+                saltLength -
                 PSS_FIXED_LENGTH_BYTES
         if (
             dataBlock.copyOfRange(FIRST_BYTE_OFFSET, paddingLength).any { it != ZERO_BYTE } ||
@@ -113,7 +124,7 @@ internal object RsaPssPrehashedVerifier {
                 )
             }
         salt.fill(ZERO_BYTE)
-        val expectedHash = MessageDigest.getInstance(SHA256_JCA_NAME).digest(hashInput)
+        val expectedHash = MessageDigest.getInstance(digestAlgorithm.jcaName).digest(hashInput)
         hashInput.fill(ZERO_BYTE)
         return try {
             MessageDigest.isEqual(hash, expectedHash)
@@ -170,9 +181,10 @@ internal object RsaPssPrehashedVerifier {
     private fun maskGenerationFunction(
         seed: ByteArray,
         outputLength: Int,
+        digestAlgorithm: AuthenticationDigest,
     ): ByteArray {
         val output = ByteArray(outputLength)
-        val digest = MessageDigest.getInstance(SHA256_JCA_NAME)
+        val digest = MessageDigest.getInstance(digestAlgorithm.jcaName)
         var outputOffset = FIRST_BYTE_OFFSET
         var counter = MGF1_INITIAL_COUNTER
         while (outputOffset < output.size) {
@@ -231,10 +243,8 @@ internal object RsaPssPrehashedVerifier {
 
     private fun Byte.toUnsignedInt(): Int = toUByte().toInt()
 
-    private const val SHA256_JCA_NAME = "SHA-256"
     private const val POSITIVE_BIG_INTEGER_SIGNUM = 1
     private const val PSS_BIT_LENGTH_REDUCTION = 1
-    private const val PSS_SALT_LENGTH_BYTES = SHA256_DIGEST_LENGTH_BYTES
     private const val PSS_TRAILER_LENGTH_BYTES = 1
     private const val PSS_DELIMITER_LENGTH_BYTES = 1
     private const val PSS_FIXED_LENGTH_BYTES =

@@ -27,6 +27,22 @@ internal class ReFineIdCardProvider : Provider(NAME, VERSION, DESCRIPTION) {
             implementation = Sha256WithRsaPssCardSignature::class.java,
         )
         register(
+            jcaName = JCA_SHA384_WITH_RSA,
+            implementation = Sha384WithRsaCardSignature::class.java,
+        )
+        register(
+            jcaName = JCA_SHA384_WITH_RSA_PSS,
+            implementation = Sha384WithRsaPssCardSignature::class.java,
+        )
+        register(
+            jcaName = JCA_SHA512_WITH_RSA,
+            implementation = Sha512WithRsaCardSignature::class.java,
+        )
+        register(
+            jcaName = JCA_SHA512_WITH_RSA_PSS,
+            implementation = Sha512WithRsaPssCardSignature::class.java,
+        )
+        register(
             jcaName = JCA_SHA256_WITH_ECDSA,
             implementation = Sha256WithEcdsaCardSignature::class.java,
         )
@@ -56,6 +72,10 @@ internal class ReFineIdCardProvider : Provider(NAME, VERSION, DESCRIPTION) {
         const val NAME = "ReFineIDCard"
         const val JCA_SHA256_WITH_RSA = "SHA256withRSA"
         const val JCA_SHA256_WITH_RSA_PSS = "SHA256withRSA/PSS"
+        const val JCA_SHA384_WITH_RSA = "SHA384withRSA"
+        const val JCA_SHA384_WITH_RSA_PSS = "SHA384withRSA/PSS"
+        const val JCA_SHA512_WITH_RSA = "SHA512withRSA"
+        const val JCA_SHA512_WITH_RSA_PSS = "SHA512withRSA/PSS"
         const val JCA_SHA256_WITH_ECDSA = "SHA256withECDSA"
         const val JCA_SHA384_WITH_ECDSA = "SHA384withECDSA"
 
@@ -88,6 +108,14 @@ internal object ReFineIdCardProviderRegistration {
 internal class Sha256WithRsaCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256)
 
 internal class Sha256WithRsaPssCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PSS_SHA256)
+
+internal class Sha384WithRsaCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384)
+
+internal class Sha384WithRsaPssCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PSS_SHA384)
+
+internal class Sha512WithRsaCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512)
+
+internal class Sha512WithRsaPssCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PSS_SHA512)
 
 internal class Sha256WithEcdsaCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.ECDSA_P384_SHA256)
 
@@ -162,6 +190,10 @@ internal abstract class CardBackedSignatureSpi(
 
                     AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
                     AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+                    AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+                    AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
                     -> signature.copyBytes()
                 }
             } finally {
@@ -205,6 +237,10 @@ internal abstract class CardBackedSignatureSpi(
         when (this) {
             AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
             AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
             -> JCA_KEY_ALGORITHM_RSA
 
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,

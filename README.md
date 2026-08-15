@@ -26,7 +26,8 @@ instrumented development harness, but it is not the product boundary.
   card directory layouts
 - Counter-safe PIN1 status and credential-reference preflight
 - Counter-safe, credential-free PIN2 status and qualified-signature policy
-- One-shot PIN1 VERIFY and RSA/P-384 authentication signing
+- One-shot PIN1 VERIFY, RSA PKCS#1/PSS authentication signing across
+  SHA-256/384/512, and P-384 authentication signing across SHA-256/384
 - Mandatory local verification against the retained authentication certificate
 - One-shot PIN2 VERIFY and SHA-384 qualified signing for RSA-3072 and P-384,
   bound to the exact qualified certificate with mandatory local verification
@@ -58,7 +59,8 @@ instrumented development harness, but it is not the product boundary.
 - Secure, debug-only on-device signing harness; no manual harness in release
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session
-- Card-backed JCA provider for Chromium's RSA and P-384 authentication schemes
+- Card-backed JCA provider for Chromium's full SHA-2 RSA and P-384
+  authentication schemes
 - Exact-digest signing boundary with mandatory local verification for platform
   and Gecko-style adapters
 - AOSP KeyChain descriptor, exact-digest contract, framework JCA provider,

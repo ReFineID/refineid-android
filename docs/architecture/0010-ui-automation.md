@@ -36,7 +36,7 @@ The suite verifies the secure field semantics, input bounds, one-shot synthetic
 submission, field clearing, disabled signing state, permission action,
 card-absence behavior, terse browser-action visibility, real application
 launch, and accessibility-tree visibility. Device-side tests also exercise the
-four browser JCA algorithms and the fingerprint-pinned issuer set through the
+eight browser JCA algorithms and the fingerprint-pinned issuer set through the
 Android runtime. An opt-in hardware journey takes a live card through public
 certificate discovery and the diagnostic TLS client-certificate request. It
 handles Android's USB permission window when a fresh test installation needs

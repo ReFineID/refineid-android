@@ -22,7 +22,7 @@
 
 use refineid_apdu::{CardTransport, TransportOutcome};
 use refineid_auth::{Pin1, PinOps, PinReferenceScheme, UnvalidatedSecret, VerifyOutcome};
-use refineid_digest::{Sha256, Sha384};
+use refineid_digest::{Sha256, Sha384, Sha512};
 use refineid_sign::{KeyRef, SignError, SignOps, SignScheme};
 
 use crate::pin1_status::{Pin1PreflightFailure, Pin1State, map_auth_error, probe_pin1_preflight};
@@ -39,6 +39,14 @@ pub(crate) enum AuthenticationSigningAlgorithm {
     EcdsaP384Sha256,
     /// ECDSA with SHA-384 and a P-384 authentication key.
     EcdsaP384Sha384,
+    /// RSASSA-PKCS1-v1_5 with SHA-384 and an RSA-3072 authentication key.
+    RsaPkcs1Sha384,
+    /// RSASSA-PSS with SHA-384 and an RSA-3072 authentication key.
+    RsaPssSha384,
+    /// RSASSA-PKCS1-v1_5 with SHA-512 and an RSA-3072 authentication key.
+    RsaPkcs1Sha512,
+    /// RSASSA-PSS with SHA-512 and an RSA-3072 authentication key.
+    RsaPssSha512,
 }
 
 /// Whether this boundary hashes a message or accepts a caller-asserted digest.
@@ -54,6 +62,10 @@ enum PreparedAuthenticationSigningInput {
     RsaPssSha256(Sha256),
     EcdsaP384Sha256(Sha256),
     EcdsaP384Sha384(Sha384),
+    RsaPkcs1Sha384(Sha384),
+    RsaPssSha384(Sha384),
+    RsaPkcs1Sha512(Sha512),
+    RsaPssSha512(Sha512),
 }
 
 /// Locally shaped signature returned by the card.
@@ -169,6 +181,18 @@ fn prepare_signing_input(
         AuthenticationSigningAlgorithm::EcdsaP384Sha384 => {
             sha384_input(input).map(PreparedAuthenticationSigningInput::EcdsaP384Sha384)
         }
+        AuthenticationSigningAlgorithm::RsaPkcs1Sha384 => {
+            sha384_input(input).map(PreparedAuthenticationSigningInput::RsaPkcs1Sha384)
+        }
+        AuthenticationSigningAlgorithm::RsaPssSha384 => {
+            sha384_input(input).map(PreparedAuthenticationSigningInput::RsaPssSha384)
+        }
+        AuthenticationSigningAlgorithm::RsaPkcs1Sha512 => {
+            sha512_input(input).map(PreparedAuthenticationSigningInput::RsaPkcs1Sha512)
+        }
+        AuthenticationSigningAlgorithm::RsaPssSha512 => {
+            sha512_input(input).map(PreparedAuthenticationSigningInput::RsaPssSha512)
+        }
     }
 }
 
@@ -192,6 +216,18 @@ fn sha384_input(
         AuthenticationSigningInput::Prehashed(digest) => digest
             .try_into()
             .map(Sha384::from_bytes)
+            .map_err(|_| AuthenticationSignFailure::Bridge),
+    }
+}
+
+fn sha512_input(
+    input: AuthenticationSigningInput<'_>,
+) -> Result<Sha512, AuthenticationSignFailure> {
+    match input {
+        AuthenticationSigningInput::Message(message) => Ok(Sha512::of(message)),
+        AuthenticationSigningInput::Prehashed(digest) => digest
+            .try_into()
+            .map(Sha512::from_bytes)
             .map_err(|_| AuthenticationSignFailure::Bridge),
     }
 }
@@ -223,6 +259,18 @@ where
             .map(|signature| signature.into_bytes()),
         PreparedAuthenticationSigningInput::EcdsaP384Sha384(digest) => transport
             .sign_prehashed_sha384_ecdsa(scheme, KeyRef::Auth, digest.into_bytes())
+            .map(|signature| signature.into_bytes()),
+        PreparedAuthenticationSigningInput::RsaPkcs1Sha384(digest) => transport
+            .sign_prehashed_sha384_rsa(scheme, KeyRef::Auth, digest.into_bytes())
+            .map(|signature| signature.into_bytes()),
+        PreparedAuthenticationSigningInput::RsaPssSha384(digest) => transport
+            .sign_prehashed_sha384_rsa_pss(scheme, KeyRef::Auth, digest.into_bytes())
+            .map(|signature| signature.into_bytes()),
+        PreparedAuthenticationSigningInput::RsaPkcs1Sha512(digest) => transport
+            .sign_prehashed_sha512_rsa(scheme, KeyRef::Auth, digest.into_bytes())
+            .map(|signature| signature.into_bytes()),
+        PreparedAuthenticationSigningInput::RsaPssSha512(digest) => transport
+            .sign_prehashed_sha512_rsa_pss(scheme, KeyRef::Auth, digest.into_bytes())
             .map(|signature| signature.into_bytes()),
     }
 }
@@ -493,6 +541,22 @@ mod tests {
             (
                 AuthenticationSigningAlgorithm::EcdsaP384Sha384,
                 ECDSA_P384_SIG_BYTES,
+            ),
+            (
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha384,
+                RSA_3072_SIG_BYTES,
+            ),
+            (
+                AuthenticationSigningAlgorithm::RsaPssSha384,
+                RSA_3072_SIG_BYTES,
+            ),
+            (
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha512,
+                RSA_3072_SIG_BYTES,
+            ),
+            (
+                AuthenticationSigningAlgorithm::RsaPssSha512,
+                RSA_3072_SIG_BYTES,
             ),
         ] {
             let safe = response(status(SAFE_RETRIES), Vec::new());

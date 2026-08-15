@@ -28,6 +28,10 @@ interface IExternalKeyProviderService {
     const int SIGNATURE_ALGORITHM_RSA_PSS_SHA256 = 2;
     const int SIGNATURE_ALGORITHM_ECDSA_P384_SHA256 = 3;
     const int SIGNATURE_ALGORITHM_ECDSA_P384_SHA384 = 4;
+    const int SIGNATURE_ALGORITHM_RSA_PKCS1_SHA384 = 5;
+    const int SIGNATURE_ALGORITHM_RSA_PSS_SHA384 = 6;
+    const int SIGNATURE_ALGORITHM_RSA_PKCS1_SHA512 = 7;
+    const int SIGNATURE_ALGORITHM_RSA_PSS_SHA512 = 8;
 
     int getProtocolVersion();
 

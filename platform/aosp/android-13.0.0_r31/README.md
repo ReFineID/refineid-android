@@ -3,9 +3,10 @@
 This directory carries the ReFineID AOSP patch series for the Pixel 4 build
 `TP1A.221005.002.B2`, which maps to the AOSP tag `android-13.0.0_r31`.
 
-The series currently contains the descriptor, exact-digest contract,
-browser-process JCA, KeyChain service-policy, native chooser-discovery,
-caller-liveness, and trusted-provider binding steps from ADR 0012. It preserves
+The series currently contains the descriptor, exact-digest contract, full
+SHA-2 RSA browser-process JCA vocabulary, KeyChain service-policy, native
+chooser-discovery, caller-liveness, and trusted-provider binding steps from
+ADR 0012. It preserves
 the existing Keystore2 grant path and adds a non-exportable external key plus a
 narrowly routed signature provider. KeyChain now owns a stable non-personal
 alias, grant checks, caller-package resolution, active-generation checks,
@@ -56,8 +57,9 @@ repository.
 - Descriptor and signature-contract parcel round trips, defensive copies,
   close behavior, algorithm mappings, coarse failures, and sanitized string
   forms pass on the physical Android 13 Pixel 4 using synthetic values only.
-- Framework-provider tests cover streaming SHA-256/SHA-384, fixed RSA-PSS,
-  strict Firefox-style `NoneWithRSA` and `NoneWithECDSA`, software-key provider
+- Framework-provider tests cover streaming SHA-256/SHA-384/SHA-512, all three
+  fixed RSA-PSS profiles, strict Firefox-style `NoneWithRSA` and
+  `NoneWithECDSA`, software-key provider
   fall-through, one-shot requests, generic failures, and non-exportability.
   The same JCA routing paths pass in Android's runtime on the physical Pixel 4
   with a synthetic signing operation; no reader or card command is involved.

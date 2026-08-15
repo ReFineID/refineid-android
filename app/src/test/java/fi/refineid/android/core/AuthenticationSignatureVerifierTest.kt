@@ -13,7 +13,7 @@ import java.security.spec.PSSParameterSpec
 
 class AuthenticationSignatureVerifierTest {
     @Test
-    fun verifiesBothRsaAuthenticationSchemesAndRejectsAnotherMessage() {
+    fun verifiesEveryRsaAuthenticationSchemeAndRejectsAnotherMessage() {
         val keyPair =
             KeyPairGenerator
                 .getInstance("RSA")
@@ -23,6 +23,10 @@ class AuthenticationSignatureVerifierTest {
         for (algorithm in listOf(
             AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
             AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
         )) {
             val signature = sign(keyPair, algorithm, MESSAGE)
             val digest = digest(algorithm, MESSAGE)
@@ -130,10 +134,14 @@ class AuthenticationSignatureVerifierTest {
                     AuthenticationSigningAlgorithm.RSA_PSS_SHA256 -> "RSASSA-PSS"
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA256 -> "SHA256withECDSA"
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> "SHA384withECDSA"
+                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384 -> "SHA384withRSA"
+                    AuthenticationSigningAlgorithm.RSA_PSS_SHA384 -> "RSASSA-PSS"
+                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512 -> "SHA512withRSA"
+                    AuthenticationSigningAlgorithm.RSA_PSS_SHA512 -> "RSASSA-PSS"
                 },
             )
-        if (algorithm == AuthenticationSigningAlgorithm.RSA_PSS_SHA256) {
-            signer.setParameter(RSA_PSS_SHA256_PARAMETERS)
+        if (algorithm.isRsaPss()) {
+            signer.setParameter(algorithm.digest.rsaPssParameters())
         }
         signer.initSign(keyPair.private)
         signer.update(message)
@@ -143,18 +151,35 @@ class AuthenticationSignatureVerifierTest {
     private fun digest(
         algorithm: AuthenticationSigningAlgorithm,
         message: ByteArray,
-    ): ByteArray =
-        MessageDigest
-            .getInstance(
-                when (algorithm) {
-                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
-                    AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
-                    AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
-                    -> "SHA-256"
+    ): ByteArray = MessageDigest.getInstance(algorithm.digest.jcaName).digest(message)
 
-                    AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> "SHA-384"
-                },
-            ).digest(message)
+    private fun AuthenticationSigningAlgorithm.isRsaPss(): Boolean =
+        when (this) {
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
+            -> true
+
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
+            AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
+            AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+            -> false
+        }
+
+    private fun AuthenticationDigest.rsaPssParameters(): PSSParameterSpec =
+        PSSParameterSpec(
+            jcaName,
+            MASK_GENERATION_FUNCTION_NAME,
+            when (this) {
+                AuthenticationDigest.SHA256 -> MGF1ParameterSpec.SHA256
+                AuthenticationDigest.SHA384 -> MGF1ParameterSpec.SHA384
+                AuthenticationDigest.SHA512 -> MGF1ParameterSpec.SHA512
+            },
+            length,
+            PSSParameterSpec.DEFAULT.trailerField,
+        )
 
     private fun derP384EcdsaToRaw(der: ByteArray): ByteArray {
         var offset = DER_INITIAL_OFFSET
@@ -248,14 +273,7 @@ class AuthenticationSignatureVerifierTest {
         val MESSAGE = "authentication request".encodeToByteArray()
         val OTHER_MESSAGE = "different request".encodeToByteArray()
 
-        val RSA_PSS_SHA256_PARAMETERS =
-            PSSParameterSpec(
-                "SHA-256",
-                "MGF1",
-                MGF1ParameterSpec.SHA256,
-                SHA256_DIGEST_LENGTH_BYTES,
-                PSSParameterSpec.DEFAULT.trailerField,
-            )
+        const val MASK_GENERATION_FUNCTION_NAME = "MGF1"
 
         const val P384_COORDINATE_LENGTH = P384_COORDINATE_LENGTH_BITS / Byte.SIZE_BITS
         const val ECDSA_COORDINATE_COUNT = 2

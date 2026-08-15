@@ -117,6 +117,10 @@ The provider implements:
 
 - `SHA256withRSA`;
 - `SHA256withRSA/PSS`;
+- `SHA384withRSA`;
+- `SHA384withRSA/PSS`;
+- `SHA512withRSA`;
+- `SHA512withRSA/PSS`;
 - `SHA256withECDSA`;
 - `SHA384withECDSA`;
 - `NONEwithRSA`, with strict parsing of a supported RSA DigestInfo; and
@@ -173,10 +177,14 @@ PIN shape, and retry-counter values do not cross into the browser process.
 | --- | --- | --- | --- |
 | Chromium `SHA256withRSA` | Complete message | SHA-256 digest, RSA PKCS#1 v1.5 | Supported |
 | Chromium `SHA256withRSA/PSS` | Complete message | SHA-256 digest, native RSA-PSS | Supported; direct JCA support prevents Chromium's raw-RSA fallback |
+| Chromium `SHA384withRSA` | Complete message | SHA-384 digest, RSA PKCS#1 v1.5 | Supported |
+| Chromium `SHA384withRSA/PSS` | Complete message | SHA-384 digest, native RSA-PSS | Supported; direct JCA support prevents Chromium's raw-RSA fallback |
+| Chromium `SHA512withRSA` | Complete message | SHA-512 digest, RSA PKCS#1 v1.5 | Supported |
+| Chromium `SHA512withRSA/PSS` | Complete message | SHA-512 digest, native RSA-PSS | Supported; direct JCA support prevents Chromium's raw-RSA fallback |
 | Chromium `SHA256withECDSA` | Complete message | SHA-256 digest, P-384 ECDSA | Supported |
 | Chromium `SHA384withECDSA` | Complete message | SHA-384 digest, P-384 ECDSA | Supported |
 | Gecko `NoneWithECDSA` | Precomputed digest | P-384 ECDSA selected by exact digest length | Supported for SHA-256 and SHA-384 |
-| Gecko `NoneWithRSA` | DER SHA-256 DigestInfo prepared by NSS | Strictly extract the SHA-256 digest, then native RSA PKCS#1 v1.5 | Supported at the provider boundary; an on-device Firefox handshake remains pending |
+| Gecko `NoneWithRSA` | DER SHA-2 DigestInfo prepared by NSS | Strictly extract a SHA-256, SHA-384, or SHA-512 digest, then native RSA PKCS#1 v1.5 | Supported at the provider boundary; an on-device Firefox handshake remains pending |
 | Gecko `raw` for RSA-PSS | Modulus-wide EMSA-PSS encoded block | No matching card operation | Unsupported in unmodified Firefox for RSA-PSS |
 
 Gecko currently implements its RSA-PSS path by performing EMSA-PSS encoding
@@ -273,17 +281,19 @@ the next one depends on it:
 1. Add hidden typed descriptors, algorithm/failure constants, and AIDL tests.
 2. Add `KeyChainExternalPrivateKey` and the external JCA provider with
    synthetic Binder tests.
-3. Add KeyChainService external aliases, grants, certificates, provider
+3. Extend the RSA vocabulary to SHA-384 and SHA-512 PKCS#1/PSS without
+   renumbering existing framework or provider codes.
+4. Add KeyChainService external aliases, grants, certificates, provider
    generation checks, and proxy signing.
-4. Extend KeyChainActivity discovery and filtering for external identities.
-5. Carry browser-process liveness through the request and add the
+5. Extend KeyChainActivity discovery and filtering for external identities.
+6. Carry browser-process liveness through the request and add the
    signature-protected, exact-component KeyChain binding with static package,
    privilege, UID, and signing-certificate trust checks.
-6. Add the ReFineID privileged service, system-image declarations, SELinux
+7. Add the ReFineID privileged service, system-image declarations, SELinux
    policy, secure prompt coordinator, and one-result replay lease over the
    existing digest-signing boundary. These sources are implemented; their
    first full Soong image build remains pending on the Linux builder.
-7. Run independent Chrome and Firefox client-authentication tests, including
+8. Run independent Chrome and Firefox client-authentication tests, including
    cancellation, detach, wrong-card generation, process death, and the matrix
    limitations above.
 

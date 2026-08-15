@@ -116,9 +116,13 @@ internal class AuthenticationSignatureVerifierInstrumentedTest {
     private fun AuthenticationSigningAlgorithm.jcaSignatureName(): String =
         when (this) {
             AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256 -> JCA_SHA256_WITH_RSA
-            AuthenticationSigningAlgorithm.RSA_PSS_SHA256 -> JCA_RSA_PSS
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA256 -> JCA_SHA256_WITH_RSA_PSS
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA256 -> JCA_SHA256_WITH_ECDSA
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> JCA_SHA384_WITH_ECDSA
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384 -> JCA_SHA384_WITH_RSA
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA384 -> JCA_SHA384_WITH_RSA_PSS
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512 -> JCA_SHA512_WITH_RSA
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA512 -> JCA_SHA512_WITH_RSA_PSS
         }
 
     private fun AuthenticationSigningAlgorithm.jcaDigestName(): String =
@@ -128,7 +132,14 @@ internal class AuthenticationSignatureVerifierInstrumentedTest {
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
             -> JCA_SHA256_DIGEST
 
-            AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> JCA_SHA384_DIGEST
+            AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+            -> JCA_SHA384_DIGEST
+
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
+            -> JCA_SHA512_DIGEST
         }
 
     private fun derP384EcdsaToRaw(der: ByteArray): ByteArray {
@@ -226,11 +237,16 @@ internal class AuthenticationSignatureVerifierInstrumentedTest {
         const val JCA_EC_KEY_ALGORITHM = "EC"
         const val P384_CURVE_NAME = "secp384r1"
         const val JCA_SHA256_WITH_RSA = "SHA256withRSA"
-        const val JCA_RSA_PSS = "SHA256withRSA/PSS"
+        const val JCA_SHA256_WITH_RSA_PSS = "SHA256withRSA/PSS"
+        const val JCA_SHA384_WITH_RSA = "SHA384withRSA"
+        const val JCA_SHA384_WITH_RSA_PSS = "SHA384withRSA/PSS"
+        const val JCA_SHA512_WITH_RSA = "SHA512withRSA"
+        const val JCA_SHA512_WITH_RSA_PSS = "SHA512withRSA/PSS"
         const val JCA_SHA256_WITH_ECDSA = "SHA256withECDSA"
         const val JCA_SHA384_WITH_ECDSA = "SHA384withECDSA"
         const val JCA_SHA256_DIGEST = "SHA-256"
         const val JCA_SHA384_DIGEST = "SHA-384"
+        const val JCA_SHA512_DIGEST = "SHA-512"
 
         val SYNTHETIC_MESSAGE = "prehashed browser authentication".encodeToByteArray()
 

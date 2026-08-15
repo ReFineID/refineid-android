@@ -211,6 +211,10 @@ internal class ExternalKeyProviderBinder(
                             when (signature.algorithm) {
                                 AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
                                 AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+                                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+                                AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+                                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+                                AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
                                 -> signature.copyBytes()
 
                                 AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
@@ -285,6 +289,22 @@ internal class ExternalKeyProviderBinder(
 
             IExternalKeyProviderService.SIGNATURE_ALGORITHM_ECDSA_P384_SHA384 -> {
                 AuthenticationSigningAlgorithm.ECDSA_P384_SHA384
+            }
+
+            IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA384 -> {
+                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384
+            }
+
+            IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PSS_SHA384 -> {
+                AuthenticationSigningAlgorithm.RSA_PSS_SHA384
+            }
+
+            IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PKCS1_SHA512 -> {
+                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512
+            }
+
+            IExternalKeyProviderService.SIGNATURE_ALGORITHM_RSA_PSS_SHA512 -> {
+                AuthenticationSigningAlgorithm.RSA_PSS_SHA512
             }
 
             else -> {

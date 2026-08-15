@@ -7,8 +7,10 @@ internal const val RSA_3072_KEY_LENGTH_BITS = 3_072
 internal const val P384_COORDINATE_LENGTH_BITS = 384
 internal const val SHA256_DIGEST_LENGTH_BITS = 256
 internal const val SHA384_DIGEST_LENGTH_BITS = 384
+internal const val SHA512_DIGEST_LENGTH_BITS = 512
 internal const val SHA256_DIGEST_LENGTH_BYTES = SHA256_DIGEST_LENGTH_BITS / Byte.SIZE_BITS
 internal const val SHA384_DIGEST_LENGTH_BYTES = SHA384_DIGEST_LENGTH_BITS / Byte.SIZE_BITS
+internal const val SHA512_DIGEST_LENGTH_BYTES = SHA512_DIGEST_LENGTH_BITS / Byte.SIZE_BITS
 private const val RSA_3072_SIGNATURE_LENGTH_BYTES = RSA_3072_KEY_LENGTH_BITS / Byte.SIZE_BITS
 private const val P384_RAW_SIGNATURE_LENGTH_BYTES =
     2 * P384_COORDINATE_LENGTH_BITS / Byte.SIZE_BITS
@@ -22,6 +24,14 @@ internal object NativeAuthenticationSignWire {
     const val REQUEST_PREHASHED_RSA_PSS_SHA256 = 5
     const val REQUEST_PREHASHED_ECDSA_P384_SHA256 = 6
     const val REQUEST_PREHASHED_ECDSA_P384_SHA384 = 7
+    const val ALGORITHM_RSA_PKCS1_SHA384 = 8
+    const val ALGORITHM_RSA_PSS_SHA384 = 9
+    const val ALGORITHM_RSA_PKCS1_SHA512 = 10
+    const val ALGORITHM_RSA_PSS_SHA512 = 11
+    const val REQUEST_PREHASHED_RSA_PKCS1_SHA384 = 12
+    const val REQUEST_PREHASHED_RSA_PSS_SHA384 = 13
+    const val REQUEST_PREHASHED_RSA_PKCS1_SHA512 = 14
+    const val REQUEST_PREHASHED_RSA_PSS_SHA512 = 15
 
     const val BRIDGE_ERROR_TAG = 0
     const val SUCCESS_TAG = 1
@@ -45,36 +55,82 @@ internal enum class AuthenticationSigningInputMode {
     PREHASHED,
 }
 
+internal enum class AuthenticationDigest(
+    val jcaName: String,
+    val length: Int,
+) {
+    SHA256(
+        jcaName = "SHA-256",
+        length = SHA256_DIGEST_LENGTH_BYTES,
+    ),
+    SHA384(
+        jcaName = "SHA-384",
+        length = SHA384_DIGEST_LENGTH_BYTES,
+    ),
+    SHA512(
+        jcaName = "SHA-512",
+        length = SHA512_DIGEST_LENGTH_BYTES,
+    ),
+}
+
 internal enum class AuthenticationSigningAlgorithm(
     val wireValue: Int,
     val keyProfile: NativeCardKeyProfile,
     val signatureLength: Int,
-    val digestLength: Int,
+    val digest: AuthenticationDigest,
 ) {
     RSA_PKCS1_SHA256(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_RSA_PKCS1_SHA256,
         keyProfile = NativeCardKeyProfile.RSA_3072,
         signatureLength = RSA_3072_SIGNATURE_LENGTH_BYTES,
-        digestLength = SHA256_DIGEST_LENGTH_BYTES,
+        digest = AuthenticationDigest.SHA256,
     ),
     RSA_PSS_SHA256(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_RSA_PSS_SHA256,
         keyProfile = NativeCardKeyProfile.RSA_3072,
         signatureLength = RSA_3072_SIGNATURE_LENGTH_BYTES,
-        digestLength = SHA256_DIGEST_LENGTH_BYTES,
+        digest = AuthenticationDigest.SHA256,
     ),
     ECDSA_P384_SHA256(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_ECDSA_P384_SHA256,
         keyProfile = NativeCardKeyProfile.ECDSA_P384,
         signatureLength = P384_RAW_SIGNATURE_LENGTH_BYTES,
-        digestLength = SHA256_DIGEST_LENGTH_BYTES,
+        digest = AuthenticationDigest.SHA256,
     ),
     ECDSA_P384_SHA384(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_ECDSA_P384_SHA384,
         keyProfile = NativeCardKeyProfile.ECDSA_P384,
         signatureLength = P384_RAW_SIGNATURE_LENGTH_BYTES,
-        digestLength = SHA384_DIGEST_LENGTH_BYTES,
+        digest = AuthenticationDigest.SHA384,
     ),
+    RSA_PKCS1_SHA384(
+        wireValue = NativeAuthenticationSignWire.ALGORITHM_RSA_PKCS1_SHA384,
+        keyProfile = NativeCardKeyProfile.RSA_3072,
+        signatureLength = RSA_3072_SIGNATURE_LENGTH_BYTES,
+        digest = AuthenticationDigest.SHA384,
+    ),
+    RSA_PSS_SHA384(
+        wireValue = NativeAuthenticationSignWire.ALGORITHM_RSA_PSS_SHA384,
+        keyProfile = NativeCardKeyProfile.RSA_3072,
+        signatureLength = RSA_3072_SIGNATURE_LENGTH_BYTES,
+        digest = AuthenticationDigest.SHA384,
+    ),
+    RSA_PKCS1_SHA512(
+        wireValue = NativeAuthenticationSignWire.ALGORITHM_RSA_PKCS1_SHA512,
+        keyProfile = NativeCardKeyProfile.RSA_3072,
+        signatureLength = RSA_3072_SIGNATURE_LENGTH_BYTES,
+        digest = AuthenticationDigest.SHA512,
+    ),
+    RSA_PSS_SHA512(
+        wireValue = NativeAuthenticationSignWire.ALGORITHM_RSA_PSS_SHA512,
+        keyProfile = NativeCardKeyProfile.RSA_3072,
+        signatureLength = RSA_3072_SIGNATURE_LENGTH_BYTES,
+        digest = AuthenticationDigest.SHA512,
+    ),
+    ;
+
+    val digestLength: Int
+        get() = digest.length
 }
 
 internal fun AuthenticationSigningAlgorithm.requestWireValue(inputMode: AuthenticationSigningInputMode): Int =
@@ -99,6 +155,22 @@ internal fun AuthenticationSigningAlgorithm.requestWireValue(inputMode: Authenti
 
                 AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> {
                     NativeAuthenticationSignWire.REQUEST_PREHASHED_ECDSA_P384_SHA384
+                }
+
+                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384 -> {
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PKCS1_SHA384
+                }
+
+                AuthenticationSigningAlgorithm.RSA_PSS_SHA384 -> {
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PSS_SHA384
+                }
+
+                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512 -> {
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PKCS1_SHA512
+                }
+
+                AuthenticationSigningAlgorithm.RSA_PSS_SHA512 -> {
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PSS_SHA512
                 }
             }
         }

@@ -20,6 +20,14 @@ class NativeAuthenticationSignReplyTest {
                     NativeAuthenticationSignWire.REQUEST_PREHASHED_ECDSA_P384_SHA256,
                 AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 to
                     NativeAuthenticationSignWire.REQUEST_PREHASHED_ECDSA_P384_SHA384,
+                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384 to
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PKCS1_SHA384,
+                AuthenticationSigningAlgorithm.RSA_PSS_SHA384 to
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PSS_SHA384,
+                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512 to
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PKCS1_SHA512,
+                AuthenticationSigningAlgorithm.RSA_PSS_SHA512 to
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PSS_SHA512,
             )
 
         for (algorithm in AuthenticationSigningAlgorithm.entries) {

@@ -88,6 +88,14 @@ const AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256: u8 = 4;
 const AUTHENTICATION_PREHASHED_RSA_PSS_SHA256: u8 = 5;
 const AUTHENTICATION_PREHASHED_ECDSA_P384_SHA256: u8 = 6;
 const AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384: u8 = 7;
+const AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA384: u8 = 8;
+const AUTHENTICATION_ALGORITHM_RSA_PSS_SHA384: u8 = 9;
+const AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA512: u8 = 10;
+const AUTHENTICATION_ALGORITHM_RSA_PSS_SHA512: u8 = 11;
+const AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA384: u8 = 12;
+const AUTHENTICATION_PREHASHED_RSA_PSS_SHA384: u8 = 13;
+const AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA512: u8 = 14;
+const AUTHENTICATION_PREHASHED_RSA_PSS_SHA512: u8 = 15;
 
 const QUALIFIED_SIGNATURE_BRIDGE_ERROR: u8 = 0;
 const QUALIFIED_SIGNATURE_SUCCEEDED: u8 = 1;
@@ -571,6 +579,18 @@ fn authentication_algorithm_from_jint(value: jint) -> Option<AuthenticationSigni
         value if value == jint::from(AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA384) => {
             Some(AuthenticationSigningAlgorithm::EcdsaP384Sha384)
         }
+        value if value == jint::from(AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA384) => {
+            Some(AuthenticationSigningAlgorithm::RsaPkcs1Sha384)
+        }
+        value if value == jint::from(AUTHENTICATION_ALGORITHM_RSA_PSS_SHA384) => {
+            Some(AuthenticationSigningAlgorithm::RsaPssSha384)
+        }
+        value if value == jint::from(AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA512) => {
+            Some(AuthenticationSigningAlgorithm::RsaPkcs1Sha512)
+        }
+        value if value == jint::from(AUTHENTICATION_ALGORITHM_RSA_PSS_SHA512) => {
+            Some(AuthenticationSigningAlgorithm::RsaPssSha512)
+        }
         _ => None,
     }
 }
@@ -617,6 +637,22 @@ fn authentication_request_from_jint(
         )),
         value if value == jint::from(AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384) => Some((
             AuthenticationSigningAlgorithm::EcdsaP384Sha384,
+            AuthenticationSigningInputMode::Prehashed,
+        )),
+        value if value == jint::from(AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA384) => Some((
+            AuthenticationSigningAlgorithm::RsaPkcs1Sha384,
+            AuthenticationSigningInputMode::Prehashed,
+        )),
+        value if value == jint::from(AUTHENTICATION_PREHASHED_RSA_PSS_SHA384) => Some((
+            AuthenticationSigningAlgorithm::RsaPssSha384,
+            AuthenticationSigningInputMode::Prehashed,
+        )),
+        value if value == jint::from(AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA512) => Some((
+            AuthenticationSigningAlgorithm::RsaPkcs1Sha512,
+            AuthenticationSigningInputMode::Prehashed,
+        )),
+        value if value == jint::from(AUTHENTICATION_PREHASHED_RSA_PSS_SHA512) => Some((
+            AuthenticationSigningAlgorithm::RsaPssSha512,
             AuthenticationSigningInputMode::Prehashed,
         )),
         _ => None,
@@ -762,6 +798,18 @@ fn encode_authentication_signature_reply(
                 AuthenticationSigningAlgorithm::EcdsaP384Sha384 => {
                     AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA384
                 }
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha384 => {
+                    AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA384
+                }
+                AuthenticationSigningAlgorithm::RsaPssSha384 => {
+                    AUTHENTICATION_ALGORITHM_RSA_PSS_SHA384
+                }
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha512 => {
+                    AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA512
+                }
+                AuthenticationSigningAlgorithm::RsaPssSha512 => {
+                    AUTHENTICATION_ALGORITHM_RSA_PSS_SHA512
+                }
             });
             reply.append(&mut signature.bytes);
             reply
@@ -825,8 +873,14 @@ mod tests {
 
     use super::{
         ATR_INVALID, ATR_VALID_NON_T0_DIRECT, ATR_VALID_T0_DIRECT, ATR_VALID_T0_INVERSE,
-        AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA384, AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA256,
-        AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384, AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256,
+        AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA256, AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA384,
+        AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA256, AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA384,
+        AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA512, AUTHENTICATION_ALGORITHM_RSA_PSS_SHA256,
+        AUTHENTICATION_ALGORITHM_RSA_PSS_SHA384, AUTHENTICATION_ALGORITHM_RSA_PSS_SHA512,
+        AUTHENTICATION_PREHASHED_ECDSA_P384_SHA256, AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384,
+        AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256, AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA384,
+        AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA512, AUTHENTICATION_PREHASHED_RSA_PSS_SHA256,
+        AUTHENTICATION_PREHASHED_RSA_PSS_SHA384, AUTHENTICATION_PREHASHED_RSA_PSS_SHA512,
         AUTHENTICATION_SIGNATURE_CARD_UNAVAILABLE, AUTHENTICATION_SIGNATURE_REPLY_HEADER_LENGTH,
         AUTHENTICATION_SIGNATURE_SUCCEEDED, CARD_OPERATION_CARD_UNAVAILABLE,
         CARD_OPERATION_REJECTED, CARD_OPERATION_SUCCEEDED, CARD_OPERATION_TRANSPORT_ERROR,
@@ -862,9 +916,11 @@ mod tests {
     const ATR_CONVENTION_OFFSET: usize = 0;
     const UNSUPPORTED_EXCHANGE_LEVEL: i32 = 2;
     const AUTHENTICATION_ALGORITHM_BELOW_RANGE: i32 = -1;
-    const AUTHENTICATION_ALGORITHM_ABOVE_RANGE: i32 = 4;
+    const AUTHENTICATION_ALGORITHM_NON_MESSAGE_CODE: i32 =
+        AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256 as i32;
     const AUTHENTICATION_REQUEST_BELOW_RANGE: i32 = -1;
-    const AUTHENTICATION_REQUEST_ABOVE_RANGE: i32 = 8;
+    const AUTHENTICATION_REQUEST_ABOVE_RANGE: i32 =
+        AUTHENTICATION_PREHASHED_RSA_PSS_SHA512 as i32 + 1;
     const QUALIFIED_ALGORITHM_BELOW_RANGE: i32 = -1;
     const QUALIFIED_ALGORITHM_ABOVE_RANGE: i32 = 2;
     const SYNTHETIC_REJECTED_STATUS_WORD: u16 = 0x6a82;
@@ -917,18 +973,51 @@ mod tests {
 
     #[test]
     fn accepts_only_stable_authentication_algorithm_codes() {
-        assert_eq!(
-            authentication_algorithm_from_jint(i32::from(
+        for (wire_value, algorithm) in [
+            (
                 AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA256,
-            )),
-            Some(AuthenticationSigningAlgorithm::RsaPkcs1Sha256)
-        );
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PSS_SHA256,
+                AuthenticationSigningAlgorithm::RsaPssSha256,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA256,
+                AuthenticationSigningAlgorithm::EcdsaP384Sha256,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA384,
+                AuthenticationSigningAlgorithm::EcdsaP384Sha384,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA384,
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha384,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PSS_SHA384,
+                AuthenticationSigningAlgorithm::RsaPssSha384,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA512,
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha512,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PSS_SHA512,
+                AuthenticationSigningAlgorithm::RsaPssSha512,
+            ),
+        ] {
+            assert_eq!(
+                authentication_algorithm_from_jint(i32::from(wire_value)),
+                Some(algorithm)
+            );
+        }
         assert_eq!(
             authentication_algorithm_from_jint(AUTHENTICATION_ALGORITHM_BELOW_RANGE),
             None
         );
         assert_eq!(
-            authentication_algorithm_from_jint(AUTHENTICATION_ALGORITHM_ABOVE_RANGE),
+            authentication_algorithm_from_jint(AUTHENTICATION_ALGORITHM_NON_MESSAGE_CODE),
             None
         );
     }
@@ -951,27 +1040,84 @@ mod tests {
 
     #[test]
     fn accepts_only_stable_authentication_request_codes() {
-        assert_eq!(
-            authentication_request_from_jint(i32::from(AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA256)),
-            Some((
+        for (wire_value, algorithm) in [
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA256,
                 AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
-                super::AuthenticationSigningInputMode::Message,
-            ))
-        );
-        assert_eq!(
-            authentication_request_from_jint(i32::from(AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256)),
-            Some((
-                AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
-                super::AuthenticationSigningInputMode::Prehashed,
-            ))
-        );
-        assert_eq!(
-            authentication_request_from_jint(i32::from(AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384)),
-            Some((
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PSS_SHA256,
+                AuthenticationSigningAlgorithm::RsaPssSha256,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA256,
+                AuthenticationSigningAlgorithm::EcdsaP384Sha256,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA384,
                 AuthenticationSigningAlgorithm::EcdsaP384Sha384,
-                super::AuthenticationSigningInputMode::Prehashed,
-            ))
-        );
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA384,
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha384,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PSS_SHA384,
+                AuthenticationSigningAlgorithm::RsaPssSha384,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA512,
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha512,
+            ),
+            (
+                AUTHENTICATION_ALGORITHM_RSA_PSS_SHA512,
+                AuthenticationSigningAlgorithm::RsaPssSha512,
+            ),
+        ] {
+            assert_eq!(
+                authentication_request_from_jint(i32::from(wire_value)),
+                Some((algorithm, super::AuthenticationSigningInputMode::Message))
+            );
+        }
+        for (wire_value, algorithm) in [
+            (
+                AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256,
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
+            ),
+            (
+                AUTHENTICATION_PREHASHED_RSA_PSS_SHA256,
+                AuthenticationSigningAlgorithm::RsaPssSha256,
+            ),
+            (
+                AUTHENTICATION_PREHASHED_ECDSA_P384_SHA256,
+                AuthenticationSigningAlgorithm::EcdsaP384Sha256,
+            ),
+            (
+                AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384,
+                AuthenticationSigningAlgorithm::EcdsaP384Sha384,
+            ),
+            (
+                AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA384,
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha384,
+            ),
+            (
+                AUTHENTICATION_PREHASHED_RSA_PSS_SHA384,
+                AuthenticationSigningAlgorithm::RsaPssSha384,
+            ),
+            (
+                AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA512,
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha512,
+            ),
+            (
+                AUTHENTICATION_PREHASHED_RSA_PSS_SHA512,
+                AuthenticationSigningAlgorithm::RsaPssSha512,
+            ),
+        ] {
+            assert_eq!(
+                authentication_request_from_jint(i32::from(wire_value)),
+                Some((algorithm, super::AuthenticationSigningInputMode::Prehashed))
+            );
+        }
         assert_eq!(
             authentication_request_from_jint(AUTHENTICATION_REQUEST_BELOW_RANGE),
             None

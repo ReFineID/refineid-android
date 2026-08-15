@@ -74,12 +74,28 @@ internal object AuthenticationSignatureVerifier {
             return false
         }
         return when (algorithm) {
-            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256 -> {
-                verifyPrehashedRsaPkcs1Sha256(publicKey, digest, signature)
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+            -> {
+                verifyPrehashedRsaPkcs1(
+                    publicKey = publicKey,
+                    digest = digest,
+                    signature = signature,
+                    digestInfoPrefix = algorithm.digest.rsaDigestInfoPrefix(),
+                )
             }
 
-            AuthenticationSigningAlgorithm.RSA_PSS_SHA256 -> {
-                RsaPssPrehashedVerifier.verify(publicKey, digest, signature)
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
+            -> {
+                RsaPssPrehashedVerifier.verify(
+                    publicKey = publicKey,
+                    digestAlgorithm = algorithm.digest,
+                    digest = digest,
+                    signature = signature,
+                )
             }
 
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
@@ -116,6 +132,10 @@ internal object AuthenticationSignatureVerifier {
 
             AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
             AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA512,
             -> {
                 verifier.verify(signature)
             }
@@ -129,7 +149,7 @@ internal object AuthenticationSignatureVerifier {
             }
 
             AuthenticationSigningAlgorithm.RSA_PSS_SHA256 -> {
-                newRsaPssSha256Verifier()
+                newRsaPssVerifier(JCA_SHA256_WITH_RSA_PSS, digest)
             }
 
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA256 -> {
@@ -139,23 +159,43 @@ internal object AuthenticationSignatureVerifier {
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> {
                 Signature.getInstance(JCA_SHA384_WITH_ECDSA)
             }
-        }
 
-    private fun newRsaPssSha256Verifier(): Signature =
-        try {
-            Signature.getInstance(JCA_SHA256_WITH_RSA_PSS)
-        } catch (_: java.security.NoSuchAlgorithmException) {
-            Signature.getInstance(JCA_GENERIC_RSA_PSS).apply {
-                setParameter(RSA_PSS_SHA256_PARAMETERS)
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384 -> {
+                Signature.getInstance(JCA_SHA384_WITH_RSA)
+            }
+
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA384 -> {
+                newRsaPssVerifier(JCA_SHA384_WITH_RSA_PSS, digest)
+            }
+
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512 -> {
+                Signature.getInstance(JCA_SHA512_WITH_RSA)
+            }
+
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA512 -> {
+                newRsaPssVerifier(JCA_SHA512_WITH_RSA_PSS, digest)
             }
         }
 
-    private fun verifyPrehashedRsaPkcs1Sha256(
+    private fun newRsaPssVerifier(
+        namedAlgorithm: String,
+        digest: AuthenticationDigest,
+    ): Signature =
+        try {
+            Signature.getInstance(namedAlgorithm)
+        } catch (_: java.security.NoSuchAlgorithmException) {
+            Signature.getInstance(JCA_GENERIC_RSA_PSS).apply {
+                setParameter(digest.rsaPssParameters())
+            }
+        }
+
+    private fun verifyPrehashedRsaPkcs1(
         publicKey: PublicKey,
         digest: ByteArray,
         signature: ByteArray,
+        digestInfoPrefix: ByteArray,
     ): Boolean {
-        val digestInfo = SHA256_DIGEST_INFO_PREFIX + digest
+        val digestInfo = digestInfoPrefix + digest
         return try {
             Signature
                 .getInstance(JCA_NONE_WITH_RSA)
@@ -186,14 +226,28 @@ internal object AuthenticationSignatureVerifier {
         }
     }
 
-    private val RSA_PSS_SHA256_PARAMETERS =
+    private fun AuthenticationDigest.rsaPssParameters(): PSSParameterSpec =
         PSSParameterSpec(
-            "SHA-256",
-            "MGF1",
-            MGF1ParameterSpec.SHA256,
-            SHA256_DIGEST_LENGTH_BYTES,
+            jcaName,
+            MASK_GENERATION_FUNCTION_NAME,
+            mgfSpecification(),
+            length,
             PSSParameterSpec.DEFAULT.trailerField,
         )
+
+    private fun AuthenticationDigest.mgfSpecification(): MGF1ParameterSpec =
+        when (this) {
+            AuthenticationDigest.SHA256 -> MGF1ParameterSpec.SHA256
+            AuthenticationDigest.SHA384 -> MGF1ParameterSpec.SHA384
+            AuthenticationDigest.SHA512 -> MGF1ParameterSpec.SHA512
+        }
+
+    private fun AuthenticationDigest.rsaDigestInfoPrefix(): ByteArray =
+        when (this) {
+            AuthenticationDigest.SHA256 -> SHA256_DIGEST_INFO_PREFIX
+            AuthenticationDigest.SHA384 -> SHA384_DIGEST_INFO_PREFIX
+            AuthenticationDigest.SHA512 -> SHA512_DIGEST_INFO_PREFIX
+        }
 
     // RFC 8017 Appendix B.1: DER DigestInfo prefix for id-sha256 with NULL parameters.
     private val SHA256_DIGEST_INFO_PREFIX =
@@ -219,11 +273,64 @@ internal object AuthenticationSignatureVerifier {
             0x20,
         )
 
+    // RFC 8017 Appendix B.1: DER DigestInfo prefix for id-sha384 with NULL parameters.
+    private val SHA384_DIGEST_INFO_PREFIX =
+        byteArrayOf(
+            0x30,
+            0x41,
+            0x30,
+            0x0D,
+            0x06,
+            0x09,
+            0x60,
+            0x86.toByte(),
+            0x48,
+            0x01,
+            0x65,
+            0x03,
+            0x04,
+            0x02,
+            0x02,
+            0x05,
+            0x00,
+            0x04,
+            0x30,
+        )
+
+    // RFC 8017 Appendix B.1: DER DigestInfo prefix for id-sha512 with NULL parameters.
+    private val SHA512_DIGEST_INFO_PREFIX =
+        byteArrayOf(
+            0x30,
+            0x51,
+            0x30,
+            0x0D,
+            0x06,
+            0x09,
+            0x60,
+            0x86.toByte(),
+            0x48,
+            0x01,
+            0x65,
+            0x03,
+            0x04,
+            0x02,
+            0x03,
+            0x05,
+            0x00,
+            0x04,
+            0x40,
+        )
+
     private const val JCA_NONE_WITH_RSA = "NONEwithRSA"
     private const val JCA_NONE_WITH_ECDSA = "NONEwithECDSA"
     private const val JCA_SHA256_WITH_RSA = "SHA256withRSA"
     private const val JCA_SHA256_WITH_RSA_PSS = "SHA256withRSA/PSS"
+    private const val JCA_SHA384_WITH_RSA = "SHA384withRSA"
+    private const val JCA_SHA384_WITH_RSA_PSS = "SHA384withRSA/PSS"
+    private const val JCA_SHA512_WITH_RSA = "SHA512withRSA"
+    private const val JCA_SHA512_WITH_RSA_PSS = "SHA512withRSA/PSS"
     private const val JCA_GENERIC_RSA_PSS = "RSASSA-PSS"
+    private const val MASK_GENERATION_FUNCTION_NAME = "MGF1"
     private const val JCA_SHA256_WITH_ECDSA = "SHA256withECDSA"
     private const val JCA_SHA384_WITH_ECDSA = "SHA384withECDSA"
     private const val ZERO_BYTE: Byte = 0
