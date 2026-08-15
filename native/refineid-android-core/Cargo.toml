@@ -11,13 +11,13 @@ crate-type = ["cdylib"]
 
 [dependencies]
 jni = "=0.22.4"
-refineid-apdu = { git = "https://github.com/ReFineID/refineid-core.git", rev = "6de00bfe8eaae43e383e594ad25da637d66911a9" }
-refineid-auth = { git = "https://github.com/ReFineID/refineid-core.git", rev = "6de00bfe8eaae43e383e594ad25da637d66911a9" }
-refineid-atr = { git = "https://github.com/ReFineID/refineid-core.git", rev = "6de00bfe8eaae43e383e594ad25da637d66911a9" }
-refineid-digest = { git = "https://github.com/ReFineID/refineid-core.git", rev = "6de00bfe8eaae43e383e594ad25da637d66911a9" }
-refineid-pkcs15 = { git = "https://github.com/ReFineID/refineid-core.git", rev = "6de00bfe8eaae43e383e594ad25da637d66911a9" }
-refineid-sign = { git = "https://github.com/ReFineID/refineid-core.git", rev = "6de00bfe8eaae43e383e594ad25da637d66911a9" }
-refineid-x509 = { git = "https://github.com/ReFineID/refineid-core.git", rev = "6de00bfe8eaae43e383e594ad25da637d66911a9" }
+refineid-apdu = { git = "https://github.com/ReFineID/refineid-core.git", rev = "b6b86ce3950ab86af96dd0cefaa24995629c61b8" }
+refineid-auth = { git = "https://github.com/ReFineID/refineid-core.git", rev = "b6b86ce3950ab86af96dd0cefaa24995629c61b8" }
+refineid-atr = { git = "https://github.com/ReFineID/refineid-core.git", rev = "b6b86ce3950ab86af96dd0cefaa24995629c61b8" }
+refineid-digest = { git = "https://github.com/ReFineID/refineid-core.git", rev = "b6b86ce3950ab86af96dd0cefaa24995629c61b8" }
+refineid-pkcs15 = { git = "https://github.com/ReFineID/refineid-core.git", rev = "b6b86ce3950ab86af96dd0cefaa24995629c61b8" }
+refineid-sign = { git = "https://github.com/ReFineID/refineid-core.git", rev = "b6b86ce3950ab86af96dd0cefaa24995629c61b8" }
+refineid-x509 = { git = "https://github.com/ReFineID/refineid-core.git", rev = "b6b86ce3950ab86af96dd0cefaa24995629c61b8" }
 
 [lints.rust]
 missing_docs = "warn"
