@@ -22,6 +22,8 @@ instrumented development harness, but it is not the product boundary.
   `refineid-core`
 - Typed PKCS#15 application selection over APDU- or T=0 TPDU-level readers
 - Bounded authentication-certificate read and public-key classification
+- Credential-free qualified-certificate read across citizen and organization
+  card directory layouts
 - Counter-safe PIN1 status and credential-reference preflight
 - One-shot PIN1 VERIFY and RSA/P-384 authentication signing
 - Mandatory local verification against the retained authentication certificate

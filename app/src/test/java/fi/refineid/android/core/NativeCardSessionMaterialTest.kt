@@ -58,7 +58,7 @@ class NativeCardSessionMaterialTest {
 
     private fun certificate(byte: Byte): NativeAuthenticationCertificate =
         NativeAuthenticationCertificate(
-            keyProfile = NativeAuthenticationKeyProfile.RSA_2048,
+            keyProfile = NativeCardKeyProfile.RSA_2048,
             ownedDer = byteArrayOf(byte),
         )
 

@@ -11,17 +11,18 @@ import fi.refineid.android.core.AuthenticationSignatureVerifier
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
 import fi.refineid.android.core.NativeAuthenticationCertificate
-import fi.refineid.android.core.NativeAuthenticationCertificateReadFailure
-import fi.refineid.android.core.NativeAuthenticationCertificateReadResult
-import fi.refineid.android.core.NativeAuthenticationKeyProfile
 import fi.refineid.android.core.NativeAuthenticationSignFailure
 import fi.refineid.android.core.NativeAuthenticationSignResult
 import fi.refineid.android.core.NativeCardExchangeLevel
+import fi.refineid.android.core.NativeCardKeyProfile
 import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativeCardSessionMaterial
+import fi.refineid.android.core.NativeCertificateReadFailure
+import fi.refineid.android.core.NativeCertificateReadResult
 import fi.refineid.android.core.NativeCore
 import fi.refineid.android.core.NativePin1PreflightFailure
 import fi.refineid.android.core.NativePin1PreflightResult
+import fi.refineid.android.core.NativeQualifiedCertificate
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
 
@@ -78,7 +79,7 @@ internal class CcidUsbSession(
         )
     }
 
-    fun cacheAuthenticationCertificate(): NativeAuthenticationCertificateReadResult {
+    fun cacheAuthenticationCertificate(): NativeCertificateReadResult<NativeAuthenticationCertificate> {
         checkOwnerThread()
         check(!isClosed) {
             "CCID session is closed"
@@ -88,10 +89,55 @@ internal class CcidUsbSession(
                 exchangeLevel = exchangeLevel,
                 exchange = nativeExchange,
             )
-        if (result is NativeAuthenticationCertificateReadResult.Success) {
+        if (result is NativeCertificateReadResult.Success) {
             sessionMaterial.cacheAuthenticationCertificate(result.certificate)
         }
         return result
+    }
+
+    /** Reads EF.4332, then restores the PKCS#15 authentication context. */
+    fun readQualifiedCertificate(): NativeCertificateReadResult<NativeQualifiedCertificate> {
+        checkOwnerThread()
+        check(!isClosed) {
+            "CCID session is closed"
+        }
+        val result =
+            NativeCore.readQualifiedCertificate(
+                exchangeLevel = exchangeLevel,
+                exchange = nativeExchange,
+            )
+        if (!result.allowsContextRestore()) {
+            return result
+        }
+        return when (selectPkcs15Application()) {
+            NativeCardOperationResult.SUCCEEDED -> {
+                result
+            }
+
+            NativeCardOperationResult.CARD_UNAVAILABLE -> {
+                result.closeCertificate()
+                NativeCertificateReadResult.Failure(
+                    NativeCertificateReadFailure.CARD_UNAVAILABLE,
+                )
+            }
+
+            NativeCardOperationResult.REJECTED -> {
+                result.closeCertificate()
+                NativeCertificateReadResult.Failure(NativeCertificateReadFailure.REJECTED)
+            }
+
+            NativeCardOperationResult.TRANSPORT_ERROR -> {
+                result.closeCertificate()
+                NativeCertificateReadResult.Failure(
+                    NativeCertificateReadFailure.TRANSPORT_ERROR,
+                )
+            }
+
+            NativeCardOperationResult.BRIDGE_ERROR -> {
+                result.closeCertificate()
+                NativeCertificateReadResult.Failure(NativeCertificateReadFailure.BRIDGE_ERROR)
+            }
+        }
     }
 
     fun cachePin1Preflight(): NativePin1PreflightResult {
@@ -233,16 +279,16 @@ internal class CcidUsbSession(
         }
         val algorithm =
             when (sessionMaterial.requireAuthenticationCertificate().keyProfile) {
-                NativeAuthenticationKeyProfile.RSA_3072 -> {
+                NativeCardKeyProfile.RSA_3072 -> {
                     AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256
                 }
 
-                NativeAuthenticationKeyProfile.ECDSA_P384 -> {
+                NativeCardKeyProfile.ECDSA_P384 -> {
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA256
                 }
 
-                NativeAuthenticationKeyProfile.RSA_2048,
-                NativeAuthenticationKeyProfile.ECDSA_P256,
+                NativeCardKeyProfile.RSA_2048,
+                NativeCardKeyProfile.ECDSA_P256,
                 -> {
                     null
                 }
@@ -287,6 +333,24 @@ internal class CcidUsbSession(
         check(Thread.currentThread() === ownerThread) {
             "CCID session used from a different thread"
         }
+    }
+}
+
+private fun NativeCertificateReadResult<NativeQualifiedCertificate>.allowsContextRestore(): Boolean =
+    when (this) {
+        is NativeCertificateReadResult.Success -> {
+            true
+        }
+
+        is NativeCertificateReadResult.Failure -> {
+            kind == NativeCertificateReadFailure.REJECTED ||
+                kind == NativeCertificateReadFailure.INVALID_CERTIFICATE
+        }
+    }
+
+private fun NativeCertificateReadResult<NativeQualifiedCertificate>.closeCertificate() {
+    if (this is NativeCertificateReadResult.Success) {
+        certificate.close()
     }
 }
 
@@ -438,7 +502,7 @@ internal class CcidUsbSessionOpener(
             when (session.selectPkcs15Application()) {
                 NativeCardOperationResult.SUCCEEDED -> {
                     when (val result = session.cacheAuthenticationCertificate()) {
-                        is NativeAuthenticationCertificateReadResult.Success -> {
+                        is NativeCertificateReadResult.Success -> {
                             when (val preflight = session.cachePin1Preflight()) {
                                 is NativePin1PreflightResult.Success -> {
                                     retainSession = true
@@ -461,20 +525,20 @@ internal class CcidUsbSessionOpener(
                             }
                         }
 
-                        is NativeAuthenticationCertificateReadResult.Failure -> {
+                        is NativeCertificateReadResult.Failure -> {
                             when (result.kind) {
-                                NativeAuthenticationCertificateReadFailure.CARD_UNAVAILABLE -> {
+                                NativeCertificateReadFailure.CARD_UNAVAILABLE -> {
                                     CcidSessionOpenResult.NoCard
                                 }
 
-                                NativeAuthenticationCertificateReadFailure.REJECTED,
-                                NativeAuthenticationCertificateReadFailure.INVALID_CERTIFICATE,
+                                NativeCertificateReadFailure.REJECTED,
+                                NativeCertificateReadFailure.INVALID_CERTIFICATE,
                                 -> {
                                     CcidSessionOpenResult.CardError
                                 }
 
-                                NativeAuthenticationCertificateReadFailure.TRANSPORT_ERROR,
-                                NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
+                                NativeCertificateReadFailure.TRANSPORT_ERROR,
+                                NativeCertificateReadFailure.BRIDGE_ERROR,
                                 -> {
                                     CcidSessionOpenResult.TransportError
                                 }

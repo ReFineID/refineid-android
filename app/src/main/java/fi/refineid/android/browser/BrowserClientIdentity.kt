@@ -1,7 +1,7 @@
 package fi.refineid.android.browser
 
 import fi.refineid.android.core.NativeAuthenticationCertificate
-import fi.refineid.android.core.NativeAuthenticationKeyProfile
+import fi.refineid.android.core.NativeCardKeyProfile
 import fi.refineid.android.core.P384_COORDINATE_LENGTH_BITS
 import fi.refineid.android.core.RSA_3072_KEY_LENGTH_BITS
 import java.security.GeneralSecurityException
@@ -77,25 +77,25 @@ internal class BrowserClientIdentity private constructor(
             )
         }
 
-        private fun NativeAuthenticationKeyProfile.jcaKeyAlgorithm(): String? =
+        private fun NativeCardKeyProfile.jcaKeyAlgorithm(): String? =
             when (this) {
-                NativeAuthenticationKeyProfile.RSA_3072 -> JCA_KEY_ALGORITHM_RSA
+                NativeCardKeyProfile.RSA_3072 -> JCA_KEY_ALGORITHM_RSA
 
-                NativeAuthenticationKeyProfile.ECDSA_P384 -> JCA_KEY_ALGORITHM_EC
+                NativeCardKeyProfile.ECDSA_P384 -> JCA_KEY_ALGORITHM_EC
 
-                NativeAuthenticationKeyProfile.RSA_2048,
-                NativeAuthenticationKeyProfile.ECDSA_P256,
+                NativeCardKeyProfile.RSA_2048,
+                NativeCardKeyProfile.ECDSA_P256,
                 -> null
             }
 
-        private fun NativeAuthenticationKeyProfile.matches(certificate: X509Certificate): Boolean =
+        private fun NativeCardKeyProfile.matches(certificate: X509Certificate): Boolean =
             when (this) {
-                NativeAuthenticationKeyProfile.RSA_3072 -> {
+                NativeCardKeyProfile.RSA_3072 -> {
                     (certificate.publicKey as? RSAPublicKey)?.modulus?.bitLength() ==
                         RSA_3072_KEY_LENGTH_BITS
                 }
 
-                NativeAuthenticationKeyProfile.ECDSA_P384 -> {
+                NativeCardKeyProfile.ECDSA_P384 -> {
                     (certificate.publicKey as? ECPublicKey)
                         ?.params
                         ?.curve
@@ -103,8 +103,8 @@ internal class BrowserClientIdentity private constructor(
                         ?.fieldSize == P384_COORDINATE_LENGTH_BITS
                 }
 
-                NativeAuthenticationKeyProfile.RSA_2048,
-                NativeAuthenticationKeyProfile.ECDSA_P256,
+                NativeCardKeyProfile.RSA_2048,
+                NativeCardKeyProfile.ECDSA_P256,
                 -> {
                     false
                 }

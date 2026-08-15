@@ -18,11 +18,11 @@ class NativeAuthenticationCertificateReplyTest {
             )
 
         val result =
-            NativeAuthenticationCertificateReply.decode(reply)
-                as NativeAuthenticationCertificateReadResult.Success
+            decodeAuthentication(reply)
+                as NativeCertificateReadResult.Success<NativeAuthenticationCertificate>
 
         assertTrue(reply.all { byte -> byte == 0.toByte() })
-        assertEquals(NativeAuthenticationKeyProfile.RSA_2048, result.certificate.keyProfile)
+        assertEquals(NativeCardKeyProfile.RSA_2048, result.certificate.keyProfile)
         assertEquals(SYNTHETIC_DER.size, result.certificate.derLength)
         val copied = result.certificate.copyDer()
         assertArrayEquals(SYNTHETIC_DER, copied)
@@ -39,22 +39,22 @@ class NativeAuthenticationCertificateReplyTest {
         val cases =
             listOf(
                 CERTIFICATE_CARD_UNAVAILABLE to
-                    NativeAuthenticationCertificateReadFailure.CARD_UNAVAILABLE,
+                    NativeCertificateReadFailure.CARD_UNAVAILABLE,
                 CERTIFICATE_REJECTED to
-                    NativeAuthenticationCertificateReadFailure.REJECTED,
+                    NativeCertificateReadFailure.REJECTED,
                 CERTIFICATE_TRANSPORT_ERROR to
-                    NativeAuthenticationCertificateReadFailure.TRANSPORT_ERROR,
+                    NativeCertificateReadFailure.TRANSPORT_ERROR,
                 CERTIFICATE_INVALID to
-                    NativeAuthenticationCertificateReadFailure.INVALID_CERTIFICATE,
+                    NativeCertificateReadFailure.INVALID_CERTIFICATE,
                 CERTIFICATE_BRIDGE_ERROR to
-                    NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
+                    NativeCertificateReadFailure.BRIDGE_ERROR,
             )
 
         for ((tag, expected) in cases) {
             val reply = byteArrayOf(tag)
             val result =
-                NativeAuthenticationCertificateReply.decode(reply)
-                    as NativeAuthenticationCertificateReadResult.Failure
+                decodeAuthentication(reply)
+                    as NativeCertificateReadResult.Failure
 
             assertEquals(expected, result.kind)
             assertArrayEquals(CLEARED_FAILURE_REPLY, reply)
@@ -68,16 +68,52 @@ class NativeAuthenticationCertificateReplyTest {
         val unknownProfile =
             byteArrayOf(CERTIFICATE_SUCCEEDED, UNKNOWN_KEY_PROFILE, SYNTHETIC_DER_TAG)
 
-        assertBridgeFailure(NativeAuthenticationCertificateReply.decode(payloadBearingFailure))
-        assertBridgeFailure(NativeAuthenticationCertificateReply.decode(unknownProfile))
+        assertBridgeFailure(decodeAuthentication(payloadBearingFailure))
+        assertBridgeFailure(decodeAuthentication(unknownProfile))
         assertTrue(payloadBearingFailure.all { byte -> byte == 0.toByte() })
         assertTrue(unknownProfile.all { byte -> byte == 0.toByte() })
     }
 
-    private fun assertBridgeFailure(result: NativeAuthenticationCertificateReadResult) {
+    @Test
+    fun constructsAQualifiedCertificateFromTheSharedWireVocabulary() {
+        val reply =
+            byteArrayOf(
+                CERTIFICATE_SUCCEEDED,
+                KEY_PROFILE_RSA_2048,
+                SYNTHETIC_DER_TAG,
+                SYNTHETIC_DER_LENGTH,
+            )
+
+        val result =
+            NativeCertificateReply.decode(
+                reply = reply,
+                certificate = { profile, der ->
+                    NativeQualifiedCertificate(
+                        keyProfile = profile,
+                        ownedDer = der,
+                    )
+                },
+            ) as NativeCertificateReadResult.Success<NativeQualifiedCertificate>
+
+        assertEquals(NativeCardKeyProfile.RSA_2048, result.certificate.keyProfile)
+        result.certificate.close()
+    }
+
+    private fun decodeAuthentication(reply: ByteArray): NativeCertificateReadResult<NativeAuthenticationCertificate> =
+        NativeCertificateReply.decode(
+            reply = reply,
+            certificate = { profile, der ->
+                NativeAuthenticationCertificate(
+                    keyProfile = profile,
+                    ownedDer = der,
+                )
+            },
+        )
+
+    private fun assertBridgeFailure(result: NativeCertificateReadResult<*>) {
         assertEquals(
-            NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
-            (result as NativeAuthenticationCertificateReadResult.Failure).kind,
+            NativeCertificateReadFailure.BRIDGE_ERROR,
+            (result as NativeCertificateReadResult.Failure).kind,
         )
     }
 

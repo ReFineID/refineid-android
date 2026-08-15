@@ -47,31 +47,31 @@ internal enum class AuthenticationSigningInputMode {
 
 internal enum class AuthenticationSigningAlgorithm(
     val wireValue: Int,
-    val keyProfile: NativeAuthenticationKeyProfile,
+    val keyProfile: NativeCardKeyProfile,
     val signatureLength: Int,
     val digestLength: Int,
 ) {
     RSA_PKCS1_SHA256(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_RSA_PKCS1_SHA256,
-        keyProfile = NativeAuthenticationKeyProfile.RSA_3072,
+        keyProfile = NativeCardKeyProfile.RSA_3072,
         signatureLength = RSA_3072_SIGNATURE_LENGTH_BYTES,
         digestLength = SHA256_DIGEST_LENGTH_BYTES,
     ),
     RSA_PSS_SHA256(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_RSA_PSS_SHA256,
-        keyProfile = NativeAuthenticationKeyProfile.RSA_3072,
+        keyProfile = NativeCardKeyProfile.RSA_3072,
         signatureLength = RSA_3072_SIGNATURE_LENGTH_BYTES,
         digestLength = SHA256_DIGEST_LENGTH_BYTES,
     ),
     ECDSA_P384_SHA256(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_ECDSA_P384_SHA256,
-        keyProfile = NativeAuthenticationKeyProfile.ECDSA_P384,
+        keyProfile = NativeCardKeyProfile.ECDSA_P384,
         signatureLength = P384_RAW_SIGNATURE_LENGTH_BYTES,
         digestLength = SHA256_DIGEST_LENGTH_BYTES,
     ),
     ECDSA_P384_SHA384(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_ECDSA_P384_SHA384,
-        keyProfile = NativeAuthenticationKeyProfile.ECDSA_P384,
+        keyProfile = NativeCardKeyProfile.ECDSA_P384,
         signatureLength = P384_RAW_SIGNATURE_LENGTH_BYTES,
         digestLength = SHA384_DIGEST_LENGTH_BYTES,
     ),

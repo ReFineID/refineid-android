@@ -6,11 +6,13 @@ import fi.refineid.android.browser.BrowserSignatureStatus
 import fi.refineid.android.core.AtrValidation
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
-import fi.refineid.android.core.NativeAuthenticationCertificateReadResult
+import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignResult
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardOperationResult
+import fi.refineid.android.core.NativeCertificateReadResult
 import fi.refineid.android.core.NativePin1PreflightResult
+import fi.refineid.android.core.NativeQualifiedCertificate
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
 import fi.refineid.android.usb.AuthenticationStatus
@@ -112,21 +114,47 @@ internal object AppTrace {
 
     fun nativeAuthenticationCertificateReadCompleted(
         startedAt: Long,
-        result: NativeAuthenticationCertificateReadResult,
+        result: NativeCertificateReadResult<NativeAuthenticationCertificate>,
     ) {
         val outcome =
             when (result) {
-                is NativeAuthenticationCertificateReadResult.Success -> {
+                is NativeCertificateReadResult.Success -> {
                     "success profile=" + result.certificate.keyProfile +
                         " length=" + result.certificate.derLength
                 }
 
-                is NativeAuthenticationCertificateReadResult.Failure -> {
+                is NativeCertificateReadResult.Failure -> {
                     "failure kind=" + result.kind
                 }
             }
         debug(
             "native:authentication-certificate-read " + outcome +
+                " duration-us=" + elapsedMicroseconds(startedAt),
+        )
+    }
+
+    fun nativeQualifiedCertificateReadStarted(level: NativeCardExchangeLevel): Long =
+        System.nanoTime().also {
+            debug("native:qualified-certificate-read start level=" + level)
+        }
+
+    fun nativeQualifiedCertificateReadCompleted(
+        startedAt: Long,
+        result: NativeCertificateReadResult<NativeQualifiedCertificate>,
+    ) {
+        val outcome =
+            when (result) {
+                is NativeCertificateReadResult.Success -> {
+                    "success profile=" + result.certificate.keyProfile +
+                        " length=" + result.certificate.derLength
+                }
+
+                is NativeCertificateReadResult.Failure -> {
+                    "failure kind=" + result.kind
+                }
+            }
+        debug(
+            "native:qualified-certificate-read " + outcome +
                 " duration-us=" + elapsedMicroseconds(startedAt),
         )
     }

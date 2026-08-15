@@ -29,29 +29,29 @@ internal class AuthenticationSignatureVerifierInstrumentedTest {
         for (algorithm in AuthenticationSigningAlgorithm.entries) {
             val keyPair =
                 when (algorithm.keyProfile) {
-                    NativeAuthenticationKeyProfile.RSA_3072 -> rsaKeyPair
+                    NativeCardKeyProfile.RSA_3072 -> rsaKeyPair
 
-                    NativeAuthenticationKeyProfile.ECDSA_P384 -> ecKeyPair
+                    NativeCardKeyProfile.ECDSA_P384 -> ecKeyPair
 
-                    NativeAuthenticationKeyProfile.RSA_2048,
-                    NativeAuthenticationKeyProfile.ECDSA_P256,
+                    NativeCardKeyProfile.RSA_2048,
+                    NativeCardKeyProfile.ECDSA_P256,
                     -> throw AssertionError("unexpected authentication key profile")
                 }
             val providerSignature = sign(keyPair, algorithm, SYNTHETIC_MESSAGE)
             val cardSignature =
                 when (algorithm.keyProfile) {
-                    NativeAuthenticationKeyProfile.RSA_3072 -> {
+                    NativeCardKeyProfile.RSA_3072 -> {
                         providerSignature
                     }
 
-                    NativeAuthenticationKeyProfile.ECDSA_P384 -> {
+                    NativeCardKeyProfile.ECDSA_P384 -> {
                         derP384EcdsaToRaw(providerSignature).also {
                             providerSignature.fill(ZERO_BYTE)
                         }
                     }
 
-                    NativeAuthenticationKeyProfile.RSA_2048,
-                    NativeAuthenticationKeyProfile.ECDSA_P256,
+                    NativeCardKeyProfile.RSA_2048,
+                    NativeCardKeyProfile.ECDSA_P256,
                     -> {
                         throw AssertionError("unexpected authentication key profile")
                     }

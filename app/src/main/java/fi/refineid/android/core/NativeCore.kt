@@ -26,7 +26,7 @@ internal enum class NativeCardOperationResult {
     BRIDGE_ERROR,
 }
 
-internal enum class NativeAuthenticationKeyProfile {
+internal enum class NativeCardKeyProfile {
     RSA_2048,
     RSA_3072,
     ECDSA_P256,
@@ -34,7 +34,7 @@ internal enum class NativeAuthenticationKeyProfile {
 }
 
 internal class NativeAuthenticationCertificate(
-    val keyProfile: NativeAuthenticationKeyProfile,
+    val keyProfile: NativeCardKeyProfile,
     private val ownedDer: ByteArray,
 ) : AutoCloseable {
     private var isClosed = false
@@ -68,7 +68,36 @@ internal class NativeAuthenticationCertificate(
             ", closed=" + isClosed + ")"
 }
 
-internal enum class NativeAuthenticationCertificateReadFailure {
+internal class NativeQualifiedCertificate(
+    val keyProfile: NativeCardKeyProfile,
+    private val ownedDer: ByteArray,
+) : AutoCloseable {
+    private var isClosed = false
+
+    val derLength: Int
+        get() = ownedDer.size
+
+    fun copyDer(): ByteArray {
+        check(!isClosed) {
+            "qualified certificate is closed"
+        }
+        return ownedDer.copyOf()
+    }
+
+    override fun close() {
+        if (!isClosed) {
+            ownedDer.fill(0)
+            isClosed = true
+        }
+    }
+
+    override fun toString(): String =
+        "NativeQualifiedCertificate(profile=" + keyProfile +
+            ", length=" + derLength +
+            ", closed=" + isClosed + ")"
+}
+
+internal enum class NativeCertificateReadFailure {
     CARD_UNAVAILABLE,
     REJECTED,
     TRANSPORT_ERROR,
@@ -76,16 +105,16 @@ internal enum class NativeAuthenticationCertificateReadFailure {
     BRIDGE_ERROR,
 }
 
-internal sealed interface NativeAuthenticationCertificateReadResult {
-    class Success(
-        val certificate: NativeAuthenticationCertificate,
-    ) : NativeAuthenticationCertificateReadResult {
+internal sealed interface NativeCertificateReadResult<out Certificate> {
+    class Success<Certificate>(
+        val certificate: Certificate,
+    ) : NativeCertificateReadResult<Certificate> {
         override fun toString(): String = "Success(" + certificate + ")"
     }
 
     data class Failure(
-        val kind: NativeAuthenticationCertificateReadFailure,
-    ) : NativeAuthenticationCertificateReadResult
+        val kind: NativeCertificateReadFailure,
+    ) : NativeCertificateReadResult<Nothing>
 }
 
 /** Synchronous byte-moving callback invoked only inside one native operation. */
@@ -193,32 +222,81 @@ internal object NativeCore {
     fun readAuthenticationCertificate(
         exchangeLevel: NativeCardExchangeLevel,
         exchange: NativeBlockExchange,
-    ): NativeAuthenticationCertificateReadResult {
+    ): NativeCertificateReadResult<NativeAuthenticationCertificate> {
         val startedAt = AppTrace.nativeAuthenticationCertificateReadStarted(exchangeLevel)
         val result =
             if (!isLoaded) {
-                NativeAuthenticationCertificateReadResult.Failure(
-                    NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
+                NativeCertificateReadResult.Failure(
+                    NativeCertificateReadFailure.BRIDGE_ERROR,
                 )
             } else {
                 try {
-                    NativeAuthenticationCertificateReply.decode(
-                        readAuthenticationCertificateNative(
-                            exchangeLevel = exchangeLevel.wireValue,
-                            callback = exchange,
-                        ),
+                    NativeCertificateReply.decode(
+                        reply =
+                            readAuthenticationCertificateNative(
+                                exchangeLevel = exchangeLevel.wireValue,
+                                callback = exchange,
+                            ),
+                        certificate = { profile, der ->
+                            NativeAuthenticationCertificate(
+                                keyProfile = profile,
+                                ownedDer = der,
+                            )
+                        },
                     )
                 } catch (_: LinkageError) {
-                    NativeAuthenticationCertificateReadResult.Failure(
-                        NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
+                    NativeCertificateReadResult.Failure(
+                        NativeCertificateReadFailure.BRIDGE_ERROR,
                     )
                 } catch (_: RuntimeException) {
-                    NativeAuthenticationCertificateReadResult.Failure(
-                        NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
+                    NativeCertificateReadResult.Failure(
+                        NativeCertificateReadFailure.BRIDGE_ERROR,
                     )
                 }
             }
         AppTrace.nativeAuthenticationCertificateReadCompleted(
+            startedAt = startedAt,
+            result = result,
+        )
+        return result
+    }
+
+    fun readQualifiedCertificate(
+        exchangeLevel: NativeCardExchangeLevel,
+        exchange: NativeBlockExchange,
+    ): NativeCertificateReadResult<NativeQualifiedCertificate> {
+        val startedAt = AppTrace.nativeQualifiedCertificateReadStarted(exchangeLevel)
+        val result =
+            if (!isLoaded) {
+                NativeCertificateReadResult.Failure(
+                    NativeCertificateReadFailure.BRIDGE_ERROR,
+                )
+            } else {
+                try {
+                    NativeCertificateReply.decode(
+                        reply =
+                            readQualifiedCertificateNative(
+                                exchangeLevel = exchangeLevel.wireValue,
+                                callback = exchange,
+                            ),
+                        certificate = { profile, der ->
+                            NativeQualifiedCertificate(
+                                keyProfile = profile,
+                                ownedDer = der,
+                            )
+                        },
+                    )
+                } catch (_: LinkageError) {
+                    NativeCertificateReadResult.Failure(
+                        NativeCertificateReadFailure.BRIDGE_ERROR,
+                    )
+                } catch (_: RuntimeException) {
+                    NativeCertificateReadResult.Failure(
+                        NativeCertificateReadFailure.BRIDGE_ERROR,
+                    )
+                }
+            }
+        AppTrace.nativeQualifiedCertificateReadCompleted(
             startedAt = startedAt,
             result = result,
         )
@@ -358,6 +436,12 @@ internal object NativeCore {
     ): ByteArray
 
     @JvmStatic
+    private external fun readQualifiedCertificateNative(
+        exchangeLevel: Int,
+        callback: Any,
+    ): ByteArray
+
+    @JvmStatic
     private external fun probePin1StatusNative(
         exchangeLevel: Int,
         callback: Any,
@@ -373,8 +457,11 @@ internal object NativeCore {
     ): ByteArray
 }
 
-internal object NativeAuthenticationCertificateReply {
-    fun decode(reply: ByteArray): NativeAuthenticationCertificateReadResult =
+internal object NativeCertificateReply {
+    fun <Certificate> decode(
+        reply: ByteArray,
+        certificate: (NativeCardKeyProfile, ByteArray) -> Certificate,
+    ): NativeCertificateReadResult<Certificate> =
         try {
             if (reply.isEmpty() || reply.size > MAXIMUM_REPLY_LENGTH) {
                 return bridgeFailure()
@@ -382,41 +469,41 @@ internal object NativeAuthenticationCertificateReply {
 
             when (reply[CERTIFICATE_REPLY_TAG_OFFSET].toInt()) {
                 CERTIFICATE_SUCCEEDED -> {
-                    decodeSuccess(reply)
+                    decodeSuccess(reply, certificate)
                 }
 
                 CERTIFICATE_CARD_UNAVAILABLE -> {
                     decodeFailure(
                         reply,
-                        NativeAuthenticationCertificateReadFailure.CARD_UNAVAILABLE,
+                        NativeCertificateReadFailure.CARD_UNAVAILABLE,
                     )
                 }
 
                 CERTIFICATE_REJECTED -> {
                     decodeFailure(
                         reply,
-                        NativeAuthenticationCertificateReadFailure.REJECTED,
+                        NativeCertificateReadFailure.REJECTED,
                     )
                 }
 
                 CERTIFICATE_TRANSPORT_ERROR -> {
                     decodeFailure(
                         reply,
-                        NativeAuthenticationCertificateReadFailure.TRANSPORT_ERROR,
+                        NativeCertificateReadFailure.TRANSPORT_ERROR,
                     )
                 }
 
                 CERTIFICATE_INVALID -> {
                     decodeFailure(
                         reply,
-                        NativeAuthenticationCertificateReadFailure.INVALID_CERTIFICATE,
+                        NativeCertificateReadFailure.INVALID_CERTIFICATE,
                     )
                 }
 
                 CERTIFICATE_BRIDGE_ERROR -> {
                     decodeFailure(
                         reply,
-                        NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
+                        NativeCertificateReadFailure.BRIDGE_ERROR,
                     )
                 }
 
@@ -428,39 +515,42 @@ internal object NativeAuthenticationCertificateReply {
             reply.fill(0)
         }
 
-    private fun decodeSuccess(reply: ByteArray): NativeAuthenticationCertificateReadResult {
+    private fun <Certificate> decodeSuccess(
+        reply: ByteArray,
+        certificate: (NativeCardKeyProfile, ByteArray) -> Certificate,
+    ): NativeCertificateReadResult<Certificate> {
         if (reply.size <= CERTIFICATE_REPLY_HEADER_LENGTH) {
             return bridgeFailure()
         }
         val profile =
             when (reply[KEY_PROFILE_OFFSET].toInt()) {
-                KEY_PROFILE_RSA_2048 -> NativeAuthenticationKeyProfile.RSA_2048
-                KEY_PROFILE_RSA_3072 -> NativeAuthenticationKeyProfile.RSA_3072
-                KEY_PROFILE_ECDSA_P256 -> NativeAuthenticationKeyProfile.ECDSA_P256
-                KEY_PROFILE_ECDSA_P384 -> NativeAuthenticationKeyProfile.ECDSA_P384
+                KEY_PROFILE_RSA_2048 -> NativeCardKeyProfile.RSA_2048
+                KEY_PROFILE_RSA_3072 -> NativeCardKeyProfile.RSA_3072
+                KEY_PROFILE_ECDSA_P256 -> NativeCardKeyProfile.ECDSA_P256
+                KEY_PROFILE_ECDSA_P384 -> NativeCardKeyProfile.ECDSA_P384
                 else -> return bridgeFailure()
             }
-        return NativeAuthenticationCertificateReadResult.Success(
-            NativeAuthenticationCertificate(
-                keyProfile = profile,
-                ownedDer = reply.copyOfRange(CERTIFICATE_REPLY_HEADER_LENGTH, reply.size),
+        return NativeCertificateReadResult.Success(
+            certificate(
+                profile,
+                reply.copyOfRange(CERTIFICATE_REPLY_HEADER_LENGTH, reply.size),
             ),
         )
     }
 
     private fun decodeFailure(
         reply: ByteArray,
-        kind: NativeAuthenticationCertificateReadFailure,
-    ): NativeAuthenticationCertificateReadResult =
+        kind: NativeCertificateReadFailure,
+    ): NativeCertificateReadResult<Nothing> =
         if (reply.size == FAILURE_REPLY_LENGTH) {
-            NativeAuthenticationCertificateReadResult.Failure(kind)
+            NativeCertificateReadResult.Failure(kind)
         } else {
             bridgeFailure()
         }
 
-    private fun bridgeFailure(): NativeAuthenticationCertificateReadResult.Failure =
-        NativeAuthenticationCertificateReadResult.Failure(
-            NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
+    private fun bridgeFailure(): NativeCertificateReadResult.Failure =
+        NativeCertificateReadResult.Failure(
+            NativeCertificateReadFailure.BRIDGE_ERROR,
         )
 
     private const val CERTIFICATE_BRIDGE_ERROR = 0

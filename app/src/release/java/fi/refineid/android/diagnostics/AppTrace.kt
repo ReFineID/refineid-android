@@ -5,11 +5,13 @@ import fi.refineid.android.browser.BrowserSignatureStatus
 import fi.refineid.android.core.AtrValidation
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
-import fi.refineid.android.core.NativeAuthenticationCertificateReadResult
+import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignResult
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardOperationResult
+import fi.refineid.android.core.NativeCertificateReadResult
 import fi.refineid.android.core.NativePin1PreflightResult
+import fi.refineid.android.core.NativeQualifiedCertificate
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
 import fi.refineid.android.usb.AuthenticationStatus
@@ -64,7 +66,14 @@ internal object AppTrace {
 
     fun nativeAuthenticationCertificateReadCompleted(
         startedAt: Long,
-        result: NativeAuthenticationCertificateReadResult,
+        result: NativeCertificateReadResult<NativeAuthenticationCertificate>,
+    ) = Unit
+
+    fun nativeQualifiedCertificateReadStarted(level: NativeCardExchangeLevel): Long = 0L
+
+    fun nativeQualifiedCertificateReadCompleted(
+        startedAt: Long,
+        result: NativeCertificateReadResult<NativeQualifiedCertificate>,
     ) = Unit
 
     fun nativePin1StatusProbeStarted(level: NativeCardExchangeLevel): Long = 0L

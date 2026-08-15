@@ -1,22 +1,23 @@
 //! Narrow JNI border between Android and the reviewed ReFineID core.
 //!
-//! ATR bytes return only a small typed status. Public authentication
-//! certificate DER crosses back only after the core has bounded the read and
-//! reconstructed its public key; credential bytes never cross this border.
+//! ATR bytes return only a small typed status. Public authentication and
+//! qualified-signature certificates cross back only after the core has bounded
+//! each DER read and reconstructed its public key; credential bytes never cross
+//! this border.
 
-mod authentication_certificate;
 mod authentication_signer;
+mod card_certificate;
 mod card_transport;
 mod jni_card_exchange;
 mod pin1_status;
 
-use authentication_certificate::{
-    AuthenticationCertificate, AuthenticationCertificateReadFailure, AuthenticationKeyProfile,
-    read_authentication_certificate,
-};
 use authentication_signer::{
     AuthenticationSignFailure, AuthenticationSignature, AuthenticationSigningAlgorithm,
     AuthenticationSigningInput, authenticate_and_sign,
+};
+use card_certificate::{
+    CardCertificate, CardKeyProfile, CertificateReadFailure, read_authentication_certificate,
+    read_qualified_certificate,
 };
 use card_transport::{AndroidCardTransport, CardExchangeLevel};
 use jni::objects::{JByteArray, JClass, JObject};
@@ -103,6 +104,14 @@ const JAVA_ARRAY_CLEAR_CHUNK_LENGTH: usize = 64;
 const _: NativeMethod = jni::native_method! {
     java_type = "fi.refineid.android.core.NativeCore",
     static extern fn validate_atr_native(atr: [jbyte]) -> jint,
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCore",
+    static extern fn read_qualified_certificate_native(
+        exchange_level: jint,
+        callback: JObject,
+    ) -> [jbyte],
 };
 
 const _: NativeMethod = jni::native_method! {
@@ -205,7 +214,35 @@ fn read_authentication_certificate_native<'local>(
     let mut reply = if bridge_failed {
         vec![CERTIFICATE_BRIDGE_ERROR]
     } else {
-        encode_authentication_certificate_reply(result)
+        encode_certificate_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn read_qualified_certificate_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    exchange_level: jint,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let Some(level) = exchange_level_from_jint(exchange_level) else {
+        return env.byte_array_from_slice(&[CERTIFICATE_BRIDGE_ERROR]);
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let mut transport = AndroidCardTransport::new(exchange, level);
+        let result = read_qualified_certificate(&mut transport);
+        let exchange = transport.into_exchange();
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![CERTIFICATE_BRIDGE_ERROR]
+    } else {
+        encode_certificate_reply(result)
     };
     let java_reply = env.byte_array_from_slice(&reply);
     reply.fill(0);
@@ -413,29 +450,27 @@ fn map_pkcs15_selection_result(
     }
 }
 
-fn encode_authentication_certificate_reply(
-    result: Result<AuthenticationCertificate, AuthenticationCertificateReadFailure>,
-) -> Vec<u8> {
+fn encode_certificate_reply(result: Result<CardCertificate, CertificateReadFailure>) -> Vec<u8> {
     match result {
         Ok(mut certificate) => {
             let mut reply =
                 Vec::with_capacity(CERTIFICATE_REPLY_HEADER_LENGTH + certificate.der.len());
             reply.push(CERTIFICATE_SUCCEEDED);
             reply.push(match certificate.profile {
-                AuthenticationKeyProfile::Rsa2048 => KEY_PROFILE_RSA_2048,
-                AuthenticationKeyProfile::Rsa3072 => KEY_PROFILE_RSA_3072,
-                AuthenticationKeyProfile::EcdsaP256 => KEY_PROFILE_ECDSA_P256,
-                AuthenticationKeyProfile::EcdsaP384 => KEY_PROFILE_ECDSA_P384,
+                CardKeyProfile::Rsa2048 => KEY_PROFILE_RSA_2048,
+                CardKeyProfile::Rsa3072 => KEY_PROFILE_RSA_3072,
+                CardKeyProfile::EcdsaP256 => KEY_PROFILE_ECDSA_P256,
+                CardKeyProfile::EcdsaP384 => KEY_PROFILE_ECDSA_P384,
             });
             reply.append(&mut certificate.der);
             reply
         }
         Err(failure) => vec![match failure {
-            AuthenticationCertificateReadFailure::CardUnavailable => CERTIFICATE_CARD_UNAVAILABLE,
-            AuthenticationCertificateReadFailure::Rejected => CERTIFICATE_REJECTED,
-            AuthenticationCertificateReadFailure::Transport => CERTIFICATE_TRANSPORT_ERROR,
-            AuthenticationCertificateReadFailure::InvalidCertificate => CERTIFICATE_INVALID,
-            AuthenticationCertificateReadFailure::Bridge => CERTIFICATE_BRIDGE_ERROR,
+            CertificateReadFailure::CardUnavailable => CERTIFICATE_CARD_UNAVAILABLE,
+            CertificateReadFailure::Rejected => CERTIFICATE_REJECTED,
+            CertificateReadFailure::Transport => CERTIFICATE_TRANSPORT_ERROR,
+            CertificateReadFailure::InvalidCertificate => CERTIFICATE_INVALID,
+            CertificateReadFailure::Bridge => CERTIFICATE_BRIDGE_ERROR,
         }],
     }
 }
@@ -536,16 +571,14 @@ mod tests {
         NO_RETRY_COUNT, PIN_REFERENCE_CITIZEN, PIN1_PREFLIGHT_BRIDGE_ERROR,
         PIN1_PREFLIGHT_CARD_UNAVAILABLE, PIN1_PREFLIGHT_REPLY_LENGTH, PIN1_PREFLIGHT_SUCCEEDED,
         PIN1_STATE_REMAINING, POLICY_PERMITTED, authentication_algorithm_from_jint,
-        authentication_request_from_jint, encode_authentication_certificate_reply,
-        encode_authentication_signature_reply, encode_pin1_preflight_reply,
-        exchange_level_from_jint, map_pkcs15_selection_result, validate_atr_bytes,
-    };
-    use crate::authentication_certificate::{
-        AuthenticationCertificate, AuthenticationCertificateReadFailure, AuthenticationKeyProfile,
+        authentication_request_from_jint, encode_authentication_signature_reply,
+        encode_certificate_reply, encode_pin1_preflight_reply, exchange_level_from_jint,
+        map_pkcs15_selection_result, validate_atr_bytes,
     };
     use crate::authentication_signer::{
         AuthenticationSignFailure, AuthenticationSignature, AuthenticationSigningAlgorithm,
     };
+    use crate::card_certificate::{CardCertificate, CardKeyProfile, CertificateReadFailure};
     use crate::card_transport::{AndroidTransportError, CardExchangeLevel};
     use crate::pin1_status::{Pin1Preflight, Pin1PreflightFailure, Pin1State};
 
@@ -688,8 +721,8 @@ mod tests {
     #[test]
     fn encodes_certificate_success_and_typed_failures() {
         const SYNTHETIC_DER: &[u8] = &[SYNTHETIC_DER_SEQUENCE_TAG, SYNTHETIC_DER_EMPTY_LENGTH];
-        let success = encode_authentication_certificate_reply(Ok(AuthenticationCertificate {
-            profile: AuthenticationKeyProfile::Rsa2048,
+        let success = encode_certificate_reply(Ok(CardCertificate {
+            profile: CardKeyProfile::Rsa2048,
             der: SYNTHETIC_DER.to_vec(),
         }));
         assert_eq!(
@@ -705,15 +738,11 @@ mod tests {
             CERTIFICATE_REPLY_HEADER_LENGTH + SYNTHETIC_DER.len()
         );
         assert_eq!(
-            encode_authentication_certificate_reply(Err(
-                AuthenticationCertificateReadFailure::CardUnavailable
-            )),
+            encode_certificate_reply(Err(CertificateReadFailure::CardUnavailable)),
             vec![CERTIFICATE_CARD_UNAVAILABLE]
         );
         assert_eq!(
-            encode_authentication_certificate_reply(Err(
-                AuthenticationCertificateReadFailure::InvalidCertificate
-            )),
+            encode_certificate_reply(Err(CertificateReadFailure::InvalidCertificate)),
             vec![CERTIFICATE_INVALID]
         );
     }

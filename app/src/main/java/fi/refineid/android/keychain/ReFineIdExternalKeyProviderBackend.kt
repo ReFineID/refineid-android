@@ -1,6 +1,6 @@
 package fi.refineid.android.keychain
 
-import fi.refineid.android.core.NativeAuthenticationKeyProfile
+import fi.refineid.android.core.NativeCardKeyProfile
 import fi.refineid.android.diagnostics.AppTrace
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledThreadPoolExecutor
@@ -165,7 +165,7 @@ internal class ReFineIdExternalKeyProviderBackend(
 
     private data class ActiveIdentityMetadata(
         val providerGeneration: ExternalKeyProviderGeneration,
-        val keyProfile: NativeAuthenticationKeyProfile,
+        val keyProfile: NativeCardKeyProfile,
     )
 
     private companion object {
@@ -230,14 +230,14 @@ internal class ExternalKeyProviderRuntime(
     }
 }
 
-private fun NativeAuthenticationKeyProfile.isSupportedExternalKeyProfile(): Boolean =
+private fun NativeCardKeyProfile.isSupportedExternalKeyProfile(): Boolean =
     when (this) {
-        NativeAuthenticationKeyProfile.RSA_3072,
-        NativeAuthenticationKeyProfile.ECDSA_P384,
+        NativeCardKeyProfile.RSA_3072,
+        NativeCardKeyProfile.ECDSA_P384,
         -> true
 
-        NativeAuthenticationKeyProfile.RSA_2048,
-        NativeAuthenticationKeyProfile.ECDSA_P256,
+        NativeCardKeyProfile.RSA_2048,
+        NativeCardKeyProfile.ECDSA_P256,
         -> false
     }
 

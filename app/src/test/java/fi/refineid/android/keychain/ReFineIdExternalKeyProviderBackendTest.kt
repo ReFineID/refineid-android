@@ -3,8 +3,8 @@ package fi.refineid.android.keychain
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.NativeAuthenticationCertificate
-import fi.refineid.android.core.NativeAuthenticationKeyProfile
 import fi.refineid.android.core.NativeAuthenticationSignature
+import fi.refineid.android.core.NativeCardKeyProfile
 import fi.refineid.android.core.Pin1Submission
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -83,7 +83,7 @@ class ReFineIdExternalKeyProviderBackendTest {
 
     @Test
     fun unsupportedAndAbsentCardsAreNeverPublished() {
-        val fixture = Fixture(keyProfile = NativeAuthenticationKeyProfile.RSA_2048)
+        val fixture = Fixture(keyProfile = NativeCardKeyProfile.RSA_2048)
 
         assertNull(fixture.backend.copyActiveIdentity())
         fixture.cardSession.isPresent = false
@@ -115,7 +115,7 @@ class ReFineIdExternalKeyProviderBackendTest {
     }
 
     private class Fixture(
-        keyProfile: NativeAuthenticationKeyProfile = NativeAuthenticationKeyProfile.RSA_3072,
+        keyProfile: NativeCardKeyProfile = NativeCardKeyProfile.RSA_3072,
     ) : AutoCloseable {
         val cardSession = RecordingCardSession(keyProfile)
         val authorizer = RecordingAuthorizer()
@@ -137,7 +137,7 @@ class ReFineIdExternalKeyProviderBackendTest {
     }
 
     private class RecordingCardSession(
-        var keyProfile: NativeAuthenticationKeyProfile,
+        var keyProfile: NativeCardKeyProfile,
     ) : ExternalKeyCardSession {
         var isPresent = true
         var providerGeneration = CURRENT_PROVIDER_GENERATION
