@@ -18,6 +18,9 @@ import fi.refineid.android.usb.UsbReaderSnapshot
 class MainActivity : ComponentActivity() {
     private var readerSnapshot by mutableStateOf(UsbReaderSnapshot())
     private lateinit var readerController: UsbReaderController
+    private val readerStateListener: (UsbReaderSnapshot) -> Unit = { snapshot ->
+        readerSnapshot = snapshot
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,11 +34,8 @@ class MainActivity : ComponentActivity() {
         window.decorView.importantForContentCapture =
             View.IMPORTANT_FOR_CONTENT_CAPTURE_NO_EXCLUDE_DESCENDANTS
 
-        readerController =
-            UsbReaderController(this) { snapshot ->
-                readerSnapshot = snapshot
-            }
-        readerController.start()
+        readerController = (application as ReFineIdApplication).readerController
+        readerController.addStateListener(readerStateListener)
 
         setContent {
             ReFineIdTheme {
@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         AppTrace.activityDestroyed()
-        readerController.stop()
+        readerController.removeStateListener(readerStateListener)
         super.onDestroy()
     }
 }

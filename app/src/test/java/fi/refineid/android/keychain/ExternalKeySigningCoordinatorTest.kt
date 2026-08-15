@@ -122,6 +122,70 @@ class ExternalKeySigningCoordinatorTest {
     }
 
     @Test
+    fun callerCancellationDuringConsentClosesThePinWithoutCardUse() {
+        val scheduler = ManualScheduler()
+        val cardService = RecordingCardService()
+        val cancellation = ExternalKeyOperationCancellation()
+        lateinit var submittedPin: Pin1Submission
+        val authorizer =
+            RecordingPinAuthorizer {
+                cancellation.cancel()
+                syntheticPin().also { pin1 -> submittedPin = pin1 }.let(
+                    ExternalKeyPinAuthorization::Approved,
+                )
+            }
+        val coordinator =
+            ExternalKeySigningCoordinator(
+                cardService = cardService,
+                pinAuthorizer = authorizer,
+                replayLease = ExternalSignatureReplayLease(scheduler),
+                initialProviderGeneration = CURRENT_GENERATION,
+            )
+        val request = request(cancellation = cancellation)
+
+        assertEquals(
+            ExternalKeySignFailure.CALLER_INTERRUPTED,
+            coordinator.sign(request).requireFailure(),
+        )
+        assertEquals(NO_OPERATIONS, cardService.signCount)
+        assertThrows(IllegalStateException::class.java) {
+            submittedPin.consume { Unit }
+        }
+        request.close()
+        coordinator.close()
+    }
+
+    @Test
+    fun callerCancellationDuringCardUseDiscardsTheCompletedSignature() {
+        val cancellation = ExternalKeyOperationCancellation()
+        val cardService = RecordingCardService(beforeResult = cancellation::cancel)
+        val coordinator =
+            ExternalKeySigningCoordinator(
+                cardService = cardService,
+                pinAuthorizer =
+                    RecordingPinAuthorizer {
+                        ExternalKeyPinAuthorization.Approved(syntheticPin())
+                    },
+                replayLease = ExternalSignatureReplayLease(ManualScheduler()),
+                initialProviderGeneration = CURRENT_GENERATION,
+            )
+        val request = request(cancellation = cancellation)
+
+        assertEquals(
+            ExternalKeySignFailure.CALLER_INTERRUPTED,
+            coordinator.sign(request).requireFailure(),
+        )
+        assertEquals(SINGLE_OPERATION, cardService.signCount)
+        assertTrue(
+            requireNotNull(cardService.lastIssuedSignatureBytes).all { value ->
+                value == CLEARED_BYTE
+            },
+        )
+        request.close()
+        coordinator.close()
+    }
+
+    @Test
     fun aGenerationChangeDuringCardUseDiscardsTheCompletedSignature() {
         val scheduler = ManualScheduler()
         lateinit var coordinator: ExternalKeySigningCoordinator
@@ -351,13 +415,19 @@ class ExternalKeySigningCoordinatorTest {
         callerUid: Int = SYNTHETIC_CALLER_UID,
         providerGeneration: Long = SYNTHETIC_PROVIDER_GENERATION,
         digestFill: Byte = DIGEST_FILL,
+        cancellation: ExternalKeyOperationCancellation = ExternalKeyOperationCancellation(),
     ): ExternalKeySignRequest =
         ExternalKeySignRequest.create(
-            callerUid = ExternalKeyCallerUid(callerUid),
+            caller =
+                ExternalKeyCaller.create(
+                    uid = ExternalKeyCallerUid(callerUid),
+                    packageNames = arrayOf(SYNTHETIC_CALLER_PACKAGE),
+                ),
             alias = ExternalKeyAlias.AUTHENTICATION,
             providerGeneration = ExternalKeyProviderGeneration(providerGeneration),
             algorithm = SYNTHETIC_ALGORITHM,
             digest = ByteArray(SYNTHETIC_ALGORITHM.digestLength) { digestFill },
+            cancellation = cancellation,
         )
 
     private fun ExternalKeySignResult.requireSuccess(): ExternalKeySignResult.Success {
@@ -377,6 +447,7 @@ class ExternalKeySigningCoordinatorTest {
     private companion object {
         const val SYNTHETIC_CALLER_UID = 10_001
         const val ALTERNATE_CALLER_UID = 10_002
+        const val SYNTHETIC_CALLER_PACKAGE = "com.example.browser"
         const val SYNTHETIC_PROVIDER_GENERATION = 7L
         const val ALTERNATE_PROVIDER_GENERATION = 8L
         const val MINIMUM_SCHEDULE_DELAY_MILLISECONDS = 1L

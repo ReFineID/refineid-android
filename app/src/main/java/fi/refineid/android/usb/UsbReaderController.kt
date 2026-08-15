@@ -21,6 +21,7 @@ import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidUsbSession
 import fi.refineid.android.usb.ccid.CcidUsbSessionOpener
+import java.security.SecureRandom
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -57,9 +58,25 @@ internal data class UsbReaderSnapshot(
     val authenticationStatus: AuthenticationStatus = AuthenticationStatus.IDLE,
 )
 
+/** One public card identity bound to the currently retained USB session. */
+internal class UsbAuthenticationIdentity(
+    val providerGeneration: Long,
+    val certificate: NativeAuthenticationCertificate,
+) : AutoCloseable {
+    override fun close() {
+        certificate.close()
+    }
+
+    override fun toString(): String =
+        "UsbAuthenticationIdentity(" +
+            "generationAvailable=" + (providerGeneration >= MINIMUM_PROVIDER_GENERATION) +
+            ", profile=" + certificate.keyProfile +
+            ", certificateLength=" + certificate.derLength +
+            ")"
+}
+
 internal class UsbReaderController(
     context: Context,
-    private val onStateChanged: (UsbReaderSnapshot) -> Unit,
 ) : AuthenticationCardService {
     private val applicationContext = context.applicationContext
     private val usbManager =
@@ -73,10 +90,14 @@ internal class UsbReaderController(
         )
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val providerGenerationRandom = SecureRandom()
+    private val stateListeners = linkedSetOf<(UsbReaderSnapshot) -> Unit>()
 
     @Volatile
     private var isStarted = false
     private var selectedDevice: UsbDevice? = null
+
+    @Volatile
     private var latestSnapshot = UsbReaderSnapshot()
 
     @Volatile
@@ -84,6 +105,7 @@ internal class UsbReaderController(
 
     // Worker-thread confined. Main-thread state never owns a USB connection.
     private var activeSession: CcidUsbSession? = null
+    private var activeProviderGeneration: Long? = null
 
     private val permissionReceiver =
         object : BroadcastReceiver() {
@@ -150,6 +172,17 @@ internal class UsbReaderController(
         isStarted = true
         AppTrace.usbControllerStarted()
         refresh()
+    }
+
+    fun addStateListener(listener: (UsbReaderSnapshot) -> Unit) {
+        checkMainThread()
+        stateListeners += listener
+        listener(latestSnapshot)
+    }
+
+    fun removeStateListener(listener: (UsbReaderSnapshot) -> Unit) {
+        checkMainThread()
+        stateListeners -= listener
     }
 
     fun stop() {
@@ -328,6 +361,37 @@ internal class UsbReaderController(
         }
     }
 
+    /** Blocks a provider Binder worker until earlier session setup has settled. */
+    fun copyActiveAuthenticationIdentity(): UsbAuthenticationIdentity? {
+        if (Looper.myLooper() == Looper.getMainLooper() || !isStarted) {
+            return null
+        }
+        val completion = CompletableFuture<UsbAuthenticationIdentity?>()
+        try {
+            ioExecutor.execute {
+                val session = activeSession
+                val providerGeneration = activeProviderGeneration
+                val identity =
+                    if (isStarted && session != null && providerGeneration != null) {
+                        try {
+                            UsbAuthenticationIdentity(
+                                providerGeneration = providerGeneration,
+                                certificate = session.copyAuthenticationCertificate(),
+                            )
+                        } catch (_: IllegalStateException) {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                completion.complete(identity)
+            }
+        } catch (_: RejectedExecutionException) {
+            return null
+        }
+        return completion.awaitPreservingInterrupt()
+    }
+
     /** Blocks a browser crypto worker while one card operation runs on the USB owner thread. */
     override fun signAuthenticationMessage(
         algorithm: AuthenticationSigningAlgorithm,
@@ -435,6 +499,7 @@ internal class UsbReaderController(
             val result = ccidSessionOpener.open(device)
             if (result is CcidSessionOpenResult.Ready) {
                 activeSession = result.session
+                activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
             }
             mainHandler.post {
                 if (
@@ -484,6 +549,7 @@ internal class UsbReaderController(
     }
 
     private fun closeActiveSession() {
+        activeProviderGeneration = null
         activeSession?.close()
         activeSession = null
     }
@@ -494,19 +560,8 @@ internal class UsbReaderController(
             status = snapshot.status,
             cardPresence = snapshot.cardPresence,
         )
-        onStateChanged(snapshot)
+        stateListeners.toList().forEach { listener -> listener(snapshot) }
     }
-
-    private fun UsbDevice.toDescriptor(): UsbDeviceDescriptor =
-        UsbDeviceDescriptor(
-            deviceId = deviceId,
-            interfaces =
-                List(interfaceCount) { index ->
-                    UsbInterfaceDescriptor(
-                        interfaceClass = getInterface(index).interfaceClass,
-                    )
-                },
-        )
 
     private companion object {
         const val USB_PERMISSION_REQUEST_CODE = 0x5246
@@ -514,7 +569,35 @@ internal class UsbReaderController(
     }
 }
 
-private fun CompletableFuture<AuthenticationSignResult>.awaitPreservingInterrupt(): AuthenticationSignResult {
+private fun checkMainThread() {
+    check(Looper.myLooper() == Looper.getMainLooper()) {
+        "USB reader listeners must be changed on the main thread"
+    }
+}
+
+private fun UsbDevice.toDescriptor(): UsbDeviceDescriptor =
+    UsbDeviceDescriptor(
+        deviceId = deviceId,
+        interfaces =
+            List(interfaceCount) { index ->
+                UsbInterfaceDescriptor(
+                    interfaceClass = getInterface(index).interfaceClass,
+                )
+            },
+    )
+
+private fun SecureRandom.nextProviderGeneration(): Long {
+    var generation: Long
+    do {
+        generation = nextLong() and PROVIDER_GENERATION_VALUE_MASK
+    } while (generation < MINIMUM_PROVIDER_GENERATION)
+    return generation
+}
+
+private const val MINIMUM_PROVIDER_GENERATION = 1L
+private const val PROVIDER_GENERATION_VALUE_MASK = Long.MAX_VALUE
+
+private fun <T> CompletableFuture<T>.awaitPreservingInterrupt(): T {
     var wasInterrupted = false
     while (true) {
         try {

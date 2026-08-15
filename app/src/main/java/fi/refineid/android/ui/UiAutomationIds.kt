@@ -14,4 +14,9 @@ internal object UiAutomationIds {
     const val BROWSER_CLOSE_ACTION = "browserCloseAction"
     const val BROWSER_PIN1_FIELD = "browserPin1Field"
     const val BROWSER_SIGN_ACTION = "browserSignAction"
+    const val EXTERNAL_KEY_PIN_SCREEN = "externalKeyPinScreen"
+    const val EXTERNAL_KEY_CALLER = "externalKeyCaller"
+    const val EXTERNAL_KEY_PIN1_FIELD = "externalKeyPin1Field"
+    const val EXTERNAL_KEY_CANCEL_ACTION = "externalKeyCancelAction"
+    const val EXTERNAL_KEY_AUTHENTICATE_ACTION = "externalKeyAuthenticateAction"
 }

@@ -16,6 +16,8 @@
     <string name="authentication">Authentication</string>
     <string name="pin1" tools:ignore="Typos">PIN1</string>
     <string name="sign">Sign</string>
+    <string name="authenticate">Authenticate</string>
+    <string name="cancel">Cancel</string>
     <string name="signing">Signing</string>
     <string name="signed">Signed</string>
     <string name="wrong_pin">Wrong PIN</string>

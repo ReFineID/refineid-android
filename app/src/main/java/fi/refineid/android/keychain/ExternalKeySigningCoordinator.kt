@@ -93,6 +93,9 @@ internal class ExternalKeySigningCoordinator(
     }
 
     fun sign(request: ExternalKeySignRequest): ExternalKeySignResult {
+        if (request.cancellation.isCancelled) {
+            return failure(ExternalKeySignFailure.CALLER_INTERRUPTED)
+        }
         try {
             operationLock.lockInterruptibly()
         } catch (_: InterruptedException) {
@@ -133,6 +136,9 @@ internal class ExternalKeySigningCoordinator(
 
     @Suppress("TooGenericExceptionCaught")
     private fun signLocked(request: ExternalKeySignRequest): ExternalKeySignResult {
+        if (request.cancellation.isCancelled) {
+            return failure(ExternalKeySignFailure.CALLER_INTERRUPTED)
+        }
         when (availability(request)) {
             ProviderAvailability.CURRENT -> {
                 Unit
@@ -154,6 +160,10 @@ internal class ExternalKeySigningCoordinator(
                 return failure(ExternalKeySignFailure.INVALID_REQUEST)
             }
         if (replay != null) {
+            if (request.cancellation.isCancelled) {
+                replay.close()
+                return failure(ExternalKeySignFailure.CALLER_INTERRUPTED)
+            }
             return ExternalKeySignResult.Success(
                 signature = replay,
                 isReplay = true,
@@ -166,6 +176,31 @@ internal class ExternalKeySigningCoordinator(
             } catch (_: Exception) {
                 return failure(ExternalKeySignFailure.INTERNAL_ERROR)
             }
+        when (availability(request)) {
+            ProviderAvailability.CURRENT -> {
+                Unit
+            }
+
+            ProviderAvailability.UNAVAILABLE -> {
+                if (authorization is ExternalKeyPinAuthorization.Approved) {
+                    authorization.pin1.close()
+                }
+                return failure(ExternalKeySignFailure.PROVIDER_UNAVAILABLE)
+            }
+
+            ProviderAvailability.GENERATION_CHANGED -> {
+                if (authorization is ExternalKeyPinAuthorization.Approved) {
+                    authorization.pin1.close()
+                }
+                return failure(ExternalKeySignFailure.PROVIDER_GENERATION_CHANGED)
+            }
+        }
+        if (request.cancellation.isCancelled) {
+            if (authorization is ExternalKeyPinAuthorization.Approved) {
+                authorization.pin1.close()
+            }
+            return failure(ExternalKeySignFailure.CALLER_INTERRUPTED)
+        }
         return when (authorization) {
             is ExternalKeyPinAuthorization.Approved -> {
                 signApproved(request, authorization.pin1)
@@ -195,20 +230,10 @@ internal class ExternalKeySigningCoordinator(
         request: ExternalKeySignRequest,
         pin1: Pin1Submission,
     ): ExternalKeySignResult {
-        when (availability(request)) {
-            ProviderAvailability.CURRENT -> {
-                Unit
-            }
-
-            ProviderAvailability.UNAVAILABLE -> {
-                pin1.close()
-                return failure(ExternalKeySignFailure.PROVIDER_UNAVAILABLE)
-            }
-
-            ProviderAvailability.GENERATION_CHANGED -> {
-                pin1.close()
-                return failure(ExternalKeySignFailure.PROVIDER_GENERATION_CHANGED)
-            }
+        val preconditionFailure = request.approvedSigningPreconditionFailure()
+        if (preconditionFailure != null) {
+            pin1.close()
+            return failure(preconditionFailure)
         }
         val digest =
             try {
@@ -230,6 +255,20 @@ internal class ExternalKeySigningCoordinator(
                 digest.fill(CLEARED_BYTE)
                 pin1.close()
             }
+        return completeCardResult(request, cardResult)
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun completeCardResult(
+        request: ExternalKeySignRequest,
+        cardResult: AuthenticationSignResult,
+    ): ExternalKeySignResult {
+        if (request.cancellation.isCancelled) {
+            if (cardResult is AuthenticationSignResult.Success) {
+                cardResult.signature.close()
+            }
+            return failure(ExternalKeySignFailure.CALLER_INTERRUPTED)
+        }
         if (cardResult is AuthenticationSignResult.Failure) {
             return failure(cardResult.kind.toExternalFailure())
         }
@@ -264,11 +303,39 @@ internal class ExternalKeySigningCoordinator(
                 return failure(ExternalKeySignFailure.PROVIDER_GENERATION_CHANGED)
             }
         }
+        if (request.cancellation.isCancelled) {
+            replayLease.invalidate()
+            signature.close()
+            return failure(ExternalKeySignFailure.CALLER_INTERRUPTED)
+        }
         return ExternalKeySignResult.Success(
             signature = signature,
             isReplay = false,
         )
     }
+
+    private fun ExternalKeySignRequest.approvedSigningPreconditionFailure(): ExternalKeySignFailure? =
+        when {
+            cancellation.isCancelled -> {
+                ExternalKeySignFailure.CALLER_INTERRUPTED
+            }
+
+            else -> {
+                when (availability(this)) {
+                    ProviderAvailability.CURRENT -> {
+                        null
+                    }
+
+                    ProviderAvailability.UNAVAILABLE -> {
+                        ExternalKeySignFailure.PROVIDER_UNAVAILABLE
+                    }
+
+                    ProviderAvailability.GENERATION_CHANGED -> {
+                        ExternalKeySignFailure.PROVIDER_GENERATION_CHANGED
+                    }
+                }
+            }
+        }
 
     private fun availability(request: ExternalKeySignRequest): ProviderAvailability =
         synchronized(stateLock) {

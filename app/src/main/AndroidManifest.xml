@@ -5,7 +5,10 @@
         android:name="android.hardware.usb.host"
         android:required="true" />
 
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+
     <application
+        android:name=".ReFineIdApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
@@ -15,6 +18,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ReFineID"
         android:usesCleartextTraffic="false">
+        <activity
+            android:name=".keychain.ExternalKeyPinActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:finishOnTaskLaunch="true"
+            android:launchMode="singleTop" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

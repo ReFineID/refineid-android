@@ -24,8 +24,44 @@ class ExternalSignatureReplayLeaseTest {
             ExternalKeyProviderGeneration(INVALID_PROVIDER_GENERATION)
         }
         assertThrows(IllegalArgumentException::class.java) {
+            ExternalKeyCaller.create(
+                uid = ExternalKeyCallerUid(SYNTHETIC_CALLER_UID),
+                packageNames = emptyArray(),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            ExternalKeyCaller.create(
+                uid = ExternalKeyCallerUid(SYNTHETIC_CALLER_UID),
+                packageNames = arrayOf(SYNTHETIC_CALLER_PACKAGE, SYNTHETIC_CALLER_PACKAGE),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
             request(digestLengthAdjustment = MISSING_BYTE_ADJUSTMENT)
         }
+    }
+
+    @Test
+    fun cancellationIsStickyAndInvokesAtMostOneRegisteredListener() {
+        val cancellation = ExternalKeyOperationCancellation()
+        var callbackCount = NO_CALLBACKS
+        val registration =
+            cancellation.register {
+                callbackCount += SINGLE_CALLBACK
+            }
+
+        cancellation.cancel()
+        cancellation.cancel()
+        registration.close()
+
+        assertTrue(cancellation.isCancelled)
+        assertEquals(SINGLE_CALLBACK, callbackCount)
+
+        var lateCallbackCount = NO_CALLBACKS
+        cancellation
+            .register {
+                lateCallbackCount += SINGLE_CALLBACK
+            }.close()
+        assertEquals(SINGLE_CALLBACK, lateCallbackCount)
     }
 
     @Test
@@ -221,6 +257,7 @@ class ExternalSignatureReplayLeaseTest {
         try {
             val digestText = digestCopy.joinToString(separator = "")
             assertFalse(request.toString().contains(SYNTHETIC_CALLER_UID.toString()))
+            assertFalse(request.toString().contains(SYNTHETIC_CALLER_PACKAGE))
             assertFalse(request.toString().contains(digestText))
             assertFalse(lease.toString().contains(ExternalKeyAlias.AUTHENTICATION.wireValue))
         } finally {
@@ -238,7 +275,11 @@ class ExternalSignatureReplayLeaseTest {
         digestLengthAdjustment: Int = NO_LENGTH_ADJUSTMENT,
     ): ExternalKeySignRequest =
         ExternalKeySignRequest.create(
-            callerUid = ExternalKeyCallerUid(callerUid),
+            caller =
+                ExternalKeyCaller.create(
+                    uid = ExternalKeyCallerUid(callerUid),
+                    packageNames = arrayOf(SYNTHETIC_CALLER_PACKAGE),
+                ),
             alias = ExternalKeyAlias.AUTHENTICATION,
             providerGeneration = ExternalKeyProviderGeneration(providerGeneration),
             algorithm = algorithm,
@@ -246,6 +287,7 @@ class ExternalSignatureReplayLeaseTest {
                 ByteArray(algorithm.digestLength + digestLengthAdjustment) {
                     digestFill
                 },
+            cancellation = ExternalKeyOperationCancellation(),
         )
 
     private fun syntheticSignature(algorithm: AuthenticationSigningAlgorithm): ByteArray =
@@ -287,6 +329,7 @@ class ExternalSignatureReplayLeaseTest {
         const val INVALID_CALLER_UID = -1
         const val SYNTHETIC_CALLER_UID = 10_001
         const val ALTERNATE_CALLER_UID = 10_002
+        const val SYNTHETIC_CALLER_PACKAGE = "com.example.browser"
         const val INVALID_PROVIDER_GENERATION = 0L
         const val SYNTHETIC_PROVIDER_GENERATION = 7L
         const val ALTERNATE_PROVIDER_GENERATION = 8L
@@ -294,6 +337,8 @@ class ExternalSignatureReplayLeaseTest {
         const val NO_LENGTH_ADJUSTMENT = 0
         const val MISSING_BYTE_ADJUSTMENT = -1
         const val SINGLE_MISSING_BYTE_COUNT = 1
+        const val NO_CALLBACKS = 0
+        const val SINGLE_CALLBACK = 1
         const val FIRST_TASK_INDEX = 0
         const val CLEARED_BYTE: Byte = 0
         const val DIGEST_FILL: Byte = 0x31
