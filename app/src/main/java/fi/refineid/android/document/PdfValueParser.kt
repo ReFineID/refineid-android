@@ -251,6 +251,39 @@ internal class PdfValueParser(
     )
 
     companion object {
+        fun arrayValues(text: String): List<String>? {
+            val encoded = PdfValueLexemes.strictLatin1(text) ?: return null
+            val parser = PdfValueParser(encoded)
+            parser.skipTrivia()
+            if (!parser.consume(ARRAY_OPEN)) {
+                return null
+            }
+            val values = mutableListOf<String>()
+            while (true) {
+                parser.skipTrivia()
+                if (parser.consume(ARRAY_CLOSE)) {
+                    return try {
+                        parser.requireEnd()
+                        values
+                    } catch (_: PdfSigningException) {
+                        null
+                    }
+                }
+                val value = parser.value(INITIAL_NESTING_DEPTH)
+                values += PdfValueLexemes.text(encoded, value)
+            }
+        }
+
+        fun unsignedIntegerArray(text: String): List<Int>? =
+            arrayValues(text)?.map { value ->
+                unsignedInteger(value) ?: return null
+            }
+
+        fun nameArray(text: String): List<String>? =
+            arrayValues(text)?.map { value ->
+                PdfValueLexemes.name(value) ?: return null
+            }
+
         fun reference(text: String): PdfDocumentIndex.Reference? {
             val encoded = PdfValueLexemes.strictLatin1(text) ?: return null
             val parser = PdfValueParser(encoded)

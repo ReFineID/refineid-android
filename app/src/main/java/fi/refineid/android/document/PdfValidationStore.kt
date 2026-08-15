@@ -96,7 +96,7 @@ internal object PdfValidationStore {
         output.writeLatin1(INDIRECT_OBJECT_SUFFIX)
 
         val xrefOffset = output.size
-        output.writeLatin1(
+        output.write(
             PdfIncrementalSigner.crossReferenceSection(
                 offsets = offsets,
                 size = maxOf(context.declaredSize, nextNumber),

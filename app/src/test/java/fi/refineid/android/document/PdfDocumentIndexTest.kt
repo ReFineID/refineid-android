@@ -59,11 +59,11 @@ class PdfDocumentIndexTest {
                 .document,
         )
         assertIndexFailure(
-            PdfSigningFailure.CROSS_REFERENCE_STREAM_UNSUPPORTED,
+            PdfSigningFailure.STRUCTURE_UNREADABLE,
             crossReferenceStreamShape(),
         )
         assertIndexFailure(
-            PdfSigningFailure.CROSS_REFERENCE_STREAM_UNSUPPORTED,
+            PdfSigningFailure.STRUCTURE_UNREADABLE,
             PdfTestDocuments.minimalClassic(trailerExtra = HYBRID_XREF_STREAM_ENTRY).document,
         )
         assertIndexFailure(

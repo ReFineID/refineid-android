@@ -71,7 +71,7 @@ internal object PdfIncrementalSigner {
         }
         val xrefOffset = output.size
         val finalSize = increment(field.number)
-        output.writeLatin1(
+        output.write(
             crossReferenceSection(
                 offsets = offsets,
                 size = maxOf(declaredSize, finalSize),
@@ -175,42 +175,14 @@ internal object PdfIncrementalSigner {
         root: PdfDocumentIndex.Reference,
         xrefOffset: Int,
         index: PdfDocumentIndex,
-    ): String {
-        val text = StringBuilder(PdfFormat.XREF_KEYWORD).append(LINE_FEED)
-        for ((reference, offset) in offsets.entries.sortedBy { entry -> entry.key.number }) {
-            text.append(reference.number).append(" 1\n")
-            text.append(
-                String.format(
-                    Locale.ROOT,
-                    XREF_ENTRY_FORMAT,
-                    offset,
-                    reference.generation,
-                ),
-            )
-        }
-        text.append(PdfFormat.TRAILER_KEYWORD).append(LINE_FEED)
-        text.append(
-            "<< ${PdfFormat.SIZE_KEY} $size ${PdfFormat.ROOT_KEY} ${root.encodedIndirectReference()}",
+    ): ByteArray =
+        PdfCrossReferenceSectionWriter.write(
+            offsets = offsets,
+            size = size,
+            root = root,
+            xrefOffset = xrefOffset,
+            index = index,
         )
-        text.append(" ${PdfFormat.PREVIOUS_XREF_KEY} ${index.previousStartXref}")
-        text.append(carriedTrailerEntries(index.trailer))
-        text.append(" >>\n${PdfFormat.START_XREF_KEYWORD}\n$xrefOffset\n")
-        text.append(PdfFormat.END_OF_FILE_MARKER).append(LINE_FEED)
-        return text.toString()
-    }
-
-    private fun carriedTrailerEntries(trailer: String): String {
-        val syntax = PdfDictionarySyntax(trailer)
-        val carried = StringBuilder()
-        syntax.entry(TRAILER_IDENTIFIER_NAME)?.let { identifier ->
-            carried.append(" /$TRAILER_IDENTIFIER_NAME ").append(syntax.value(identifier))
-        }
-        syntax.entry(TRAILER_INFO_NAME)?.let { info ->
-            val reference = PdfValueParser.reference(syntax.value(info)) ?: throw unreadable()
-            carried.append(" /$TRAILER_INFO_NAME ").append(reference.encodedIndirectReference())
-        }
-        return carried.toString()
-    }
 
     private fun patched(
         document: ByteArray,
@@ -404,10 +376,7 @@ internal object PdfIncrementalSigner {
     private const val BYTE_RANGE_SUFFIX = " ]\n"
     private const val CONTENTS_PREFIX = "/Contents "
     private const val SIGNATURE_OBJECT_SUFFIX = "\n>>\nendobj\n"
-    private const val XREF_ENTRY_FORMAT = "%010d %05d n \n"
     private const val PDF_DATE_FORMAT = "D:%04d%02d%02d%02d%02d%02d+00'00'"
-    private const val TRAILER_IDENTIFIER_NAME = "ID"
-    private const val TRAILER_INFO_NAME = "Info"
     private const val LINE_FEED = '\n'
     private const val MINIMUM_NEW_OBJECT_NUMBER = 1
     private const val NEW_OBJECT_GENERATION = 0

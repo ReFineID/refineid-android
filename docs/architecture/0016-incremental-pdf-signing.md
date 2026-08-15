@@ -19,11 +19,19 @@ that appears signed while readers reconstruct a different object graph.
 
 ## Decision
 
-The first Android writer accepts unencrypted PDFs whose complete revision chain
-uses classic cross-reference tables. Its byte-oriented index validates each
-table, generation, object offset, trailer link, dictionary boundary, page-tree
-depth, and cycle before planning an update. Cross-reference streams fail with a
-specific unsupported result; they are not repaired or converted implicitly.
+The Android writer accepts unencrypted PDFs whose revision chain uses classic
+cross-reference tables, cross-reference streams, or hybrid tables with
+`/XRefStm`. Its byte-oriented index validates each section, generation, object
+offset, trailer link, dictionary boundary, page-tree depth, and cycle before
+planning an update. It resolves both direct objects and generation-zero objects
+stored in object streams.
+
+Structural streams may be unfiltered or use one `FlateDecode` filter, including
+the equivalent singleton filter and decode-parameter arrays. Inflation is
+limited to 64 MiB. PNG predictors 10 through 15 are decoded for one-color,
+eight-bit rows. Other filters, predictors, color counts, and component widths
+fail with a typed unsupported-encoding result; malformed structures fail as
+unreadable. Encrypted documents remain explicitly refused.
 
 The writer copies the input verbatim and appends:
 
@@ -31,7 +39,11 @@ The writer copies the input verbatim and appends:
    `/ByteRange` and zero-filled hexadecimal `/Contents` reservation;
 2. one invisible combined signature-field and widget object;
 3. revised page, AcroForm, field-array, and annotation-array objects as needed;
-4. a classic cross-reference section whose trailer points to the prior one.
+4. a cross-reference section whose `/Prev` points to the prior one.
+
+The appended section follows the newest source representation: a classic table
+or hybrid section remains a table, while a cross-reference stream remains a
+stream. The writer does not rewrite or convert the source revision.
 
 Existing object generations are retained. New object numbers are allocated
 above both the declared size and every claimed cross-reference entry. Direct
@@ -58,13 +70,18 @@ linkage, distinct field names, signature versus timestamp dictionaries,
 Unicode metadata, syntax-shaped metadata, malformed surrogate pairs, excessive
 length, and dates outside the PDF year range.
 
-An optional compatibility test invokes qpdf when it is installed and requires
-the filled synthetic revision to pass `qpdf --check` without repair warnings.
-The test fixture contains only synthetic data and no valid private signature.
+Cross-reference tests cover direct and compressed objects, all five PNG row
+filters, singleton filter and decode-parameter arrays, hybrid precedence,
+retained DSS revisions, malformed field widths, and unsupported encodings. An
+optional interoperability test asks qpdf to convert a synthetic classic file to
+an object-stream PDF, signs it, and requires the result to pass
+`qpdf --check` without repair warnings. `pdfinfo` and Poppler rendering provide
+independent inspection of the resulting revision. Fixtures contain only
+synthetic data and no valid private signature.
 
 ## Consequences
 
-Classic unencrypted PDFs can now reach the deterministic CMS boundary without
-changing signed bytes. Cross-reference streams, object streams, encrypted
-documents, visible appearances, holder-facing orchestration, trusted
-timestamps, and archival revocation evidence remain explicit later work.
+Modern unencrypted PDFs can now reach the deterministic CMS boundary without
+changing signed bytes. Encrypted documents, additional stream filters and
+predictor shapes, visible appearances, and holder-facing orchestration remain
+outside this layer.

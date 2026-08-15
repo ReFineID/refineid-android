@@ -33,8 +33,9 @@ instrumented development harness, but it is not the product boundary.
   bound to the exact qualified certificate with mandatory local verification
 - Canonical detached PAdES CMS assembly for RSA-3072 and P-384, with strict DER
   parsing and exact signed-attribute reconstruction
-- Bounded classic-PDF incremental revisions with invisible signature fields,
-  fixed byte ranges, repeat-signing support, and qpdf compatibility checks
+- Bounded classic and cross-reference-stream PDF revisions with object-stream
+  resolution, invisible signature fields, fixed byte ranges, repeat-signing
+  support, and qpdf compatibility checks
 - One-shot PAdES-B-B orchestration that binds the exact card certificate,
   signed attributes, verified card signature, and prepared PDF revision
 - Independent OpenSSL, qpdf, and Poppler validation for synthetic RSA-3072 and

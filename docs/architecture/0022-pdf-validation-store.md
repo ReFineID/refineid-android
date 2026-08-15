@@ -20,11 +20,13 @@ must not be transcoded through UTF-8.
 
 ## Decision
 
-`PdfValidationStore.append` writes one classic-cross-reference incremental
-revision. Each distinct new certificate, OCSP response, and CRL becomes an
-unfiltered stream whose `/Length` covers exactly the evidence bytes. A new DSS
-dictionary references those streams, and a new version of the existing catalog
-references that DSS. The prior document remains an exact prefix of the result.
+`PdfValidationStore.append` writes one incremental revision and preserves the
+newest cross-reference shape: classic and hybrid inputs receive a table, while
+cross-reference-stream inputs receive a stream. Each distinct new certificate,
+OCSP response, and CRL becomes an unfiltered stream whose `/Length` covers
+exactly the evidence bytes. A new DSS dictionary references those streams, and
+a new version of the existing catalog references that DSS. The prior document
+remains an exact prefix of the result.
 
 The existing token-aware PDF parser resolves a direct DSS or one indirect DSS
 dictionary. Direct or indirect arrays under `/Certs`, `/OCSPs`, and `/CRLs` are
@@ -53,7 +55,8 @@ indirect VRI dictionaries, extension retention, malformed-store rejection,
 escaped names, nested and quoted false matches, raw eight-bit catalog and DSS
 values, and token-aware trailer identifiers. They also prove that a DSS
 appended after a signature preserves the entire signed revision as an exact
-prefix. qpdf independently accepts the resulting file.
+prefix and that a stream-shaped input retains its shape. qpdf independently
+accepts the resulting file.
 
 ## Consequences
 

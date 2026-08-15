@@ -76,6 +76,23 @@ internal class PdfBytes(
         return null
     }
 
+    fun firstTokenRange(
+        token: String,
+        from: Int,
+    ): Range? {
+        var cursor = from.coerceAtLeast(FIRST_BYTE_OFFSET)
+        while (cursor < bytes.size) {
+            val found = firstRange(token, cursor) ?: return null
+            val hasLeadingBoundary =
+                found.start == FIRST_BYTE_OFFSET || isBoundary(bytes[found.start - BYTE_OFFSET_STEP])
+            if (hasLeadingBoundary && hasToken(token, found.start)) {
+                return found
+            }
+            cursor = found.start + BYTE_OFFSET_STEP
+        }
+        return null
+    }
+
     fun lastRange(keyword: String): Range? {
         val expected = keyword.encodeToByteArray()
         if (expected.isEmpty() || expected.size > bytes.size) {
