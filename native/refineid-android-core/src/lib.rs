@@ -10,6 +10,8 @@ mod card_certificate;
 mod card_transport;
 mod jni_card_exchange;
 mod pin1_status;
+mod pin2_status;
+mod qualified_signer;
 
 use authentication_signer::{
     AuthenticationSignFailure, AuthenticationSignature, AuthenticationSigningAlgorithm,
@@ -25,6 +27,11 @@ use jni::sys::jint;
 use jni::{Env, NativeMethod};
 use jni_card_exchange::JniBlockExchange;
 use pin1_status::{Pin1Preflight, Pin1PreflightFailure, Pin1State, probe_pin1_preflight};
+use pin2_status::{Pin2Preflight, Pin2PreflightFailure, Pin2State, probe_pin2_preflight};
+use qualified_signer::{
+    MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH, QualifiedSignFailure, QualifiedSignature,
+    QualifiedSigningAlgorithm, qualified_sign,
+};
 use refineid_apdu::TransportOutcome;
 use refineid_atr::{Atr, Convention};
 use refineid_auth::PinReferenceScheme;
@@ -57,6 +64,11 @@ const PIN1_PREFLIGHT_SUCCEEDED: u8 = 1;
 const PIN1_PREFLIGHT_CARD_UNAVAILABLE: u8 = 2;
 const PIN1_PREFLIGHT_TRANSPORT_ERROR: u8 = 3;
 
+const PIN2_PREFLIGHT_BRIDGE_ERROR: u8 = 0;
+const PIN2_PREFLIGHT_SUCCEEDED: u8 = 1;
+const PIN2_PREFLIGHT_CARD_UNAVAILABLE: u8 = 2;
+const PIN2_PREFLIGHT_TRANSPORT_ERROR: u8 = 3;
+
 const AUTHENTICATION_SIGNATURE_BRIDGE_ERROR: u8 = 0;
 const AUTHENTICATION_SIGNATURE_SUCCEEDED: u8 = 1;
 const AUTHENTICATION_SIGNATURE_CARD_UNAVAILABLE: u8 = 2;
@@ -77,6 +89,24 @@ const AUTHENTICATION_PREHASHED_RSA_PSS_SHA256: u8 = 5;
 const AUTHENTICATION_PREHASHED_ECDSA_P384_SHA256: u8 = 6;
 const AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384: u8 = 7;
 
+const QUALIFIED_SIGNATURE_BRIDGE_ERROR: u8 = 0;
+const QUALIFIED_SIGNATURE_SUCCEEDED: u8 = 1;
+const QUALIFIED_SIGNATURE_CARD_UNAVAILABLE: u8 = 2;
+const QUALIFIED_SIGNATURE_TRANSPORT_ERROR: u8 = 3;
+const QUALIFIED_SIGNATURE_INVALID_PIN: u8 = 4;
+const QUALIFIED_SIGNATURE_SAFETY_REFUSED: u8 = 5;
+const QUALIFIED_SIGNATURE_PIN_LOCKED: u8 = 6;
+const QUALIFIED_SIGNATURE_WRONG_PIN: u8 = 7;
+const QUALIFIED_SIGNATURE_VERIFICATION_REJECTED: u8 = 8;
+const QUALIFIED_SIGNATURE_CERTIFICATE_REJECTED: u8 = 9;
+const QUALIFIED_SIGNATURE_INVALID_CERTIFICATE: u8 = 10;
+const QUALIFIED_SIGNATURE_CERTIFICATE_MISMATCH: u8 = 11;
+const QUALIFIED_SIGNATURE_KEY_PROFILE_MISMATCH: u8 = 12;
+const QUALIFIED_SIGNATURE_SIGNING_REJECTED: u8 = 13;
+
+const QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384: u8 = 0;
+const QUALIFIED_ALGORITHM_ECDSA_P384_SHA384: u8 = 1;
+
 const PIN_REFERENCE_CITIZEN: u8 = 0;
 const PIN_REFERENCE_ORGANIZATIONAL: u8 = 1;
 
@@ -85,6 +115,12 @@ const PIN1_STATE_REMAINING: u8 = 1;
 const PIN1_STATE_LOCKED: u8 = 2;
 const PIN1_STATE_NO_INFORMATION: u8 = 3;
 const PIN1_STATE_UNRECOGNISED: u8 = 4;
+
+const PIN2_STATE_VERIFIED: u8 = 0;
+const PIN2_STATE_REMAINING: u8 = 1;
+const PIN2_STATE_LOCKED: u8 = 2;
+const PIN2_STATE_NO_INFORMATION: u8 = 3;
+const PIN2_STATE_UNRECOGNISED: u8 = 4;
 
 const POLICY_REFUSED: u8 = 0;
 const POLICY_PERMITTED: u8 = 1;
@@ -97,8 +133,11 @@ const KEY_PROFILE_ECDSA_P384: u8 = 3;
 
 const CERTIFICATE_REPLY_HEADER_LENGTH: usize = 2;
 const PIN1_PREFLIGHT_REPLY_LENGTH: usize = 5;
+const PIN2_PREFLIGHT_REPLY_LENGTH: usize = 5;
 const AUTHENTICATION_SIGNATURE_REPLY_HEADER_LENGTH: usize = 2;
+const QUALIFIED_SIGNATURE_REPLY_HEADER_LENGTH: usize = 2;
 const MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH: usize = 1_024 * 1_024;
+const MAXIMUM_EXPECTED_CERTIFICATE_LENGTH: usize = 16 * 1_024;
 const JAVA_ARRAY_CLEAR_CHUNK_LENGTH: usize = 64;
 
 const _: NativeMethod = jni::native_method! {
@@ -107,7 +146,7 @@ const _: NativeMethod = jni::native_method! {
 };
 
 const _: NativeMethod = jni::native_method! {
-    java_type = "fi.refineid.android.core.NativeCore",
+    java_type = "fi.refineid.android.core.NativeQualifiedCore",
     static extern fn read_qualified_certificate_native(
         exchange_level: jint,
         callback: JObject,
@@ -126,8 +165,28 @@ const _: NativeMethod = jni::native_method! {
 };
 
 const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeQualifiedCore",
+    static extern fn qualified_sign_native(
+        exchange_level: jint,
+        algorithm: jint,
+        pin: [jbyte],
+        content: [jbyte],
+        expected_certificate: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
     java_type = "fi.refineid.android.core.NativeCore",
     static extern fn probe_pin1_status_native(
+        exchange_level: jint,
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeQualifiedCore",
+    static extern fn probe_pin2_status_native(
         exchange_level: jint,
         callback: JObject,
     ) -> [jbyte],
@@ -277,6 +336,34 @@ fn probe_pin1_status_native<'local>(
     java_reply
 }
 
+fn probe_pin2_status_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    exchange_level: jint,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let Some(level) = exchange_level_from_jint(exchange_level) else {
+        return env.byte_array_from_slice(&[PIN2_PREFLIGHT_BRIDGE_ERROR]);
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let mut transport = AndroidCardTransport::new(exchange, level);
+        let result = probe_pin2_preflight(&mut transport);
+        let exchange = transport.into_exchange();
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![PIN2_PREFLIGHT_BRIDGE_ERROR]
+    } else {
+        encode_pin2_preflight_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
 fn authenticate_and_sign_native<'local>(
     env: &mut Env<'local>,
     _class: JClass<'local>,
@@ -345,6 +432,104 @@ fn authenticate_and_sign_native<'local>(
     java_reply
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the static JNI ABI carries five explicit request fields plus its environment, class, and callback"
+)]
+fn qualified_sign_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    exchange_level: jint,
+    algorithm: jint,
+    pin: JByteArray<'local>,
+    content: JByteArray<'local>,
+    expected_certificate: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let mut pin_bytes = match env.convert_byte_array(&pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let _ = clear_java_byte_array(env, &pin);
+            return Err(error);
+        }
+    };
+    if let Err(error) = clear_java_byte_array(env, &pin) {
+        pin_bytes.fill(0);
+        return Err(error);
+    }
+
+    let Some(level) = exchange_level_from_jint(exchange_level) else {
+        pin_bytes.fill(0);
+        return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
+    };
+    let Some(algorithm) = qualified_algorithm_from_jint(algorithm) else {
+        pin_bytes.fill(0);
+        return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
+    };
+    let content_length = match content.len(env) {
+        Ok(length) => length,
+        Err(error) => {
+            pin_bytes.fill(0);
+            return Err(error);
+        }
+    };
+    if content_length > MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH {
+        pin_bytes.fill(0);
+        return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
+    }
+    let certificate_length = match expected_certificate.len(env) {
+        Ok(length) => length,
+        Err(error) => {
+            pin_bytes.fill(0);
+            return Err(error);
+        }
+    };
+    if certificate_length == 0 || certificate_length > MAXIMUM_EXPECTED_CERTIFICATE_LENGTH {
+        pin_bytes.fill(0);
+        return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
+    }
+
+    let mut content_bytes = match env.convert_byte_array(&content) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            pin_bytes.fill(0);
+            return Err(error);
+        }
+    };
+    let mut certificate_bytes = match env.convert_byte_array(&expected_certificate) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            pin_bytes.fill(0);
+            content_bytes.fill(0);
+            return Err(error);
+        }
+    };
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let mut transport = AndroidCardTransport::new(exchange, level);
+        let result = qualified_sign(
+            &mut transport,
+            algorithm,
+            pin_bytes,
+            &content_bytes,
+            &certificate_bytes,
+        );
+        let exchange = transport.into_exchange();
+        (result, exchange.bridge_failed())
+    };
+    content_bytes.fill(0);
+    certificate_bytes.fill(0);
+
+    let mut reply = if bridge_failed {
+        vec![QUALIFIED_SIGNATURE_BRIDGE_ERROR]
+    } else {
+        encode_qualified_signature_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
 fn clear_java_byte_array(env: &Env<'_>, array: &JByteArray<'_>) -> Result<(), jni::errors::Error> {
     const ZEROES: [i8; JAVA_ARRAY_CLEAR_CHUNK_LENGTH] = [0; JAVA_ARRAY_CLEAR_CHUNK_LENGTH];
     let length = array.len(env)?;
@@ -385,6 +570,18 @@ fn authentication_algorithm_from_jint(value: jint) -> Option<AuthenticationSigni
         }
         value if value == jint::from(AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA384) => {
             Some(AuthenticationSigningAlgorithm::EcdsaP384Sha384)
+        }
+        _ => None,
+    }
+}
+
+fn qualified_algorithm_from_jint(value: jint) -> Option<QualifiedSigningAlgorithm> {
+    match value {
+        value if value == jint::from(QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384) => {
+            Some(QualifiedSigningAlgorithm::RsaPkcs1Sha384)
+        }
+        value if value == jint::from(QUALIFIED_ALGORITHM_ECDSA_P384_SHA384) => {
+            Some(QualifiedSigningAlgorithm::EcdsaP384Sha384)
         }
         _ => None,
     }
@@ -509,6 +706,40 @@ fn encode_pin1_preflight_reply(result: Result<Pin1Preflight, Pin1PreflightFailur
     }
 }
 
+fn encode_pin2_preflight_reply(result: Result<Pin2Preflight, Pin2PreflightFailure>) -> Vec<u8> {
+    match result {
+        Ok(preflight) => {
+            let (state, retries) = match preflight.state {
+                Pin2State::Verified => (PIN2_STATE_VERIFIED, NO_RETRY_COUNT),
+                Pin2State::Remaining(retries) => (PIN2_STATE_REMAINING, retries),
+                Pin2State::Locked => (PIN2_STATE_LOCKED, NO_RETRY_COUNT),
+                Pin2State::NoInformation => (PIN2_STATE_NO_INFORMATION, NO_RETRY_COUNT),
+                Pin2State::Unrecognised => (PIN2_STATE_UNRECOGNISED, NO_RETRY_COUNT),
+            };
+            let reply: [u8; PIN2_PREFLIGHT_REPLY_LENGTH] = [
+                PIN2_PREFLIGHT_SUCCEEDED,
+                match preflight.scheme {
+                    PinReferenceScheme::Citizen => PIN_REFERENCE_CITIZEN,
+                    PinReferenceScheme::Organizational => PIN_REFERENCE_ORGANIZATIONAL,
+                },
+                state,
+                retries,
+                if preflight.qualified_signature_permitted {
+                    POLICY_PERMITTED
+                } else {
+                    POLICY_REFUSED
+                },
+            ];
+            reply.to_vec()
+        }
+        Err(failure) => vec![match failure {
+            Pin2PreflightFailure::CardUnavailable => PIN2_PREFLIGHT_CARD_UNAVAILABLE,
+            Pin2PreflightFailure::Transport => PIN2_PREFLIGHT_TRANSPORT_ERROR,
+            Pin2PreflightFailure::Bridge => PIN2_PREFLIGHT_BRIDGE_ERROR,
+        }],
+    }
+}
+
 fn encode_authentication_signature_reply(
     result: Result<AuthenticationSignature, AuthenticationSignFailure>,
 ) -> Vec<u8> {
@@ -551,13 +782,46 @@ fn encode_authentication_signature_reply(
     }
 }
 
+fn encode_qualified_signature_reply(
+    result: Result<QualifiedSignature, QualifiedSignFailure>,
+) -> Vec<u8> {
+    match result {
+        Ok(mut signature) => {
+            let mut reply =
+                Vec::with_capacity(QUALIFIED_SIGNATURE_REPLY_HEADER_LENGTH + signature.bytes.len());
+            reply.push(QUALIFIED_SIGNATURE_SUCCEEDED);
+            reply.push(match signature.algorithm {
+                QualifiedSigningAlgorithm::RsaPkcs1Sha384 => QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384,
+                QualifiedSigningAlgorithm::EcdsaP384Sha384 => QUALIFIED_ALGORITHM_ECDSA_P384_SHA384,
+            });
+            reply.append(&mut signature.bytes);
+            reply
+        }
+        Err(failure) => vec![match failure {
+            QualifiedSignFailure::InvalidPin => QUALIFIED_SIGNATURE_INVALID_PIN,
+            QualifiedSignFailure::SafetyRefused => QUALIFIED_SIGNATURE_SAFETY_REFUSED,
+            QualifiedSignFailure::PinLocked => QUALIFIED_SIGNATURE_PIN_LOCKED,
+            QualifiedSignFailure::WrongPin => QUALIFIED_SIGNATURE_WRONG_PIN,
+            QualifiedSignFailure::VerificationRejected => QUALIFIED_SIGNATURE_VERIFICATION_REJECTED,
+            QualifiedSignFailure::CertificateRejected => QUALIFIED_SIGNATURE_CERTIFICATE_REJECTED,
+            QualifiedSignFailure::InvalidCertificate => QUALIFIED_SIGNATURE_INVALID_CERTIFICATE,
+            QualifiedSignFailure::CertificateMismatch => QUALIFIED_SIGNATURE_CERTIFICATE_MISMATCH,
+            QualifiedSignFailure::KeyProfileMismatch => QUALIFIED_SIGNATURE_KEY_PROFILE_MISMATCH,
+            QualifiedSignFailure::SigningRejected => QUALIFIED_SIGNATURE_SIGNING_REJECTED,
+            QualifiedSignFailure::CardUnavailable => QUALIFIED_SIGNATURE_CARD_UNAVAILABLE,
+            QualifiedSignFailure::Transport => QUALIFIED_SIGNATURE_TRANSPORT_ERROR,
+            QualifiedSignFailure::Bridge => QUALIFIED_SIGNATURE_BRIDGE_ERROR,
+        }],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use refineid_apdu::TransportOutcome;
     use refineid_atr::{Convention, MINIMAL_DIRECT_ATR};
     use refineid_auth::PinReferenceScheme;
     use refineid_pkcs15::Pkcs15Error;
-    use refineid_sign::ECDSA_P384_SIG_BYTES;
+    use refineid_sign::{ECDSA_P384_SIG_BYTES, RSA_3072_SIG_BYTES};
 
     use super::{
         ATR_INVALID, ATR_VALID_NON_T0_DIRECT, ATR_VALID_T0_DIRECT, ATR_VALID_T0_INVERSE,
@@ -570,10 +834,15 @@ mod tests {
         CERTIFICATE_SUCCEEDED, EXCHANGE_LEVEL_APDU, EXCHANGE_LEVEL_T0_TPDU, KEY_PROFILE_RSA_2048,
         NO_RETRY_COUNT, PIN_REFERENCE_CITIZEN, PIN1_PREFLIGHT_BRIDGE_ERROR,
         PIN1_PREFLIGHT_CARD_UNAVAILABLE, PIN1_PREFLIGHT_REPLY_LENGTH, PIN1_PREFLIGHT_SUCCEEDED,
-        PIN1_STATE_REMAINING, POLICY_PERMITTED, authentication_algorithm_from_jint,
+        PIN1_STATE_REMAINING, PIN2_PREFLIGHT_BRIDGE_ERROR, PIN2_PREFLIGHT_CARD_UNAVAILABLE,
+        PIN2_PREFLIGHT_REPLY_LENGTH, PIN2_PREFLIGHT_SUCCEEDED, PIN2_STATE_REMAINING,
+        POLICY_PERMITTED, QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384,
+        QUALIFIED_SIGNATURE_CARD_UNAVAILABLE, QUALIFIED_SIGNATURE_REPLY_HEADER_LENGTH,
+        QUALIFIED_SIGNATURE_SUCCEEDED, authentication_algorithm_from_jint,
         authentication_request_from_jint, encode_authentication_signature_reply,
-        encode_certificate_reply, encode_pin1_preflight_reply, exchange_level_from_jint,
-        map_pkcs15_selection_result, validate_atr_bytes,
+        encode_certificate_reply, encode_pin1_preflight_reply, encode_pin2_preflight_reply,
+        encode_qualified_signature_reply, exchange_level_from_jint, map_pkcs15_selection_result,
+        qualified_algorithm_from_jint, validate_atr_bytes,
     };
     use crate::authentication_signer::{
         AuthenticationSignFailure, AuthenticationSignature, AuthenticationSigningAlgorithm,
@@ -581,20 +850,29 @@ mod tests {
     use crate::card_certificate::{CardCertificate, CardKeyProfile, CertificateReadFailure};
     use crate::card_transport::{AndroidTransportError, CardExchangeLevel};
     use crate::pin1_status::{Pin1Preflight, Pin1PreflightFailure, Pin1State};
+    use crate::pin2_status::{Pin2Preflight, Pin2PreflightFailure, Pin2State};
+    use crate::qualified_signer::{
+        QualifiedSignFailure, QualifiedSignature, QualifiedSigningAlgorithm,
+    };
 
     const AUTHENTICATION_SIGNATURE_TAG_OFFSET: usize = 0;
     const AUTHENTICATION_SIGNATURE_ALGORITHM_OFFSET: usize = 1;
+    const QUALIFIED_SIGNATURE_TAG_OFFSET: usize = 0;
+    const QUALIFIED_SIGNATURE_ALGORITHM_OFFSET: usize = 1;
     const ATR_CONVENTION_OFFSET: usize = 0;
     const UNSUPPORTED_EXCHANGE_LEVEL: i32 = 2;
     const AUTHENTICATION_ALGORITHM_BELOW_RANGE: i32 = -1;
     const AUTHENTICATION_ALGORITHM_ABOVE_RANGE: i32 = 4;
     const AUTHENTICATION_REQUEST_BELOW_RANGE: i32 = -1;
     const AUTHENTICATION_REQUEST_ABOVE_RANGE: i32 = 8;
+    const QUALIFIED_ALGORITHM_BELOW_RANGE: i32 = -1;
+    const QUALIFIED_ALGORITHM_ABOVE_RANGE: i32 = 2;
     const SYNTHETIC_REJECTED_STATUS_WORD: u16 = 0x6a82;
     const SYNTHETIC_DER_SEQUENCE_TAG: u8 = 0x30;
     const SYNTHETIC_DER_EMPTY_LENGTH: u8 = 0x00;
     const SYNTHETIC_PIN_RETRY_COUNT: u8 = 3;
     const PIN1_PREFLIGHT_RETRY_COUNT_OFFSET: usize = 3;
+    const PIN2_PREFLIGHT_RETRY_COUNT_OFFSET: usize = 3;
 
     #[test]
     fn accepts_minimal_direct_atr() {
@@ -651,6 +929,22 @@ mod tests {
         );
         assert_eq!(
             authentication_algorithm_from_jint(AUTHENTICATION_ALGORITHM_ABOVE_RANGE),
+            None
+        );
+    }
+
+    #[test]
+    fn accepts_only_stable_qualified_algorithm_codes() {
+        assert_eq!(
+            qualified_algorithm_from_jint(i32::from(QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384)),
+            Some(QualifiedSigningAlgorithm::RsaPkcs1Sha384)
+        );
+        assert_eq!(
+            qualified_algorithm_from_jint(QUALIFIED_ALGORITHM_BELOW_RANGE),
+            None
+        );
+        assert_eq!(
+            qualified_algorithm_from_jint(QUALIFIED_ALGORITHM_ABOVE_RANGE),
             None
         );
     }
@@ -777,6 +1071,35 @@ mod tests {
     }
 
     #[test]
+    fn encodes_pin2_preflight_without_raw_card_values() {
+        let success = encode_pin2_preflight_reply(Ok(Pin2Preflight {
+            scheme: PinReferenceScheme::Citizen,
+            state: Pin2State::Remaining(SYNTHETIC_PIN_RETRY_COUNT),
+            qualified_signature_permitted: true,
+        }));
+        assert_eq!(
+            success,
+            vec![
+                PIN2_PREFLIGHT_SUCCEEDED,
+                PIN_REFERENCE_CITIZEN,
+                PIN2_STATE_REMAINING,
+                SYNTHETIC_PIN_RETRY_COUNT,
+                POLICY_PERMITTED,
+            ]
+        );
+        assert_eq!(success.len(), PIN2_PREFLIGHT_REPLY_LENGTH);
+        assert_ne!(success[PIN2_PREFLIGHT_RETRY_COUNT_OFFSET], NO_RETRY_COUNT);
+        assert_eq!(
+            encode_pin2_preflight_reply(Err(Pin2PreflightFailure::CardUnavailable)),
+            vec![PIN2_PREFLIGHT_CARD_UNAVAILABLE]
+        );
+        assert_eq!(
+            encode_pin2_preflight_reply(Err(Pin2PreflightFailure::Bridge)),
+            vec![PIN2_PREFLIGHT_BRIDGE_ERROR]
+        );
+    }
+
+    #[test]
     fn encodes_signature_success_and_coarse_failure() {
         const SYNTHETIC_SIGNATURE_FILL: u8 = 0xA5;
         const SYNTHETIC_SIGNATURE: [u8; ECDSA_P384_SIG_BYTES] =
@@ -800,6 +1123,33 @@ mod tests {
         assert_eq!(
             encode_authentication_signature_reply(Err(AuthenticationSignFailure::CardUnavailable,)),
             vec![AUTHENTICATION_SIGNATURE_CARD_UNAVAILABLE]
+        );
+    }
+
+    #[test]
+    fn encodes_qualified_signature_success_and_coarse_failure() {
+        const SYNTHETIC_QUALIFIED_SIGNATURE_FILL: u8 = 0xC3;
+        const SYNTHETIC_QUALIFIED_SIGNATURE: [u8; RSA_3072_SIG_BYTES] =
+            [SYNTHETIC_QUALIFIED_SIGNATURE_FILL; RSA_3072_SIG_BYTES];
+        let success = encode_qualified_signature_reply(Ok(QualifiedSignature {
+            algorithm: QualifiedSigningAlgorithm::RsaPkcs1Sha384,
+            bytes: SYNTHETIC_QUALIFIED_SIGNATURE.to_vec(),
+        }));
+        assert_eq!(
+            success[QUALIFIED_SIGNATURE_TAG_OFFSET],
+            QUALIFIED_SIGNATURE_SUCCEEDED
+        );
+        assert_eq!(
+            success[QUALIFIED_SIGNATURE_ALGORITHM_OFFSET],
+            QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384
+        );
+        assert_eq!(
+            &success[QUALIFIED_SIGNATURE_REPLY_HEADER_LENGTH..],
+            &SYNTHETIC_QUALIFIED_SIGNATURE
+        );
+        assert_eq!(
+            encode_qualified_signature_reply(Err(QualifiedSignFailure::CardUnavailable)),
+            vec![QUALIFIED_SIGNATURE_CARD_UNAVAILABLE]
         );
     }
 }

@@ -11,7 +11,10 @@ import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativeCertificateReadResult
 import fi.refineid.android.core.NativePin1PreflightResult
+import fi.refineid.android.core.NativePin2PreflightResult
 import fi.refineid.android.core.NativeQualifiedCertificate
+import fi.refineid.android.core.NativeQualifiedSignResult
+import fi.refineid.android.core.QualifiedSigningAlgorithm
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
 import fi.refineid.android.usb.AuthenticationStatus
@@ -83,6 +86,13 @@ internal object AppTrace {
         result: NativePin1PreflightResult,
     ) = Unit
 
+    fun nativePin2StatusProbeStarted(level: NativeCardExchangeLevel): Long = 0L
+
+    fun nativePin2StatusProbeCompleted(
+        startedAt: Long,
+        result: NativePin2PreflightResult,
+    ) = Unit
+
     fun nativeAuthenticationSignStarted(
         algorithm: AuthenticationSigningAlgorithm,
         inputMode: AuthenticationSigningInputMode,
@@ -93,6 +103,18 @@ internal object AppTrace {
         startedAt: Long,
         result: NativeAuthenticationSignResult,
     ) = Unit
+
+    fun nativeQualifiedSignStarted(
+        algorithm: QualifiedSigningAlgorithm,
+        contentLength: Int,
+    ): Long = 0L
+
+    fun nativeQualifiedSignCompleted(
+        startedAt: Long,
+        result: NativeQualifiedSignResult,
+    ) = Unit
+
+    fun qualifiedSignatureVerificationCompleted(isVerified: Boolean) = Unit
 
     fun authenticationSignatureVerificationCompleted(
         inputMode: AuthenticationSigningInputMode,

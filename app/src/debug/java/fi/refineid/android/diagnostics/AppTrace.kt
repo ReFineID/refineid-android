@@ -12,7 +12,10 @@ import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativeCertificateReadResult
 import fi.refineid.android.core.NativePin1PreflightResult
+import fi.refineid.android.core.NativePin2PreflightResult
 import fi.refineid.android.core.NativeQualifiedCertificate
+import fi.refineid.android.core.NativeQualifiedSignResult
+import fi.refineid.android.core.QualifiedSigningAlgorithm
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
 import fi.refineid.android.usb.AuthenticationStatus
@@ -186,6 +189,33 @@ internal object AppTrace {
         )
     }
 
+    fun nativePin2StatusProbeStarted(level: NativeCardExchangeLevel): Long =
+        System.nanoTime().also {
+            debug("native:pin2-status-probe start level=" + level)
+        }
+
+    fun nativePin2StatusProbeCompleted(
+        startedAt: Long,
+        result: NativePin2PreflightResult,
+    ) {
+        val outcome =
+            when (result) {
+                is NativePin2PreflightResult.Success -> {
+                    "success scheme=" + result.preflight.referenceScheme +
+                        " state=" + result.preflight.state +
+                        " permitted=" + result.preflight.qualifiedSignaturePermitted
+                }
+
+                is NativePin2PreflightResult.Failure -> {
+                    "failure kind=" + result.kind
+                }
+            }
+        debug(
+            "native:pin2-status-probe " + outcome +
+                " duration-us=" + elapsedMicroseconds(startedAt),
+        )
+    }
+
     fun nativeAuthenticationSignStarted(
         algorithm: AuthenticationSigningAlgorithm,
         inputMode: AuthenticationSigningInputMode,
@@ -218,6 +248,42 @@ internal object AppTrace {
             "native:authentication-sign " + outcome +
                 " duration-us=" + elapsedMicroseconds(startedAt),
         )
+    }
+
+    fun nativeQualifiedSignStarted(
+        algorithm: QualifiedSigningAlgorithm,
+        contentLength: Int,
+    ): Long =
+        System.nanoTime().also {
+            debug(
+                "native:qualified-sign start algorithm=" + algorithm +
+                    " content-length=" + contentLength,
+            )
+        }
+
+    fun nativeQualifiedSignCompleted(
+        startedAt: Long,
+        result: NativeQualifiedSignResult,
+    ) {
+        val outcome =
+            when (result) {
+                is NativeQualifiedSignResult.Success -> {
+                    "success algorithm=" + result.signature.algorithm +
+                        " length=" + result.signature.length
+                }
+
+                is NativeQualifiedSignResult.Failure -> {
+                    "failure kind=" + result.kind
+                }
+            }
+        debug(
+            "native:qualified-sign " + outcome +
+                " duration-us=" + elapsedMicroseconds(startedAt),
+        )
+    }
+
+    fun qualifiedSignatureVerificationCompleted(isVerified: Boolean) {
+        debug("qualified-signature:local-verification verified=" + isVerified)
     }
 
     fun authenticationSignatureVerificationCompleted(

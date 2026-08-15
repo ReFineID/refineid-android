@@ -22,8 +22,17 @@ import fi.refineid.android.core.NativeCertificateReadResult
 import fi.refineid.android.core.NativeCore
 import fi.refineid.android.core.NativePin1PreflightFailure
 import fi.refineid.android.core.NativePin1PreflightResult
+import fi.refineid.android.core.NativePin2PreflightResult
 import fi.refineid.android.core.NativeQualifiedCertificate
+import fi.refineid.android.core.NativeQualifiedCore
+import fi.refineid.android.core.NativeQualifiedSignFailure
+import fi.refineid.android.core.NativeQualifiedSignResult
 import fi.refineid.android.core.Pin1Submission
+import fi.refineid.android.core.Pin2Submission
+import fi.refineid.android.core.QualifiedSignFailure
+import fi.refineid.android.core.QualifiedSignResult
+import fi.refineid.android.core.QualifiedSignatureVerifier
+import fi.refineid.android.core.QualifiedSigningAlgorithm
 import fi.refineid.android.diagnostics.AppTrace
 
 internal sealed interface CcidSessionOpenResult {
@@ -102,7 +111,7 @@ internal class CcidUsbSession(
             "CCID session is closed"
         }
         val result =
-            NativeCore.readQualifiedCertificate(
+            NativeQualifiedCore.readQualifiedCertificate(
                 exchangeLevel = exchangeLevel,
                 exchange = nativeExchange,
             )
@@ -154,6 +163,17 @@ internal class CcidUsbSession(
             sessionMaterial.cachePin1Preflight(result.preflight)
         }
         return result
+    }
+
+    fun probePin2Status(): NativePin2PreflightResult {
+        checkOwnerThread()
+        check(!isClosed) {
+            "CCID session is closed"
+        }
+        return NativeQualifiedCore.probePin2Status(
+            exchangeLevel = exchangeLevel,
+            exchange = nativeExchange,
+        )
     }
 
     fun copyAuthenticationCertificate(): NativeAuthenticationCertificate {
@@ -265,6 +285,81 @@ internal class CcidUsbSession(
 
             is NativeAuthenticationSignResult.Failure -> {
                 AuthenticationSignResult.Failure(result.kind.toAuthenticationFailure())
+            }
+        }
+    }
+
+    fun qualifiedSign(
+        algorithm: QualifiedSigningAlgorithm,
+        pin2: Pin2Submission,
+        content: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+    ): QualifiedSignResult {
+        checkOwnerThread()
+        check(!isClosed) {
+            "CCID session is closed"
+        }
+        if (expectedCertificate.keyProfile != algorithm.keyProfile) {
+            pin2.close()
+            return QualifiedSignResult.Failure(QualifiedSignFailure.KEY_PROFILE_MISMATCH)
+        }
+
+        val nativeResult =
+            NativeQualifiedCore.qualifiedSign(
+                exchangeLevel = exchangeLevel,
+                algorithm = algorithm,
+                pin2 = pin2,
+                content = content,
+                expectedCertificate = expectedCertificate,
+                exchange = nativeExchange,
+            )
+        val verifiedResult =
+            when (nativeResult) {
+                is NativeQualifiedSignResult.Success -> {
+                    val isVerified =
+                        QualifiedSignatureVerifier.verify(
+                            certificate = expectedCertificate,
+                            content = content,
+                            signature = nativeResult.signature,
+                        )
+                    AppTrace.qualifiedSignatureVerificationCompleted(isVerified)
+                    if (isVerified) {
+                        QualifiedSignResult.Success(nativeResult.signature)
+                    } else {
+                        nativeResult.signature.close()
+                        QualifiedSignResult.Failure(
+                            QualifiedSignFailure.LOCAL_VERIFICATION_FAILED,
+                        )
+                    }
+                }
+
+                is NativeQualifiedSignResult.Failure -> {
+                    QualifiedSignResult.Failure(nativeResult.kind.toQualifiedFailure())
+                }
+            }
+        if (!nativeResult.allowsQualifiedContextRestore()) {
+            return verifiedResult
+        }
+        return when (selectPkcs15Application()) {
+            NativeCardOperationResult.SUCCEEDED -> {
+                verifiedResult
+            }
+
+            NativeCardOperationResult.CARD_UNAVAILABLE -> {
+                verifiedResult.closeSignature()
+                QualifiedSignResult.Failure(QualifiedSignFailure.CARD_UNAVAILABLE)
+            }
+
+            NativeCardOperationResult.TRANSPORT_ERROR -> {
+                verifiedResult.closeSignature()
+                QualifiedSignResult.Failure(QualifiedSignFailure.TRANSPORT_ERROR)
+            }
+
+            NativeCardOperationResult.REJECTED,
+            NativeCardOperationResult.BRIDGE_ERROR,
+            -> {
+                verifiedResult.closeSignature()
+                QualifiedSignResult.Failure(QualifiedSignFailure.BRIDGE_ERROR)
             }
         }
     }
@@ -390,6 +485,95 @@ private fun NativeAuthenticationSignFailure.toAuthenticationFailure(): Authentic
 
         NativeAuthenticationSignFailure.BRIDGE_ERROR -> {
             AuthenticationSignFailure.BRIDGE_ERROR
+        }
+    }
+
+private fun NativeQualifiedSignResult.allowsQualifiedContextRestore(): Boolean =
+    when (this) {
+        is NativeQualifiedSignResult.Success -> {
+            true
+        }
+
+        is NativeQualifiedSignResult.Failure -> {
+            when (kind) {
+                NativeQualifiedSignFailure.PIN_LOCKED,
+                NativeQualifiedSignFailure.WRONG_PIN,
+                NativeQualifiedSignFailure.VERIFICATION_REJECTED,
+                NativeQualifiedSignFailure.CERTIFICATE_REJECTED,
+                NativeQualifiedSignFailure.INVALID_CERTIFICATE,
+                NativeQualifiedSignFailure.CERTIFICATE_MISMATCH,
+                NativeQualifiedSignFailure.KEY_PROFILE_MISMATCH,
+                NativeQualifiedSignFailure.SIGNING_REJECTED,
+                -> true
+
+                NativeQualifiedSignFailure.CARD_UNAVAILABLE,
+                NativeQualifiedSignFailure.TRANSPORT_ERROR,
+                NativeQualifiedSignFailure.INVALID_PIN,
+                NativeQualifiedSignFailure.SAFETY_REFUSED,
+                NativeQualifiedSignFailure.BRIDGE_ERROR,
+                -> false
+            }
+        }
+    }
+
+private fun QualifiedSignResult.closeSignature() {
+    if (this is QualifiedSignResult.Success) {
+        signature.close()
+    }
+}
+
+private fun NativeQualifiedSignFailure.toQualifiedFailure(): QualifiedSignFailure =
+    when (this) {
+        NativeQualifiedSignFailure.CARD_UNAVAILABLE -> {
+            QualifiedSignFailure.CARD_UNAVAILABLE
+        }
+
+        NativeQualifiedSignFailure.TRANSPORT_ERROR -> {
+            QualifiedSignFailure.TRANSPORT_ERROR
+        }
+
+        NativeQualifiedSignFailure.INVALID_PIN -> {
+            QualifiedSignFailure.INVALID_PIN
+        }
+
+        NativeQualifiedSignFailure.SAFETY_REFUSED -> {
+            QualifiedSignFailure.SAFETY_REFUSED
+        }
+
+        NativeQualifiedSignFailure.PIN_LOCKED -> {
+            QualifiedSignFailure.PIN_LOCKED
+        }
+
+        NativeQualifiedSignFailure.WRONG_PIN -> {
+            QualifiedSignFailure.WRONG_PIN
+        }
+
+        NativeQualifiedSignFailure.VERIFICATION_REJECTED -> {
+            QualifiedSignFailure.VERIFICATION_REJECTED
+        }
+
+        NativeQualifiedSignFailure.CERTIFICATE_REJECTED -> {
+            QualifiedSignFailure.CERTIFICATE_REJECTED
+        }
+
+        NativeQualifiedSignFailure.INVALID_CERTIFICATE -> {
+            QualifiedSignFailure.INVALID_CERTIFICATE
+        }
+
+        NativeQualifiedSignFailure.CERTIFICATE_MISMATCH -> {
+            QualifiedSignFailure.CERTIFICATE_MISMATCH
+        }
+
+        NativeQualifiedSignFailure.KEY_PROFILE_MISMATCH -> {
+            QualifiedSignFailure.KEY_PROFILE_MISMATCH
+        }
+
+        NativeQualifiedSignFailure.SIGNING_REJECTED -> {
+            QualifiedSignFailure.SIGNING_REJECTED
+        }
+
+        NativeQualifiedSignFailure.BRIDGE_ERROR -> {
+            QualifiedSignFailure.BRIDGE_ERROR
         }
     }
 

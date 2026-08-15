@@ -6,8 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.uiAutomator
 import fi.refineid.android.ReFineIdApplication
-import fi.refineid.android.core.NativeCertificateReadResult
-import fi.refineid.android.core.NativeQualifiedCertificate
+import fi.refineid.android.core.NativePin2PreflightResult
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
@@ -18,12 +17,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(AndroidJUnit4::class)
-internal class LiveQualifiedCertificateUiAutomatorTest {
+internal class LivePin2PreflightUiAutomatorTest {
     @Test
-    fun liveCardReadsTheQualifiedCertificateWithoutASecret() {
+    fun liveCardReportsPin2StateWithoutSubmittingACredential() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         assumeTrue(
-            "enable the opt-in live qualified-certificate read",
+            "enable the opt-in live PIN2 preflight",
             InstrumentationRegistry.getArguments().getString(LIVE_TEST_ARGUMENT) ==
                 LIVE_TEST_ENABLED_VALUE,
         )
@@ -57,37 +56,29 @@ internal class LiveQualifiedCertificateUiAutomatorTest {
         }
 
         val completion = CountDownLatch(SINGLE_COMPLETION)
-        val result =
-            AtomicReference<NativeCertificateReadResult<NativeQualifiedCertificate>>()
+        val result = AtomicReference<NativePin2PreflightResult>()
         val application =
             instrumentation.targetContext.applicationContext as ReFineIdApplication
-        application.readerController.qualifiedCardService.requestQualifiedCertificate { certificateResult ->
-            result.set(certificateResult)
+        application.readerController.qualifiedCardService.requestPin2Preflight { preflightResult ->
+            result.set(preflightResult)
             completion.countDown()
         }
 
         assertTrue(
-            "qualified-certificate read timed out",
-            completion.await(CERTIFICATE_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+            "PIN2 preflight timed out",
+            completion.await(PREFLIGHT_TIMEOUT_SECONDS, TimeUnit.SECONDS),
         )
-        when (val certificateResult = result.get()) {
-            is NativeCertificateReadResult.Success -> {
-                try {
-                    assertTrue(
-                        "qualified certificate must not be empty",
-                        certificateResult.certificate.derLength > EMPTY_CERTIFICATE_LENGTH,
-                    )
-                } finally {
-                    certificateResult.certificate.close()
-                }
+        when (val preflightResult = result.get()) {
+            is NativePin2PreflightResult.Success -> {
+                Unit
             }
 
-            is NativeCertificateReadResult.Failure -> {
-                fail("qualified-certificate read failed: " + certificateResult.kind)
+            is NativePin2PreflightResult.Failure -> {
+                fail("PIN2 preflight failed: " + preflightResult.kind)
             }
 
             null -> {
-                fail("qualified-certificate callback returned no result")
+                fail("PIN2 preflight callback returned no result")
             }
         }
     }
@@ -97,12 +88,11 @@ internal class LiveQualifiedCertificateUiAutomatorTest {
         const val TARGET_ACTIVITY_CLASS = "$TARGET_PACKAGE.MainActivity"
         const val SYSTEM_UI_PACKAGE = "com.android.systemui"
         const val ANDROID_CONFIRM_BUTTON_RESOURCE = "android:id/button1"
-        const val LIVE_TEST_ARGUMENT = "refineidLiveQualifiedCertificate"
+        const val LIVE_TEST_ARGUMENT = "refineidLivePin2Preflight"
         const val LIVE_TEST_ENABLED_VALUE = "true"
         const val CARD_READY_TIMEOUT_MILLISECONDS = 15_000L
         const val USB_PERMISSION_TIMEOUT_MILLISECONDS = 10_000L
-        const val CERTIFICATE_TIMEOUT_SECONDS = 30L
+        const val PREFLIGHT_TIMEOUT_SECONDS = 30L
         const val SINGLE_COMPLETION = 1
-        const val EMPTY_CERTIFICATE_LENGTH = 0
     }
 }

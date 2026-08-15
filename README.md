@@ -25,8 +25,11 @@ instrumented development harness, but it is not the product boundary.
 - Credential-free qualified-certificate read across citizen and organization
   card directory layouts
 - Counter-safe PIN1 status and credential-reference preflight
+- Counter-safe, credential-free PIN2 status and qualified-signature policy
 - One-shot PIN1 VERIFY and RSA/P-384 authentication signing
 - Mandatory local verification against the retained authentication certificate
+- One-shot PIN2 VERIFY and SHA-384 qualified signing for RSA-3072 and P-384,
+  bound to the exact qualified certificate with mandatory local verification
 - Secure, debug-only on-device signing harness; no manual harness in release
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session
@@ -43,6 +46,7 @@ instrumented development harness, but it is not the product boundary.
   the Android 13 Pixel 4 image
 - Fingerprint-pinned FINEID intermediate set, present only in debug builds
 - Live diagnostic handshake verified through Chromium's holder-PIN request
+- Live credential-free qualified-certificate and PIN2 preflight checks
 - No embedded browser, Internet permission, or logging in the release build
 - Compose UI Test v2 and UI Automator 2.4 instrumentation on a physical device
 

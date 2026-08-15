@@ -84,6 +84,12 @@ internal class NativeQualifiedCertificate(
         return ownedDer.copyOf()
     }
 
+    fun copyOwned(): NativeQualifiedCertificate =
+        NativeQualifiedCertificate(
+            keyProfile = keyProfile,
+            ownedDer = copyDer(),
+        )
+
     override fun close() {
         if (!isClosed) {
             ownedDer.fill(0)
@@ -137,7 +143,7 @@ internal object NativeCore {
     private const val CARD_OPERATION_REJECTED = 3
     private const val CARD_OPERATION_TRANSPORT_ERROR = 4
 
-    private val isLoaded =
+    internal val isLoaded =
         runCatching {
             System.loadLibrary(LIBRARY_NAME)
         }.also { result ->
@@ -255,48 +261,6 @@ internal object NativeCore {
                 }
             }
         AppTrace.nativeAuthenticationCertificateReadCompleted(
-            startedAt = startedAt,
-            result = result,
-        )
-        return result
-    }
-
-    fun readQualifiedCertificate(
-        exchangeLevel: NativeCardExchangeLevel,
-        exchange: NativeBlockExchange,
-    ): NativeCertificateReadResult<NativeQualifiedCertificate> {
-        val startedAt = AppTrace.nativeQualifiedCertificateReadStarted(exchangeLevel)
-        val result =
-            if (!isLoaded) {
-                NativeCertificateReadResult.Failure(
-                    NativeCertificateReadFailure.BRIDGE_ERROR,
-                )
-            } else {
-                try {
-                    NativeCertificateReply.decode(
-                        reply =
-                            readQualifiedCertificateNative(
-                                exchangeLevel = exchangeLevel.wireValue,
-                                callback = exchange,
-                            ),
-                        certificate = { profile, der ->
-                            NativeQualifiedCertificate(
-                                keyProfile = profile,
-                                ownedDer = der,
-                            )
-                        },
-                    )
-                } catch (_: LinkageError) {
-                    NativeCertificateReadResult.Failure(
-                        NativeCertificateReadFailure.BRIDGE_ERROR,
-                    )
-                } catch (_: RuntimeException) {
-                    NativeCertificateReadResult.Failure(
-                        NativeCertificateReadFailure.BRIDGE_ERROR,
-                    )
-                }
-            }
-        AppTrace.nativeQualifiedCertificateReadCompleted(
             startedAt = startedAt,
             result = result,
         )
@@ -431,12 +395,6 @@ internal object NativeCore {
 
     @JvmStatic
     private external fun readAuthenticationCertificateNative(
-        exchangeLevel: Int,
-        callback: Any,
-    ): ByteArray
-
-    @JvmStatic
-    private external fun readQualifiedCertificateNative(
         exchangeLevel: Int,
         callback: Any,
     ): ByteArray

@@ -15,12 +15,8 @@ import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
 import fi.refineid.android.core.NativeAuthenticationCertificate
-import fi.refineid.android.core.NativeCertificateReadFailure
-import fi.refineid.android.core.NativeCertificateReadResult
 import fi.refineid.android.core.NativeCore
-import fi.refineid.android.core.NativeQualifiedCertificate
 import fi.refineid.android.core.Pin1Submission
-import fi.refineid.android.core.QualifiedCertificateService
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidUsbSession
@@ -64,8 +60,7 @@ internal data class UsbReaderSnapshot(
 
 internal class UsbReaderController(
     context: Context,
-) : AuthenticationCardService,
-    QualifiedCertificateService {
+) : AuthenticationCardService {
     private val applicationContext = context.applicationContext
     private val usbManager =
         requireNotNull(applicationContext.getSystemService(UsbManager::class.java))
@@ -105,6 +100,22 @@ internal class UsbReaderController(
             },
             activeSession = { activeSession },
             activeProviderGeneration = { activeProviderGeneration },
+        )
+
+    internal val qualifiedCardService =
+        UsbQualifiedCardService(
+            ioExecutor = ioExecutor,
+            mainHandler = mainHandler,
+            isReady = {
+                isStarted &&
+                    latestSnapshot.status == ReaderConnectionStatus.READY &&
+                    latestSnapshot.cardPresence == CardPresence.PRESENT
+            },
+            currentGeneration = { probeGeneration },
+            isCurrentGeneration = { generation ->
+                isStarted && generation == probeGeneration
+            },
+            activeSession = { activeSession },
         )
 
     private val permissionReceiver =
@@ -358,65 +369,6 @@ internal class UsbReaderController(
             }
         } catch (_: RejectedExecutionException) {
             onResult(null)
-        }
-    }
-
-    override fun requestQualifiedCertificate(
-        onResult: (NativeCertificateReadResult<NativeQualifiedCertificate>) -> Unit,
-    ) {
-        if (
-            !isStarted ||
-            latestSnapshot.status != ReaderConnectionStatus.READY ||
-            latestSnapshot.cardPresence != CardPresence.PRESENT
-        ) {
-            onResult(
-                NativeCertificateReadResult.Failure(
-                    NativeCertificateReadFailure.CARD_UNAVAILABLE,
-                ),
-            )
-            return
-        }
-        val generation = probeGeneration
-        try {
-            ioExecutor.execute {
-                val result =
-                    if (isStarted && generation == probeGeneration) {
-                        try {
-                            activeSession?.readQualifiedCertificate()
-                                ?: NativeCertificateReadResult.Failure(
-                                    NativeCertificateReadFailure.CARD_UNAVAILABLE,
-                                )
-                        } catch (_: IllegalStateException) {
-                            NativeCertificateReadResult.Failure(
-                                NativeCertificateReadFailure.BRIDGE_ERROR,
-                            )
-                        }
-                    } else {
-                        NativeCertificateReadResult.Failure(
-                            NativeCertificateReadFailure.CARD_UNAVAILABLE,
-                        )
-                    }
-                mainHandler.post {
-                    if (isStarted && generation == probeGeneration) {
-                        onResult(result)
-                    } else {
-                        if (result is NativeCertificateReadResult.Success) {
-                            result.certificate.close()
-                        }
-                        onResult(
-                            NativeCertificateReadResult.Failure(
-                                NativeCertificateReadFailure.CARD_UNAVAILABLE,
-                            ),
-                        )
-                    }
-                }
-            }
-        } catch (_: RejectedExecutionException) {
-            onResult(
-                NativeCertificateReadResult.Failure(
-                    NativeCertificateReadFailure.CARD_UNAVAILABLE,
-                ),
-            )
         }
     }
 
