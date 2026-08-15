@@ -304,12 +304,15 @@ private fun BrowserStatus(status: BrowserSignatureStatus) {
         when (status) {
             BrowserSignatureStatus.IDLE,
             BrowserSignatureStatus.PIN_REQUIRED,
+            BrowserSignatureStatus.CANCELLED,
             -> null
             BrowserSignatureStatus.SIGNING -> stringResource(R.string.signing)
             BrowserSignatureStatus.SUCCEEDED -> stringResource(R.string.signed)
             BrowserSignatureStatus.WRONG_PIN -> stringResource(R.string.wrong_pin)
             BrowserSignatureStatus.PIN_LOCKED -> stringResource(R.string.pin_locked)
             BrowserSignatureStatus.REFUSED -> stringResource(R.string.unavailable)
+            BrowserSignatureStatus.TIMED_OUT,
+            BrowserSignatureStatus.INTERRUPTED,
             BrowserSignatureStatus.ERROR -> stringResource(R.string.error)
         }
     if (text != null) {

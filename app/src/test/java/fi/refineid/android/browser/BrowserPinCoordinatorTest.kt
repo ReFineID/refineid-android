@@ -104,6 +104,7 @@ class BrowserPinCoordinatorTest {
     @Test
     fun timedOutPromptRejectsAndClosesALatePin() {
         var prompt: BrowserPinRequest? = null
+        val statuses = mutableListOf<BrowserSignatureStatus>()
         val service = RecordingCardService()
         val coordinator =
             BrowserPinCoordinator(
@@ -114,7 +115,7 @@ class BrowserPinCoordinatorTest {
                         prompt = request
                     }
                 },
-                onStatusChanged = {},
+                onStatusChanged = statuses::add,
                 pinEntryTimeoutMilliseconds = IMMEDIATE_TIMEOUT_MILLISECONDS,
             )
 
@@ -129,6 +130,30 @@ class BrowserPinCoordinatorTest {
         assertThrows(IllegalStateException::class.java) {
             latePin.consume { }
         }
+        assertEquals(BrowserSignatureStatus.TIMED_OUT, statuses.last())
+        assertEquals(null, service.observedAlgorithm)
+        coordinator.close()
+    }
+
+    @Test
+    fun cancelledPromptRejectsBeforeCardUseAndReportsItsCause() {
+        val statuses = mutableListOf<BrowserSignatureStatus>()
+        val service = RecordingCardService()
+        val coordinator =
+            BrowserPinCoordinator(
+                cardService = service,
+                dispatchToUi = { action -> action() },
+                onPromptChanged = { request -> request?.cancel() },
+                onStatusChanged = statuses::add,
+            )
+
+        assertThrows(SignatureException::class.java) {
+            coordinator.sign(
+                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
+                SYNTHETIC_MESSAGE.copyOf(),
+            )
+        }
+        assertEquals(BrowserSignatureStatus.CANCELLED, statuses.last())
         assertEquals(null, service.observedAlgorithm)
         coordinator.close()
     }

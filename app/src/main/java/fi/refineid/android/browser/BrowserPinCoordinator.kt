@@ -20,6 +20,9 @@ internal enum class BrowserSignatureStatus {
     WRONG_PIN,
     PIN_LOCKED,
     REFUSED,
+    CANCELLED,
+    TIMED_OUT,
+    INTERRUPTED,
     ERROR,
 }
 
@@ -66,6 +69,7 @@ internal class BrowserPinCoordinator(
         try {
             operationLock.lockInterruptibly()
         } catch (error: InterruptedException) {
+            publishStatus(BrowserSignatureStatus.INTERRUPTED)
             Thread.currentThread().interrupt()
             throw SignatureException("card signature was interrupted", error)
         }
@@ -86,11 +90,14 @@ internal class BrowserPinCoordinator(
                     request.await(pinEntryTimeoutMilliseconds)
                 } catch (error: TimeoutException) {
                     request.cancel()
+                    publishStatus(BrowserSignatureStatus.TIMED_OUT)
                     throw SignatureException("PIN entry timed out", error)
                 } catch (error: CancellationException) {
+                    publishStatus(BrowserSignatureStatus.CANCELLED)
                     throw SignatureException("PIN entry was cancelled", error)
                 } catch (error: InterruptedException) {
                     request.cancel()
+                    publishStatus(BrowserSignatureStatus.INTERRUPTED)
                     Thread.currentThread().interrupt()
                     throw SignatureException("PIN entry was interrupted", error)
                 } finally {
