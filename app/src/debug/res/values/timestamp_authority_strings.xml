@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 ReFineID contributors. Licensed under the Apache License, Version 2.0. -->
+<resources>
+    <string name="timestamp_authorities">Timestamp</string>
+    <string name="address">Address</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="up">Up</string>
+    <string name="down">Down</string>
+    <string name="delete">Delete</string>
+    <string name="add">Add</string>
+    <string name="save">Save</string>
+    <string name="saved">Saved</string>
+    <string name="restore">Restore</string>
+</resources>

@@ -45,6 +45,7 @@ import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.core.QualifiedCardService
 import fi.refineid.android.diagnostics.BuildDiagnostics
+import fi.refineid.android.settings.TimestampAuthorityRepository
 import fi.refineid.android.usb.AuthenticationStatus
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
@@ -58,6 +59,7 @@ internal fun MainScreen(
     onAuthenticate: (Pin1Submission) -> Unit,
     browserCardService: AuthenticationCardService? = null,
     qualifiedCardService: QualifiedCardService? = null,
+    timestampAuthorityRepository: TimestampAuthorityRepository? = null,
 ) {
     Scaffold(
         modifier =
@@ -88,9 +90,12 @@ internal fun MainScreen(
                 onRequestPermission = onRequestPermission,
             )
 
+            TimestampAuthoritySettingsHarness(timestampAuthorityRepository)
+
             DocumentSigningHarness(
                 snapshot = snapshot,
                 cardService = qualifiedCardService,
+                timestampAuthorityRepository = timestampAuthorityRepository,
             )
 
             if (

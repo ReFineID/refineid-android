@@ -46,6 +46,8 @@ class MainActivity : ComponentActivity() {
                     onAuthenticate = readerController::authenticate,
                     browserCardService = readerController,
                     qualifiedCardService = readerController.qualifiedCardService,
+                    timestampAuthorityRepository =
+                        (application as ReFineIdApplication).timestampAuthorityStore,
                 )
             }
         }

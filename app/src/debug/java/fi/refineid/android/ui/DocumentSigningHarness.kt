@@ -1,6 +1,7 @@
 package fi.refineid.android.ui
 
 import android.content.ContentResolver
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +26,8 @@ import fi.refineid.android.document.QualifiedPdfPreparationResult
 import fi.refineid.android.document.QualifiedPdfSigningCoordinator
 import fi.refineid.android.document.QualifiedPdfSigningFailure
 import fi.refineid.android.document.SignedPdfDocument
+import fi.refineid.android.settings.TimestampAuthorityRepository
+import fi.refineid.android.settings.TimestampAuthorityStoreException
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
 import fi.refineid.android.usb.UsbReaderSnapshot
@@ -45,9 +48,11 @@ import java.time.Instant
 internal fun DocumentSigningHarness(
     snapshot: UsbReaderSnapshot,
     cardService: QualifiedCardService?,
+    timestampAuthorityRepository: TimestampAuthorityRepository?,
 ) {
     if (
         cardService == null ||
+        timestampAuthorityRepository == null ||
         snapshot.status != ReaderConnectionStatus.READY ||
         snapshot.cardPresence != CardPresence.PRESENT
     ) {
@@ -56,12 +61,13 @@ internal fun DocumentSigningHarness(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val session =
-        remember(cardService, context.contentResolver, scope) {
+        remember(cardService, context.contentResolver, scope, timestampAuthorityRepository) {
             DocumentSigningHarnessSession(
+                context = context.applicationContext,
                 contentResolver = context.contentResolver,
                 cardService = cardService,
                 scope = scope,
-                archivalSources = DebugDocumentSigningSources.create(context.applicationContext),
+                timestampAuthorityRepository = timestampAuthorityRepository,
             )
         }
     DisposableEffect(session) {
@@ -89,15 +95,18 @@ internal fun DocumentSigningHarness(
 }
 
 private class DocumentSigningHarnessSession(
+    private val context: Context,
     private val contentResolver: ContentResolver,
     cardService: QualifiedCardService,
     private val scope: CoroutineScope,
-    private val archivalSources: DebugDocumentSigningSources,
+    private val timestampAuthorityRepository: TimestampAuthorityRepository,
 ) : AutoCloseable {
     private val coordinator = QualifiedPdfSigningCoordinator(cardService)
     private var selected by mutableStateOf<SelectedPdfDocument?>(null)
     private var destination by mutableStateOf<Uri?>(null)
     private var isClosed = false
+    private var signingSetupJob: Job? = null
+    private var pendingArchivalSources: DebugDocumentSigningSources? = null
     private var archivalJob: Job? = null
 
     var status by mutableStateOf(DocumentSigningStatus.IDLE)
@@ -179,24 +188,76 @@ private class DocumentSigningHarnessSession(
             return
         }
         status = DocumentSigningStatus.SIGNING
-        try {
-            input.useBytes { bytes ->
-                coordinator.prepare(
-                    document = bytes,
-                    claim =
-                        PdfSignatureClaim(
-                            signedAt = Instant.now(),
-                            reason = null,
-                            location = null,
-                        ),
-                    pin2 = pin2,
-                    onResult = { result -> preparationCompleted(result, output) },
-                )
+        val running =
+            scope.launch {
+                var ownedPin2: Pin2Submission? = pin2
+                try {
+                    withContext(Dispatchers.IO) {
+                        val sources =
+                            DebugDocumentSigningSources.create(
+                                context = context,
+                                transferredConfigurations = timestampAuthorityRepository.load(),
+                            )
+                        var sourcesTransferred = false
+                        try {
+                            withContext(Dispatchers.Main.immediate) main@{
+                                if (isClosed) {
+                                    return@main
+                                }
+                                pendingArchivalSources = sources
+                                try {
+                                    input.useBytes { bytes ->
+                                        coordinator.prepare(
+                                            document = bytes,
+                                            claim =
+                                                PdfSignatureClaim(
+                                                    signedAt = Instant.now(),
+                                                    reason = null,
+                                                    location = null,
+                                                ),
+                                            pin2 = checkNotNull(ownedPin2),
+                                            onResult = { result ->
+                                                if (pendingArchivalSources === sources) {
+                                                    pendingArchivalSources = null
+                                                }
+                                                preparationCompleted(
+                                                    result = result,
+                                                    output = output,
+                                                    archivalSources = sources,
+                                                )
+                                            },
+                                        )
+                                    }
+                                } catch (failure: RuntimeException) {
+                                    if (pendingArchivalSources === sources) {
+                                        pendingArchivalSources = null
+                                    }
+                                    throw failure
+                                }
+                                ownedPin2 = null
+                                sourcesTransferred = true
+                            }
+                        } finally {
+                            if (!sourcesTransferred) {
+                                sources.close()
+                            }
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: TimestampAuthorityStoreException) {
+                    if (!isClosed) {
+                        status = DocumentSigningStatus.UNAVAILABLE
+                    }
+                } catch (_: RuntimeException) {
+                    if (!isClosed) {
+                        status = DocumentSigningStatus.ERROR
+                    }
+                } finally {
+                    ownedPin2?.close()
+                }
             }
-        } catch (_: RuntimeException) {
-            pin2.close()
-            status = DocumentSigningStatus.ERROR
-        }
+        signingSetupJob = running
     }
 
     override fun close() {
@@ -207,30 +268,30 @@ private class DocumentSigningHarnessSession(
         selected?.close()
         selected = null
         destination = null
-        val running = archivalJob
-        running?.cancel()
-        if (running == null || running.isCompleted) {
-            archivalSources.close()
-        } else {
-            running.invokeOnCompletion { archivalSources.close() }
-        }
+        signingSetupJob?.cancel()
+        pendingArchivalSources?.close()
+        pendingArchivalSources = null
+        archivalJob?.cancel()
     }
 
     private fun preparationCompleted(
         result: QualifiedPdfPreparationResult,
         output: Uri,
+        archivalSources: DebugDocumentSigningSources,
     ) {
         if (isClosed) {
             result.closePreparedSignature()
+            archivalSources.close()
             return
         }
         when (result) {
             is QualifiedPdfPreparationResult.Failure -> {
+                archivalSources.close()
                 status = result.kind.status()
             }
 
             is QualifiedPdfPreparationResult.Success -> {
-                completeArchival(result.prepared, output)
+                completeArchival(result.prepared, output, archivalSources)
             }
         }
     }
@@ -238,6 +299,7 @@ private class DocumentSigningHarnessSession(
     private fun completeArchival(
         prepared: PreparedQualifiedPdfSignature,
         output: Uri,
+        archivalSources: DebugDocumentSigningSources,
     ) {
         val running =
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -261,6 +323,8 @@ private class DocumentSigningHarnessSession(
                     if (!isClosed) {
                         status = DocumentSigningStatus.ERROR
                     }
+                } finally {
+                    archivalSources.close()
                 }
             }
         archivalJob = running

@@ -62,11 +62,13 @@ instrumented development harness, but it is not the product boundary.
 - Injected synchronous PAdES-B-LTA completion in the fixed signature-timestamp,
   validation, DSS, and archive-timestamp order, with exact digest checks and
   clearing of all intermediate owners
-- Debug-only terse PDF choose/save/PIN2 PAdES-B-LTA harness with a pinned HTTPS
-  authority, pinned signer trust, Apple-compatible retry, cancellation, and
-  off-main network work
+- Debug-only terse ordered timestamp-authority settings with Keystore-protected
+  passwords, HTTPS-only credentials, Restore Defaults, and off-main storage
+- Debug-only terse PDF choose/save/PIN2 PAdES-B-LTA harness with holder-configured
+  authority trust, pinned signer trust, Apple-compatible retry, cancellation,
+  and off-main storage and network work
 - Live card-free RFC 3161 acquisition verified on the Android 13 Pixel 4 under
-  the bundled offline timestamp root
+  holder-configured authority trust
 - Secure, debug-only on-device signing harness; no manual harness in release
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session

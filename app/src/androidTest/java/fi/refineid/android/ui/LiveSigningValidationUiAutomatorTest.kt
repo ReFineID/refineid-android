@@ -12,6 +12,7 @@ import fi.refineid.android.core.SHA384_DIGEST_LENGTH_BYTES
 import fi.refineid.android.document.ValidationMaterialCollectionException
 import fi.refineid.android.document.ValidationMaterialCollectionFailure
 import fi.refineid.android.document.ValidationPathRole
+import fi.refineid.android.settings.TimestampAuthorityConfiguration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -26,7 +27,7 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(AndroidJUnit4::class)
 internal class LiveSigningValidationUiAutomatorTest {
     @Test(timeout = LIVE_TEST_TIMEOUT_MILLISECONDS)
-    fun liveCardAndPinnedAuthorityProduceAnAuthenticatedValidationVerdictWithoutASecret() {
+    fun liveCardAndConfiguredAuthorityProduceAnAuthenticatedValidationVerdictWithoutASecret() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         assumeTrue(
             "enable the opt-in live signing-validation check",
@@ -94,7 +95,13 @@ internal class LiveSigningValidationUiAutomatorTest {
         certificate.use {
             val sources =
                 DebugDocumentSigningSources.create(
-                    InstrumentationRegistry.getInstrumentation().targetContext.applicationContext,
+                    context =
+                        InstrumentationRegistry
+                            .getInstrumentation()
+                            .targetContext
+                            .applicationContext,
+                    transferredConfigurations =
+                        listOf(TimestampAuthorityConfiguration.shipped()),
                 )
             try {
                 val digest = ByteArray(SHA384_DIGEST_LENGTH_BYTES) { SYNTHETIC_DIGEST_FILL }

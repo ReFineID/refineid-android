@@ -4,6 +4,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import fi.refineid.android.core.SHA384_DIGEST_LENGTH_BYTES
+import fi.refineid.android.settings.TimestampAuthorityConfiguration
 import fi.refineid.android.ui.DebugDocumentSigningSources
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -13,14 +14,17 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 internal class LiveTimestampAuthorityInstrumentedTest {
     @Test(timeout = LIVE_TIMEOUT_MILLISECONDS)
-    fun pinnedAuthorityReturnsARequestBoundVerifiedToken() {
+    fun configuredAuthorityReturnsARequestBoundVerifiedToken() {
         assumeTrue(
             "enable the opt-in live timestamp-authority check",
             InstrumentationRegistry.getArguments().getString(LIVE_TEST_ARGUMENT) ==
                 LIVE_TEST_ENABLED_VALUE,
         )
         val sources =
-            DebugDocumentSigningSources.create(ApplicationProvider.getApplicationContext())
+            DebugDocumentSigningSources.create(
+                context = ApplicationProvider.getApplicationContext(),
+                transferredConfigurations = listOf(TimestampAuthorityConfiguration.shipped()),
+            )
         val digest = ByteArray(SHA384_DIGEST_LENGTH_BYTES) { SYNTHETIC_DIGEST_FILL }
         try {
             val token = sources.timestamp.acquire(digest)

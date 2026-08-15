@@ -6,6 +6,7 @@ import fi.refineid.android.core.AuthenticationIssuerCertificateStore
 import fi.refineid.android.keychain.AndroidExternalKeyCallerLabelResolver
 import fi.refineid.android.keychain.ExternalKeyPinPromptBroker
 import fi.refineid.android.keychain.ExternalKeyProviderRuntime
+import fi.refineid.android.settings.TimestampAuthorityStore
 import fi.refineid.android.usb.UsbReaderController
 
 class ReFineIdApplication : Application() {
@@ -15,10 +16,13 @@ class ReFineIdApplication : Application() {
         private set
     internal lateinit var externalKeyProviderRuntime: ExternalKeyProviderRuntime
         private set
+    internal lateinit var timestampAuthorityStore: TimestampAuthorityStore
+        private set
 
     override fun onCreate() {
         super.onCreate()
         readerController = UsbReaderController(this)
+        timestampAuthorityStore = TimestampAuthorityStore(this)
         pinPromptBroker =
             ExternalKeyPinPromptBroker(
                 context = this,

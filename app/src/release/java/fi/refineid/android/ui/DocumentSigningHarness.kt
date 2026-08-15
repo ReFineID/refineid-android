@@ -2,6 +2,7 @@ package fi.refineid.android.ui
 
 import androidx.compose.runtime.Composable
 import fi.refineid.android.core.QualifiedCardService
+import fi.refineid.android.settings.TimestampAuthorityRepository
 import fi.refineid.android.usb.UsbReaderSnapshot
 
 /** Archival document signing remains absent from release until every LTA stage is present. */
@@ -10,4 +11,5 @@ import fi.refineid.android.usb.UsbReaderSnapshot
 internal fun DocumentSigningHarness(
     snapshot: UsbReaderSnapshot,
     cardService: QualifiedCardService?,
+    timestampAuthorityRepository: TimestampAuthorityRepository?,
 ) = Unit

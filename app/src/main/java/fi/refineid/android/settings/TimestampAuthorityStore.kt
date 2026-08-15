@@ -16,6 +16,20 @@ internal class TimestampAuthorityStoreException(
 ) : Exception(kind.name)
 
 /**
+ * Blocking timestamp-authority persistence.
+ *
+ * [load] transfers owned configurations to the caller. [save] borrows its configurations only for
+ * the duration of the call.
+ */
+internal interface TimestampAuthorityRepository {
+    fun load(): List<TimestampAuthorityConfiguration>
+
+    fun save(authorities: List<TimestampAuthorityConfiguration>)
+
+    fun restoreDefaults()
+}
+
+/**
  * Ordered public configuration plus Keystore-protected per-authority passwords.
  *
  * Every call performs blocking persistence or Keystore work and must run away from the main thread.
@@ -25,12 +39,12 @@ internal class TimestampAuthorityStore(
     private val passwordVault: TimestampAuthorityPasswordVault =
         AndroidKeystoreTimestampAuthorityPasswordVault(context),
     preferenceName: String = DEFAULT_PUBLIC_PREFERENCE_NAME,
-) {
+) : TimestampAuthorityRepository {
     private val preferences =
         context.applicationContext.getSharedPreferences(preferenceName, Context.MODE_PRIVATE)
 
     @Synchronized
-    fun load(): List<TimestampAuthorityConfiguration> {
+    override fun load(): List<TimestampAuthorityConfiguration> {
         if (!preferences.contains(AUTHORITY_COUNT_KEY)) {
             return listOf(TimestampAuthorityConfiguration.shipped())
         }
@@ -79,7 +93,7 @@ internal class TimestampAuthorityStore(
     }
 
     @Synchronized
-    fun save(authorities: List<TimestampAuthorityConfiguration>) {
+    override fun save(authorities: List<TimestampAuthorityConfiguration>) {
         if (authorities.isEmpty()) {
             restoreDefaults()
             return
@@ -131,7 +145,7 @@ internal class TimestampAuthorityStore(
     }
 
     @Synchronized
-    fun restoreDefaults() {
+    override fun restoreDefaults() {
         try {
             val editor = preferences.edit()
             editor.clear()

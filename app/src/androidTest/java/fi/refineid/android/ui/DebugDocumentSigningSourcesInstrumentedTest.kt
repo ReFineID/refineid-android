@@ -3,6 +3,7 @@ package fi.refineid.android.ui
 import androidx.test.core.app.ApplicationProvider
 import fi.refineid.android.core.SHA384_DIGEST_LENGTH_BYTES
 import fi.refineid.android.document.QualifiedPdfTimestampSourceException
+import fi.refineid.android.settings.TimestampAuthorityConfiguration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -10,14 +11,19 @@ import org.junit.Test
 
 class DebugDocumentSigningSourcesInstrumentedTest {
     @Test
-    fun loadsOnePinnedAuthorityAndEveryPinnedFineidIssuerWithoutNetworkAccess() {
+    fun loadsOneConfiguredAuthorityAndEveryPinnedFineidIssuerWithoutNetworkAccess() {
+        val configuration = TimestampAuthorityConfiguration.shipped()
         val sources =
-            DebugDocumentSigningSources.create(ApplicationProvider.getApplicationContext())
+            DebugDocumentSigningSources.create(
+                context = ApplicationProvider.getApplicationContext(),
+                transferredConfigurations = listOf(configuration),
+            )
 
         assertEquals(EXPECTED_AUTHORITY_COUNT, sources.timestamp.authorityCount)
         assertEquals(EXPECTED_FINEID_ISSUER_COUNT, sources.validation.signerTrustCertificateCount)
         assertEquals(EXPECTED_FINEID_ISSUER_COUNT, sources.validation.additionalCandidateCount)
         assertFalse(sources.timestamp.toString().contains(AUTHORITY_HOST))
+        assertThrows(IllegalStateException::class.java, configuration::copyPassword)
 
         sources.close()
 
