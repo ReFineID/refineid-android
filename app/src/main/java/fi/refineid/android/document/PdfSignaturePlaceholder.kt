@@ -66,10 +66,10 @@ internal class PdfSignaturePlaceholder(
             var cursor = contentsOpen + HEX_OPEN_DELIMITER_LENGTH
             for (byte in der) {
                 val unsigned = byte.toUByte().toInt()
-                filled[cursor] = HEX_DIGITS[unsigned ushr HEX_DIGIT_BITS]
+                filled[cursor] = HEX_DIGITS[unsigned ushr PdfFormat.HEX_DIGIT_BITS]
                 filled[cursor + LOW_HEX_DIGIT_OFFSET] =
-                    HEX_DIGITS[unsigned and HEX_DIGIT_MASK]
-                cursor += HEX_CHARACTERS_PER_BYTE
+                    HEX_DIGITS[unsigned and PdfFormat.HEX_DIGIT_MASK]
+                cursor += PdfFormat.HEX_CHARACTERS_PER_BYTE
             }
         }
     }
@@ -80,13 +80,13 @@ internal class PdfSignaturePlaceholder(
         }
         val hexLength =
             try {
-                Math.multiplyExact(capacity, HEX_CHARACTERS_PER_BYTE)
+                Math.multiplyExact(capacity, PdfFormat.HEX_CHARACTERS_PER_BYTE)
             } catch (_: ArithmeticException) {
                 throw malformedPlaceholder()
             }
         val excludedLength =
             try {
-                Math.addExact(hexLength, HEX_DELIMITER_COUNT)
+                Math.addExact(hexLength, PdfFormat.HEX_DELIMITER_COUNT)
             } catch (_: ArithmeticException) {
                 throw malformedPlaceholder()
             }
@@ -118,17 +118,12 @@ internal class PdfSignaturePlaceholder(
 
     private companion object {
         const val SHA384_DIGEST_ALGORITHM = "SHA-384"
-        const val HEX_DIGIT_TEXT = "0123456789ABCDEF"
-        const val HEX_CHARACTERS_PER_BYTE = 2
-        const val HEX_DIGIT_BITS = 4
-        const val HEX_DIGIT_MASK = 0x0F
-        const val HEX_DELIMITER_COUNT = 2
         const val HEX_OPEN_DELIMITER_LENGTH = 1
         const val HEX_CLOSE_DELIMITER_DISTANCE = 1
         const val LOW_HEX_DIGIT_OFFSET = 1
         const val FIRST_DOCUMENT_OFFSET = 0
         const val MINIMUM_CAPACITY = 0
-        val HEX_DIGITS = HEX_DIGIT_TEXT.encodeToByteArray()
+        val HEX_DIGITS = PdfFormat.HEX_DIGIT_TEXT.encodeToByteArray()
         val HEX_OPEN_DELIMITER = '<'.code.toByte()
         val HEX_CLOSE_DELIMITER = '>'.code.toByte()
         val ZERO_HEX_DIGIT = '0'.code.toByte()
