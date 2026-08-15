@@ -49,6 +49,8 @@ instrumented development harness, but it is not the product boundary.
   fail-closed retention of earlier certificate, OCSP, CRL, VRI, and extension data
 - Exact DER certificate facts, direct-issuer checks, nonce-bound authenticated
   OCSP responses, and complete authenticated CRLs for validation evidence
+- Bounded signer/TSA path collection with explicit anchors, AIA issuer lookup,
+  OCSP-first status, full-CRL fallback, and role-preserving revocation failures
 - Debug-only terse PDF choose/save/PIN2 harness; release stays hidden until the
   complete validation-evidence and archive stages reach PAdES-B-LTA
 - Secure, debug-only on-device signing harness; no manual harness in release

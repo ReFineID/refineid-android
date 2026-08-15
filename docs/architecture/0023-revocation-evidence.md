@@ -62,6 +62,6 @@ maximum age for responses that omit `nextUpdate`.
 ## Consequences
 
 Android has strict primitives for deciding whether downloaded revocation bytes
-are admissible evidence. This is not yet PAdES-B-LT: the collector must build
-the full signer and timestamp-authority paths, fetch each bounded resource,
-apply OCSP-to-CRL fallback, and pass only authenticated material to the DSS.
+are admissible evidence. ADR 0024 applies them while constructing the complete
+signer and timestamp-authority paths. Product orchestration must still append
+that result to the signed PDF before claiming PAdES-B-LT.
