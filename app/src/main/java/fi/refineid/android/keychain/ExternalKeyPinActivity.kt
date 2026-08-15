@@ -53,6 +53,7 @@ class ExternalKeyPinActivity : ComponentActivity() {
             WindowManager.LayoutParams.FLAG_SECURE or
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
         )
+        window.setHideOverlayWindows(true)
         setRecentsScreenshotEnabled(false)
         window.decorView.filterTouchesWhenObscured = true
         window.decorView.importantForAutofill =

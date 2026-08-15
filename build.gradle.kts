@@ -31,6 +31,11 @@ spotless {
 }
 
 val rustCrateDirectory = layout.projectDirectory.dir("native/refineid-android-core")
+val repositoryShellScripts =
+    listOf(
+        "Scripts/stamp-version.sh",
+        "Scripts/stage-aosp-prebuilt.sh",
+    )
 
 val rustFormatCheck =
     tasks.register<Exec>("rustFormatCheck") {
@@ -62,7 +67,8 @@ val shellCheck =
     tasks.register<Exec>("shellCheck") {
         group = "verification"
         description = "Run ShellCheck for repository shell scripts."
-        commandLine("shellcheck", "--shell=bash", "Scripts/stamp-version.sh")
+        inputs.files(repositoryShellScripts)
+        commandLine("shellcheck", "--shell=bash", *repositoryShellScripts.toTypedArray())
     }
 
 tasks.named("check") {

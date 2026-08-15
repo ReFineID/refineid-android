@@ -55,6 +55,14 @@ class ExternalKeyProviderManifestInstrumentedTest {
         assertFalse(activityInfo.exported)
         assertTrue(activityInfo.flags and ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS != NO_ACTIVITY_FLAGS)
         assertTrue(activityInfo.flags and ActivityInfo.FLAG_FINISH_ON_TASK_LAUNCH != NO_ACTIVITY_FLAGS)
+        val packageInfo =
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()),
+            )
+        assertTrue(
+            requireNotNull(packageInfo.requestedPermissions).contains(HIDE_OVERLAY_WINDOWS_PERMISSION),
+        )
     }
 
     private companion object {
@@ -62,6 +70,7 @@ class ExternalKeyProviderManifestInstrumentedTest {
             "com.android.keychain.permission.BIND_EXTERNAL_KEY_PROVIDER"
         const val PROVIDER_INTERFACE_ACTION =
             "com.android.keychain.external.IExternalKeyProviderService"
+        const val HIDE_OVERLAY_WINDOWS_PERMISSION = "android.permission.HIDE_OVERLAY_WINDOWS"
         const val NO_PACKAGE_MANAGER_FLAGS = 0L
         const val NO_ACTIVITY_FLAGS = 0
     }

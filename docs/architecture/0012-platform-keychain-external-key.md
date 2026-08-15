@@ -241,7 +241,8 @@ the next one depends on it:
    privilege, UID, and signing-certificate trust checks.
 6. Add the ReFineID privileged service, system-image declarations, SELinux
    policy, secure prompt coordinator, and one-result replay lease over the
-   existing digest-signing boundary.
+   existing digest-signing boundary. These sources are implemented; their
+   first full Soong image build remains pending on the Linux builder.
 7. Run independent Chrome and Firefox client-authentication tests, including
    cancellation, detach, wrong-card generation, process death, and the matrix
    limitations above.

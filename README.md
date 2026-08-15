@@ -3,10 +3,10 @@
 Native Android support for Finnish identity cards and standards-based browser
 authentication.
 
-This repository is at the browser-diagnostic stage. Its first vertical slice
-uses Android USB Host with a CCID reader, performs one PIN-authorized card
-signature, verifies it locally, and exposes the same non-exportable key to a
-debug-only WebView client-certificate handshake.
+This repository contains the native card application, a debug-only browser
+harness, and the app and AOSP boundaries needed to expose the same
+non-exportable key through Android KeyChain. A custom platform image is still
+required for independent browsers.
 
 The long-term target is authentication from normal Android browsers, including
 reference services such as Suomi.fi. An in-app browser is useful as an
@@ -35,15 +35,19 @@ instrumented development harness, but it is not the product boundary.
   service-side grant/generation bridge, native chooser discovery,
   browser-liveness token, and statically trusted provider-binding patches for
   the exact Android 13 Pixel 4 base
+- Privileged external-key service with a generation-bound USB backend, secure
+  caller-labelled PIN prompt, one-result replay, and coarse failures
+- Product priv-app import and a dedicated non-network SELinux app domain for
+  the Android 13 Pixel 4 image
 - Fingerprint-pinned FINEID intermediate set, present only in debug builds
 - Live diagnostic handshake verified through Chromium's holder-PIN request
 - No embedded browser, Internet permission, or logging in the release build
 - Compose UI Test v2 and UI Automator 2.4 instrumentation on a physical device
 
 An ordinary APK cannot publish its process-local external key to every other
-browser process. System-browser support therefore remains privileged platform
-work; see `docs/architecture/0011-browser-authentication-boundary.md` and the
-concrete AOSP design in
+browser process. System-browser support therefore uses the included privileged
+platform integration; see `docs/architecture/0011-browser-authentication-boundary.md`
+and the concrete AOSP design in
 `docs/architecture/0012-platform-keychain-external-key.md`.
 
 Product UI is deliberately terse. Explanations and diagnostics belong in
@@ -75,6 +79,14 @@ with:
     ./gradlew connectedDebugAndroidTest
 
 Machine-specific SDK paths belong in the ignored local.properties file.
+
+For an AOSP checkout containing this repository at `packages/apps/ReFineID`,
+stage the minimized unsigned release artifact with:
+
+    Scripts/stage-aosp-prebuilt.sh
+
+The AOSP module signs that ignored artifact with the build-local platform key;
+no signing key or signed platform artifact belongs in this repository.
 
 The `check` task treats Kotlin compiler and Android Lint warnings as errors,
 runs Detekt and ktlint, tests and lints the Rust bridge with rustfmt and Clippy,

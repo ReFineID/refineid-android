@@ -13,9 +13,9 @@ validated certificate snapshots, signature-shape checks, and an exact-component
 Binder connection guarded by a dedicated signature permission and install-time
 trust checks. The native chooser unions active external aliases with
 AndroidKeyStore aliases before applying its existing user-selectability,
-key-type, and issuer filters. The privileged ReFineID service, system-image
-declarations, and SELinux policy have not landed, so this series still exposes
-no card key.
+key-type, and issuer filters. The application now supplies the privileged
+provider service, generation-bound USB backend, secure PIN prompt, product
+priv-app import, and a dedicated non-network SELinux domain.
 
 ## Upstream bases
 
@@ -23,14 +23,22 @@ no card key.
 | --- | --- | --- |
 | `platform/frameworks/base` | `9cc5d58d0254f472ae071b29ccf4fae93ca1cc3d` | `patches/frameworks-base` |
 | `platform/packages/apps/KeyChain` | `97a7bc2ba75391487ecd3f23153cfb1ce293d6fe` | `patches/packages-apps-KeyChain` |
+| `device/google/coral` | `64f0b208f174e5d8627c201424c00102ef433adb` | `patches/device-google-coral` |
 
 Apply each directory's patches to its corresponding project with `git am`, in
 filename order. New AIDL methods are appended to the interface so all existing
 Binder transaction numbers remain unchanged.
 
+Place this repository at `packages/apps/ReFineID` in the AOSP tree and run
+`Scripts/stage-aosp-prebuilt.sh` before starting the platform build. The script
+stages the minimized unsigned release APK at the path consumed by `Android.bp`.
+Soong installs it under the product priv-app directory and signs it with the
+build-local platform certificate. Never copy a platform private key into this
+repository.
+
 ## Current verification
 
-- Both project patch sequences pass sequential application checks and full
+- All three project patch sequences pass sequential application checks and full
   `git am` replay in filename order from their exact upstream bases.
 - The framework AIDL interface generates with Build Tools 36; the only
   excluded warning is its pre-existing Android 13 interface-wide
@@ -64,7 +72,12 @@ Binder transaction numbers remain unchanged.
   Android-runtime validation on the physical Pixel covers the opaque Binder
   token and provider parcelables, including sender-side byte clearing for
   returned values, using synthetic data only.
-- The framework and KeyChain diffs pass Gitleaks.
+- The app-side service and backend pass Kotlin unit tests and nine synthetic
+  Binder, Compose UI, and manifest tests on the physical Pixel. The tests cover
+  stale generations, card-session replacement, removal suppression, caller
+  interruption, exact service permission, and private prompt exposure without
+  submitting a card credential.
+- The app, framework, KeyChain, and product-integration diffs pass Gitleaks.
 
 The patch series has not yet passed a Soong platform build. Android 11 and
 newer platform builds are unsupported on macOS, and Google's current
