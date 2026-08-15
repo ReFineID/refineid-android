@@ -16,6 +16,9 @@ internal enum class QualifiedDocumentCmsFailure {
     CERTIFICATE_PROFILE_MISMATCH,
     SIGNATURE_MALFORMED,
     SIGNED_ATTRIBUTES_MALFORMED,
+    TIMESTAMP_MISSING,
+    TIMESTAMP_IMPRINT_MISMATCH,
+    TIMESTAMP_TOKEN_UNAVAILABLE,
 }
 
 internal class QualifiedDocumentCmsException(
@@ -58,6 +61,36 @@ internal object QualifiedDocumentCms {
         signedAttributesSet: ByteArray,
         signature: NativeQualifiedSignature,
         signerCertificate: NativeQualifiedCertificate,
+    ): ByteArray =
+        assemble(
+            signedAttributesSet = signedAttributesSet,
+            signature = signature,
+            signerCertificate = signerCertificate,
+            timestampTokens = emptyList(),
+        )
+
+    fun assembleTimestamped(
+        signedAttributesSet: ByteArray,
+        signature: NativeQualifiedSignature,
+        signerCertificate: NativeQualifiedCertificate,
+        timestampTokens: List<VerifiedTimestampToken>,
+    ): ByteArray {
+        if (timestampTokens.isEmpty()) {
+            throw QualifiedDocumentCmsException(QualifiedDocumentCmsFailure.TIMESTAMP_MISSING)
+        }
+        return assemble(
+            signedAttributesSet = signedAttributesSet,
+            signature = signature,
+            signerCertificate = signerCertificate,
+            timestampTokens = timestampTokens,
+        )
+    }
+
+    private fun assemble(
+        signedAttributesSet: ByteArray,
+        signature: NativeQualifiedSignature,
+        signerCertificate: NativeQualifiedCertificate,
+        timestampTokens: List<VerifiedTimestampToken>,
     ): ByteArray {
         if (signature.algorithm.keyProfile != signerCertificate.keyProfile) {
             throw QualifiedDocumentCmsException(
@@ -67,6 +100,7 @@ internal object QualifiedDocumentCms {
         requireSignatureShape(signature)
         val certificateDer = signerCertificate.copyDer()
         val signatureValue = cmsSignatureValue(signature)
+        val encodedTimestampTokens = mutableListOf<ByteArray>()
         return try {
             QualifiedDocumentCmsValidation.validateSignedAttributes(
                 signedAttributesSet = signedAttributesSet,
@@ -87,15 +121,22 @@ internal object QualifiedDocumentCms {
                     QualifiedDocumentCmsFailure.SIGNATURE_MALFORMED,
                 )
             }
+            requireTimestampBindings(
+                timestampTokens = timestampTokens,
+                signatureValue = signatureValue,
+                encodedTimestampTokens = encodedTimestampTokens,
+            )
             assembleValidated(
                 signedAttributesSet = signedAttributesSet,
                 signatureValue = signatureValue,
                 algorithm = signature.algorithm,
                 signerCertificateDer = certificateDer,
+                timestampTokens = encodedTimestampTokens,
             )
         } finally {
             certificateDer.fill(ZERO_BYTE)
             signatureValue.fill(ZERO_BYTE)
+            encodedTimestampTokens.forEach { token -> token.fill(ZERO_BYTE) }
         }
     }
 
@@ -154,9 +195,10 @@ internal object QualifiedDocumentCms {
         signatureValue: ByteArray,
         algorithm: QualifiedSigningAlgorithm,
         signerCertificateDer: ByteArray,
+        timestampTokens: List<ByteArray>,
     ): ByteArray {
         val signerInfo =
-            listOf(
+            mutableListOf(
                 DerEncoder.integer(SIGNER_INFO_VERSION),
                 QualifiedDocumentCmsValidation.issuerAndSerial(signerCertificateDer),
                 sha384AlgorithmIdentifier(),
@@ -167,6 +209,7 @@ internal object QualifiedDocumentCms {
                 signatureAlgorithmIdentifier(algorithm),
                 DerEncoder.octetString(signatureValue),
             )
+        timestampAttributes(timestampTokens)?.let(signerInfo::add)
 
         val signedData =
             DerEncoder.sequence(
@@ -192,6 +235,76 @@ internal object QualifiedDocumentCms {
                 ),
             ),
         )
+    }
+
+    private fun requireTimestampBindings(
+        timestampTokens: List<VerifiedTimestampToken>,
+        signatureValue: ByteArray,
+        encodedTimestampTokens: MutableList<ByteArray>,
+    ) {
+        if (timestampTokens.isEmpty()) {
+            return
+        }
+        val imprint = sha384(signatureValue)
+        try {
+            for (token in timestampTokens) {
+                val matches =
+                    try {
+                        token.matchesMessageImprint(imprint)
+                    } catch (_: IllegalStateException) {
+                        throw QualifiedDocumentCmsException(
+                            QualifiedDocumentCmsFailure.TIMESTAMP_TOKEN_UNAVAILABLE,
+                        )
+                    }
+                if (!matches) {
+                    throw QualifiedDocumentCmsException(
+                        QualifiedDocumentCmsFailure.TIMESTAMP_IMPRINT_MISMATCH,
+                    )
+                }
+                encodedTimestampTokens +=
+                    try {
+                        token.copyEncoding()
+                    } catch (_: IllegalStateException) {
+                        throw QualifiedDocumentCmsException(
+                            QualifiedDocumentCmsFailure.TIMESTAMP_TOKEN_UNAVAILABLE,
+                        )
+                    }
+            }
+        } finally {
+            imprint.fill(ZERO_BYTE)
+        }
+    }
+
+    private fun timestampAttributes(tokens: List<ByteArray>): ByteArray? {
+        if (tokens.isEmpty()) {
+            return null
+        }
+        val unique = mutableListOf<ByteArray>()
+        try {
+            for (token in tokens) {
+                val attribute =
+                    attribute(
+                        oid = QualifiedCmsOids.SIGNATURE_TIMESTAMP_TOKEN,
+                        value = token,
+                    )
+                if (unique.any { existing -> existing.contentEquals(attribute) }) {
+                    attribute.fill(ZERO_BYTE)
+                } else {
+                    unique += attribute
+                }
+            }
+            val set = DerEncoder.setOf(unique)
+            return try {
+                DerEncoder.retagged(
+                    encoded = set,
+                    tag = DerValues.TAG_CONTEXT_1_CONSTRUCTED,
+                )
+            } finally {
+                set.fill(ZERO_BYTE)
+            }
+        } finally {
+            unique.forEach { attribute -> attribute.fill(ZERO_BYTE) }
+        }
     }
 
     private fun cmsSignatureValue(signature: NativeQualifiedSignature): ByteArray =
@@ -265,6 +378,7 @@ internal object QualifiedCmsOids {
     const val CONTENT_TYPE = "1.2.840.113549.1.9.3"
     const val MESSAGE_DIGEST = "1.2.840.113549.1.9.4"
     const val SIGNING_CERTIFICATE_V2 = "1.2.840.113549.1.9.16.2.47"
+    const val SIGNATURE_TIMESTAMP_TOKEN = "1.2.840.113549.1.9.16.2.14"
     const val SHA384 = "2.16.840.1.101.3.4.2.2"
     const val ECDSA_WITH_SHA384 = "1.2.840.10045.4.3.3"
     const val SHA384_WITH_RSA = "1.2.840.113549.1.1.12"

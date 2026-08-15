@@ -43,8 +43,10 @@ instrumented development harness, but it is not the product boundary.
 - Strict TSA CMS signature, signed-attribute, ESS certificate, timestamp-only
   certificate-profile, exact TSA-name, and offline exclusive-anchor PKIX
   verification before promotion to an owned verified-token capability
+- PAdES-B-T CMS assembly that binds each verified token to the exact stored
+  signature value and emits canonical, sorted, deduplicated unsigned attributes
 - Debug-only terse PDF choose/save/PIN2 harness; release stays hidden until the
-  timestamp and validation-evidence stages reach PAdES-B-LTA
+  complete validation-evidence and archive stages reach PAdES-B-LTA
 - Secure, debug-only on-device signing harness; no manual harness in release
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session

@@ -38,6 +38,5 @@ that permits an explicit FALSE critical flag only in TSTInfo extensions.
 
 Network-response substitution and replay are rejected at a typed boundary, but
 PAdES-B-T is not complete at this boundary. ADR 0020 adds CMS, signer-profile,
-and explicit-trust verification and creates the verified-token capability.
-Attaching that capability as a signature timestamp remains a separate CMS
-assembly step.
+and explicit-trust verification and creates the verified-token capability;
+ADR 0021 attaches only that capability as a signature timestamp.

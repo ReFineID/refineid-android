@@ -31,13 +31,34 @@ internal class TimestampTokenVerificationException(
     val kind: TimestampTokenVerificationFailure,
 ) : Exception(kind.name)
 
+internal class VerifiedTimestampCertificatePath internal constructor(
+    private val ownedCertificates: List<ByteArray>,
+    private val ownedTrustAnchor: ByteArray,
+) : AutoCloseable {
+    val certificateCount: Int
+        get() = ownedCertificates.size
+
+    fun copyCertificates(): List<ByteArray> = ownedCertificates.map(ByteArray::copyOf)
+
+    fun copyTrustAnchor(): ByteArray = ownedTrustAnchor.copyOf()
+
+    override fun close() {
+        ownedCertificates.forEach { certificate -> certificate.fill(ZERO_BYTE) }
+        ownedTrustAnchor.fill(ZERO_BYTE)
+    }
+
+    private companion object {
+        const val ZERO_BYTE: Byte = 0
+    }
+}
+
 /** RFC 3161 token authenticated to one explicit offline trust anchor. */
 internal class VerifiedTimestampToken internal constructor(
     private val ownedEncoding: ByteArray,
+    private val ownedMessageImprint: ByteArray,
     private val ownedSignerCertificate: ByteArray,
     private val ownedEmbeddedCertificates: List<ByteArray>,
-    private val ownedVerifiedCertificateChain: List<ByteArray>,
-    private val ownedTrustedCertificate: ByteArray,
+    private val ownedCertificatePath: VerifiedTimestampCertificatePath,
     val generatedAt: Instant,
 ) : AutoCloseable {
     private var isClosed = false
@@ -49,14 +70,27 @@ internal class VerifiedTimestampToken internal constructor(
         get() = ownedEmbeddedCertificates.size
 
     val verifiedCertificateCount: Int
-        get() = ownedVerifiedCertificateChain.size
+        get() = ownedCertificatePath.certificateCount
 
     fun <T> useEncoding(operation: (ByteArray) -> T): T {
         requireOpen()
-        return operation(ownedEncoding)
+        val copy = ownedEncoding.copyOf()
+        return try {
+            operation(copy)
+        } finally {
+            copy.fill(ZERO_BYTE)
+        }
     }
 
-    fun copyEncoding(): ByteArray = useEncoding(ByteArray::copyOf)
+    fun copyEncoding(): ByteArray {
+        requireOpen()
+        return ownedEncoding.copyOf()
+    }
+
+    fun matchesMessageImprint(expected: ByteArray): Boolean {
+        requireOpen()
+        return java.security.MessageDigest.isEqual(ownedMessageImprint, expected)
+    }
 
     fun copySignerCertificate(): ByteArray {
         requireOpen()
@@ -70,21 +104,21 @@ internal class VerifiedTimestampToken internal constructor(
 
     fun copyVerifiedCertificateChain(): List<ByteArray> {
         requireOpen()
-        return ownedVerifiedCertificateChain.map(ByteArray::copyOf)
+        return ownedCertificatePath.copyCertificates()
     }
 
     fun copyTrustedCertificate(): ByteArray {
         requireOpen()
-        return ownedTrustedCertificate.copyOf()
+        return ownedCertificatePath.copyTrustAnchor()
     }
 
     override fun close() {
         if (!isClosed) {
             ownedEncoding.fill(ZERO_BYTE)
+            ownedMessageImprint.fill(ZERO_BYTE)
             ownedSignerCertificate.fill(ZERO_BYTE)
             ownedEmbeddedCertificates.forEach { certificate -> certificate.fill(ZERO_BYTE) }
-            ownedVerifiedCertificateChain.forEach { certificate -> certificate.fill(ZERO_BYTE) }
-            ownedTrustedCertificate.fill(ZERO_BYTE)
+            ownedCertificatePath.close()
             isClosed = true
         }
     }
@@ -181,11 +215,15 @@ internal object TimestampTokenVerifier {
                 try {
                     return VerifiedTimestampToken(
                         ownedEncoding = encoding.copyOf(),
+                        ownedMessageImprint = binding.digest.copyOf(),
                         ownedSignerCertificate = authenticated.signerCertificate.copyOf(),
                         ownedEmbeddedCertificates =
                             authenticated.embeddedCertificates.map(ByteArray::copyOf),
-                        ownedVerifiedCertificateChain = path.chain.map(X509Certificate::getEncoded),
-                        ownedTrustedCertificate = path.anchor.encoded,
+                        ownedCertificatePath =
+                            VerifiedTimestampCertificatePath(
+                                ownedCertificates = path.chain.map(X509Certificate::getEncoded),
+                                ownedTrustAnchor = path.anchor.encoded,
+                            ),
                         generatedAt = binding.generatedAt,
                     )
                 } catch (_: CertificateException) {

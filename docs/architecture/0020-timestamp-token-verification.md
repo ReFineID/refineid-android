@@ -56,6 +56,7 @@ no private-key fixture is stored in the repository.
 ## Consequences
 
 Only a cryptographically authenticated and explicitly trusted timestamp can
-cross the type boundary needed by PAdES-B-T assembly. A token still does not
-provide long-term validation by itself: revocation evidence, DSS construction,
-the document timestamp, and archive validation remain subsequent work.
+cross the type boundary used by the PAdES-B-T assembly in ADR 0021. A token
+still does not provide long-term validation by itself: revocation evidence,
+DSS construction, the document timestamp, and archive validation remain
+subsequent work.
