@@ -73,6 +73,8 @@ internal object DerEncoder {
 
     fun octetString(content: ByteArray): ByteArray = tlv(DerValues.TAG_OCTET_STRING, content)
 
+    fun booleanTrue(): ByteArray = tlv(DerValues.TAG_BOOLEAN, byteArrayOf(DerValues.DER_TRUE_BYTE))
+
     fun nullValue(): ByteArray = tlv(DerValues.TAG_NULL, byteArrayOf())
 
     fun objectIdentifier(dotted: String): ByteArray {
@@ -342,13 +344,22 @@ internal class DerReader private constructor(
 }
 
 internal object DerValues {
+    const val TAG_BOOLEAN = 0x01
     const val TAG_INTEGER = 0x02
+    const val TAG_BIT_STRING = 0x03
     const val TAG_OCTET_STRING = 0x04
     const val TAG_NULL = 0x05
     const val TAG_OBJECT_IDENTIFIER = 0x06
+    const val TAG_UTF8_STRING = 0x0C
+    const val TAG_GENERALIZED_TIME = 0x18
     const val TAG_SEQUENCE = 0x30
     const val TAG_SET = 0x31
+    const val TAG_CONTEXT_0_PRIMITIVE = 0x80
+    const val TAG_CONTEXT_1_PRIMITIVE = 0x81
     const val TAG_CONTEXT_0_CONSTRUCTED = 0xA0
     const val TAG_CONTEXT_1_CONSTRUCTED = 0xA1
+    const val TAG_CONTEXT_4_CONSTRUCTED = 0xA4
     const val SIGN_BIT_MASK = 0x80
+    const val DER_TRUE_BYTE: Byte = -1
+    const val DER_FALSE_BYTE: Byte = 0
 }
