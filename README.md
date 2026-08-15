@@ -55,8 +55,11 @@ instrumented development harness, but it is not the product boundary.
   OCSP-first status, full-CRL fallback, and role-preserving revocation failures
 - Authenticated DSS followed by an exact-imprint RFC 3161 document timestamp,
   with synthetic end-to-end B-LTA checks through OpenSSL, qpdf, and Poppler
+- Bounded live TSA, AIA, OCSP, and CRL transport with public-address and
+  redirect policy, exact response limits, injected time/randomness, and
+  verify-before-use RFC 3161 trust promotion
 - Debug-only terse PDF choose/save/PIN2 harness; release stays hidden until the
-  live validation and timestamp transports are wired into product orchestration
+  trust configuration, retry policy, and off-main signing orchestration are wired
 - Secure, debug-only on-device signing harness; no manual harness in release
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session
