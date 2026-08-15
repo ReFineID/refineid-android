@@ -1,7 +1,7 @@
 package fi.refineid.android.ui
 
 import androidx.compose.runtime.Composable
-import fi.refineid.android.browser.BrowserCardService
+import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.usb.UsbReaderSnapshot
 
 /** Release has no embedded browser; normal-browser integration is a platform boundary. */
@@ -9,5 +9,5 @@ import fi.refineid.android.usb.UsbReaderSnapshot
 @Composable
 internal fun BrowserHarness(
     snapshot: UsbReaderSnapshot,
-    cardService: BrowserCardService?,
+    cardService: AuthenticationCardService?,
 ) = Unit

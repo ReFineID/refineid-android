@@ -42,7 +42,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import fi.refineid.android.R
-import fi.refineid.android.browser.BrowserCardService
 import fi.refineid.android.browser.BrowserClientCertificateMatcher
 import fi.refineid.android.browser.BrowserClientCertificateOutcome
 import fi.refineid.android.browser.BrowserClientIdentity
@@ -51,6 +50,7 @@ import fi.refineid.android.browser.BrowserPinRequest
 import fi.refineid.android.browser.BrowserSignatureStatus
 import fi.refineid.android.browser.BundledIssuerCertificates
 import fi.refineid.android.browser.ReFineIdCardProviderRegistration
+import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.usb.CardPresence
@@ -63,7 +63,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Composable
 internal fun BrowserHarness(
     snapshot: UsbReaderSnapshot,
-    cardService: BrowserCardService?,
+    cardService: AuthenticationCardService?,
 ) {
     if (
         cardService == null ||
@@ -99,7 +99,7 @@ internal fun BrowserHarness(
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 private fun BrowserDialog(
-    cardService: BrowserCardService,
+    cardService: AuthenticationCardService,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -332,7 +332,7 @@ private fun BrowserStatus(status: BrowserSignatureStatus) {
 }
 
 private class ReFineIdWebViewClient(
-    private val cardService: BrowserCardService,
+    private val cardService: AuthenticationCardService,
     private val issuerCandidates: List<X509Certificate>,
     private val signatureOperation: BrowserPinCoordinator,
     private val allowedOrigin: BrowserOrigin,

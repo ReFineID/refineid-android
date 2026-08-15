@@ -1,5 +1,6 @@
 package fi.refineid.android.browser
 
+import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
@@ -49,7 +50,7 @@ internal class BrowserPinRequest {
 
 /** Turns Chromium's synchronous JCA call into a terse PIN prompt plus serialized card use. */
 internal class BrowserPinCoordinator(
-    private val cardService: BrowserCardService,
+    private val cardService: AuthenticationCardService,
     private val dispatchToUi: (() -> Unit) -> Unit,
     private val onPromptChanged: (BrowserPinRequest?) -> Unit,
     private val onStatusChanged: (BrowserSignatureStatus) -> Unit,

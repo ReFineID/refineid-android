@@ -1,5 +1,6 @@
 package fi.refineid.android.browser
 
+import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
@@ -160,7 +161,7 @@ class BrowserPinCoordinatorTest {
 
     private class RecordingCardService(
         private val failure: AuthenticationSignFailure? = null,
-    ) : BrowserCardService {
+    ) : AuthenticationCardService {
         var observedAlgorithm: AuthenticationSigningAlgorithm? = null
         var observedMessage: ByteArray? = null
         var observedPin1: String? = null

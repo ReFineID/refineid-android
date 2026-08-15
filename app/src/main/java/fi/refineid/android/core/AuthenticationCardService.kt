@@ -1,12 +1,7 @@
-package fi.refineid.android.browser
+package fi.refineid.android.core
 
-import fi.refineid.android.core.AuthenticationSignResult
-import fi.refineid.android.core.AuthenticationSigningAlgorithm
-import fi.refineid.android.core.NativeAuthenticationCertificate
-import fi.refineid.android.core.Pin1Submission
-
-/** Browser-neutral boundary over one retained card session. */
-internal interface BrowserCardService {
+/** Consumer-neutral boundary over one retained, locally verified card session. */
+internal interface AuthenticationCardService {
     fun requestAuthenticationCertificate(onResult: (NativeAuthenticationCertificate?) -> Unit)
 
     fun signAuthenticationMessage(

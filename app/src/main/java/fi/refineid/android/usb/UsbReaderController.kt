@@ -9,7 +9,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
-import fi.refineid.android.browser.BrowserCardService
+import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
@@ -60,7 +60,7 @@ internal data class UsbReaderSnapshot(
 internal class UsbReaderController(
     context: Context,
     private val onStateChanged: (UsbReaderSnapshot) -> Unit,
-) : BrowserCardService {
+) : AuthenticationCardService {
     private val applicationContext = context.applicationContext
     private val usbManager =
         requireNotNull(applicationContext.getSystemService(UsbManager::class.java))

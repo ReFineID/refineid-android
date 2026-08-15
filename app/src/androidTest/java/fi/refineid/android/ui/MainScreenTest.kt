@@ -12,7 +12,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import fi.refineid.android.R
-import fi.refineid.android.browser.BrowserCardService
+import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
@@ -170,7 +170,7 @@ internal class MainScreenTest {
         snapshot: UsbReaderSnapshot,
         onRequestPermission: () -> Unit = {},
         onAuthenticate: (Pin1Submission) -> Unit = Pin1Submission::close,
-        browserCardService: BrowserCardService? = null,
+        browserCardService: AuthenticationCardService? = null,
     ) {
         composeRule.setContent {
             ReFineIdTheme {
@@ -205,7 +205,7 @@ internal class MainScreenTest {
             )
 
         val INERT_BROWSER_CARD_SERVICE =
-            object : BrowserCardService {
+            object : AuthenticationCardService {
                 override fun requestAuthenticationCertificate(onResult: (NativeAuthenticationCertificate?) -> Unit) {
                     onResult(null)
                 }

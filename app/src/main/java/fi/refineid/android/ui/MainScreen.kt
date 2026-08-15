@@ -39,7 +39,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import fi.refineid.android.R
-import fi.refineid.android.browser.BrowserCardService
+import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.BuildDiagnostics
 import fi.refineid.android.usb.AuthenticationStatus
@@ -53,7 +53,7 @@ internal fun MainScreen(
     snapshot: UsbReaderSnapshot,
     onRequestPermission: () -> Unit,
     onAuthenticate: (Pin1Submission) -> Unit,
-    browserCardService: BrowserCardService? = null,
+    browserCardService: AuthenticationCardService? = null,
 ) {
     Scaffold(
         modifier =
