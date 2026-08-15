@@ -1,0 +1,237 @@
+package fi.refineid.android.usb.ccid
+
+import fi.refineid.android.core.AtrValidation
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class CcidCardActivatorTest {
+    @Test
+    fun acceptsT0AtrForTpduReader() {
+        val io = poweredCardIo()
+
+        val result = activate(io, AtrValidation.VALID_T0_DIRECT, CcidExchangeLevel.TPDU)
+
+        assertEquals(CcidActivationResult.READY, result)
+        assertEquals(2, io.writtenFrames.size)
+        assertEquals(
+            CcidWire.PC_TO_RDR_GET_SLOT_STATUS,
+            io.writtenFrames[0].unsignedByte(CcidWire.MESSAGE_TYPE_OFFSET),
+        )
+        assertEquals(
+            CcidWire.PC_TO_RDR_ICC_POWER_ON,
+            io.writtenFrames[1].unsignedByte(CcidWire.MESSAGE_TYPE_OFFSET),
+        )
+        io.close()
+    }
+
+    @Test
+    fun rejectsNonT0AtrAtTpduBoundary() {
+        val io = poweredCardIo()
+
+        val result =
+            activate(
+                io = io,
+                validation = AtrValidation.VALID_NON_T0_DIRECT,
+                exchangeLevel = CcidExchangeLevel.TPDU,
+            )
+
+        assertEquals(CcidActivationResult.CARD_ERROR, result)
+        io.close()
+    }
+
+    @Test
+    fun acceptsNonT0AtrWhenReaderOwnsApduProtocol() {
+        val io = poweredCardIo()
+
+        val result =
+            activate(
+                io = io,
+                validation = AtrValidation.VALID_NON_T0_INVERSE,
+                exchangeLevel = CcidExchangeLevel.SHORT_APDU,
+            )
+
+        assertEquals(CcidActivationResult.READY, result)
+        io.close()
+    }
+
+    @Test
+    fun mapsNativeAtrBridgeFailureToTransportError() {
+        val io = poweredCardIo()
+
+        val result =
+            activate(
+                io = io,
+                validation = AtrValidation.BRIDGE_ERROR,
+                exchangeLevel = CcidExchangeLevel.SHORT_APDU,
+            )
+
+        assertEquals(CcidActivationResult.TRANSPORT_ERROR, result)
+        io.close()
+    }
+
+    @Test
+    fun emptySlotDoesNotPowerOrValidate() {
+        val io =
+            ScriptedBulkIo(
+                listOf(
+                    slotStatusFrame(
+                        sequence = TEST_SEQUENCE,
+                        cardStatus = CcidWire.CARD_STATUS_NOT_PRESENT,
+                    ),
+                ),
+            )
+        var validationCalls = 0
+        val activator =
+            CcidCardActivator(
+                validateAtr = {
+                    validationCalls += 1
+                    AtrValidation.VALID_T0_DIRECT
+                },
+                sequenceCounter = CcidSequenceCounter(TEST_SEQUENCE),
+            )
+
+        val result = activator.activate(exchange(io), CcidExchangeLevel.TPDU)
+
+        assertEquals(CcidActivationResult.NO_CARD, result)
+        assertEquals(0, validationCalls)
+        assertEquals(1, io.writtenFrames.size)
+        io.close()
+    }
+
+    private fun activate(
+        io: ScriptedBulkIo,
+        validation: AtrValidation,
+        exchangeLevel: CcidExchangeLevel,
+    ): CcidActivationResult {
+        var validationCalls = 0
+        val activator =
+            CcidCardActivator(
+                validateAtr = { atr ->
+                    validationCalls += 1
+                    assertArrayEquals(SYNTHETIC_ATR, atr)
+                    validation
+                },
+                sequenceCounter = CcidSequenceCounter(TEST_SEQUENCE),
+            )
+
+        return activator.activate(exchange(io), exchangeLevel).also {
+            assertEquals(1, validationCalls)
+        }
+    }
+
+    private fun exchange(io: CcidBulkIo): CcidCommandExchange =
+        CcidCommandExchange(
+            bulkIo = io,
+            maximumMessageLength = MAXIMUM_MESSAGE_LENGTH,
+        )
+
+    private fun poweredCardIo(): ScriptedBulkIo =
+        ScriptedBulkIo(
+            listOf(
+                slotStatusFrame(
+                    sequence = TEST_SEQUENCE,
+                    cardStatus = CcidWire.CARD_STATUS_ACTIVE,
+                ),
+                dataBlockFrame(
+                    sequence = TEST_SEQUENCE + 1,
+                    payload = SYNTHETIC_ATR,
+                ),
+            ),
+        )
+
+    private fun slotStatusFrame(
+        sequence: Int,
+        cardStatus: Int,
+    ): ByteArray =
+        responseFrame(
+            messageType = CcidWire.RDR_TO_PC_SLOT_STATUS,
+            sequence = sequence,
+            cardStatus = cardStatus,
+            responseParameter = CcidWire.CLOCK_RUNNING,
+        )
+
+    private fun dataBlockFrame(
+        sequence: Int,
+        payload: ByteArray,
+    ): ByteArray =
+        responseFrame(
+            messageType = CcidWire.RDR_TO_PC_DATA_BLOCK,
+            sequence = sequence,
+            cardStatus = CcidWire.CARD_STATUS_ACTIVE,
+            responseParameter = CcidWire.COMPLETE_CHAIN,
+            payload = payload,
+        )
+
+    private fun responseFrame(
+        messageType: Int,
+        sequence: Int,
+        cardStatus: Int,
+        responseParameter: Int,
+        payload: ByteArray = byteArrayOf(),
+    ): ByteArray =
+        ByteArray(CcidWire.HEADER_SIZE + payload.size).apply {
+            this[CcidWire.MESSAGE_TYPE_OFFSET] = messageType.toByte()
+            writeLength(payload.size)
+            this[CcidWire.SLOT_OFFSET] = FIRST_SLOT.toByte()
+            this[CcidWire.SEQUENCE_OFFSET] = sequence.toByte()
+            this[CcidWire.STATUS_OFFSET] = cardStatus.toByte()
+            this[CcidWire.RESPONSE_PARAMETER_OFFSET] = responseParameter.toByte()
+            payload.copyInto(this, destinationOffset = CcidWire.HEADER_SIZE)
+        }
+
+    private fun ByteArray.writeLength(length: Int) {
+        repeat(LENGTH_FIELD_SIZE) { index ->
+            this[CcidWire.LENGTH_OFFSET + index] =
+                (length ushr (index * Byte.SIZE_BITS)).toByte()
+        }
+    }
+
+    private fun ByteArray.unsignedByte(offset: Int): Int =
+        this[offset].toInt() and CcidWire.BYTE_MAX
+
+    private class ScriptedBulkIo(
+        responses: List<ByteArray>,
+    ) : CcidBulkIo,
+        AutoCloseable {
+        private val responses = responses.map(ByteArray::copyOf).toMutableList()
+        val writtenFrames = mutableListOf<ByteArray>()
+
+        override fun write(frame: ByteArray): Int {
+            writtenFrames += frame.copyOf()
+            return frame.size
+        }
+
+        override fun read(frame: ByteArray): Int {
+            if (responses.isEmpty()) {
+                return -1
+            }
+            val response = responses.removeAt(0)
+            return try {
+                response.copyInto(frame)
+                response.size
+            } finally {
+                response.fill(0)
+            }
+        }
+
+        override fun close() {
+            responses.forEach { response -> response.fill(0) }
+            writtenFrames.forEach { frame -> frame.fill(0) }
+        }
+    }
+
+    private companion object {
+        const val FIRST_SLOT = 0
+        const val TEST_SEQUENCE = 41
+        const val LENGTH_FIELD_SIZE = 4
+        const val MAXIMUM_MESSAGE_LENGTH = 512
+        const val SYNTHETIC_TS_DIRECT: Byte = 0x3B
+        const val SYNTHETIC_T0_NO_INTERFACE_BYTES: Byte = 0x00
+        val SYNTHETIC_ATR =
+            byteArrayOf(
+                SYNTHETIC_TS_DIRECT,
+                SYNTHETIC_T0_NO_INTERFACE_BYTES,
+            )
+    }
+}

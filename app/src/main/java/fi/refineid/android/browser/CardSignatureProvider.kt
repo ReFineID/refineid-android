@@ -1,0 +1,268 @@
+package fi.refineid.android.browser
+
+import fi.refineid.android.core.AuthenticationSigningAlgorithm
+import fi.refineid.android.core.MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH
+import fi.refineid.android.core.P384EcdsaSignature
+import java.security.InvalidKeyException
+import java.security.InvalidParameterException
+import java.security.PrivateKey
+import java.security.Provider
+import java.security.PublicKey
+import java.security.SecureRandom
+import java.security.SignatureException
+import java.security.SignatureSpi
+import java.security.spec.AlgorithmParameterSpec
+
+/** JCA provider consumed by Chromium's Android client-certificate bridge. */
+@Suppress("DEPRECATION")
+internal class ReFineIdCardProvider : Provider(NAME, VERSION, DESCRIPTION) {
+    init {
+        register(
+            jcaName = JCA_SHA256_WITH_RSA,
+            implementation = Sha256WithRsaCardSignature::class.java,
+        )
+        register(
+            jcaName = JCA_SHA256_WITH_RSA_PSS,
+            implementation = Sha256WithRsaPssCardSignature::class.java,
+        )
+        register(
+            jcaName = JCA_SHA256_WITH_ECDSA,
+            implementation = Sha256WithEcdsaCardSignature::class.java,
+        )
+        register(
+            jcaName = JCA_SHA384_WITH_ECDSA,
+            implementation = Sha384WithEcdsaCardSignature::class.java,
+        )
+    }
+
+    private fun register(
+        jcaName: String,
+        implementation: Class<out SignatureSpi>,
+    ) {
+        putService(
+            Service(
+                this,
+                SIGNATURE_SERVICE,
+                jcaName,
+                implementation.name,
+                emptyList(),
+                mapOf(SUPPORTED_KEY_CLASSES_ATTRIBUTE to CardBackedPrivateKey::class.java.name),
+            ),
+        )
+    }
+
+    internal companion object {
+        const val NAME = "ReFineIDCard"
+        const val JCA_SHA256_WITH_RSA = "SHA256withRSA"
+        const val JCA_SHA256_WITH_RSA_PSS = "SHA256withRSA/PSS"
+        const val JCA_SHA256_WITH_ECDSA = "SHA256withECDSA"
+        const val JCA_SHA384_WITH_ECDSA = "SHA384withECDSA"
+
+        private const val SIGNATURE_SERVICE = "Signature"
+        private const val SUPPORTED_KEY_CLASSES_ATTRIBUTE = "SupportedKeyClasses"
+        private const val VERSION = 1.0
+        private const val DESCRIPTION = "ReFineID external smart-card signatures"
+    }
+}
+
+internal class Sha256WithRsaCardSignature :
+    CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256)
+
+internal class Sha256WithRsaPssCardSignature :
+    CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PSS_SHA256)
+
+internal class Sha256WithEcdsaCardSignature :
+    CardBackedSignatureSpi(AuthenticationSigningAlgorithm.ECDSA_P384_SHA256)
+
+internal class Sha384WithEcdsaCardSignature :
+    CardBackedSignatureSpi(AuthenticationSigningAlgorithm.ECDSA_P384_SHA384)
+
+@Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+internal abstract class CardBackedSignatureSpi(
+    private val algorithm: AuthenticationSigningAlgorithm,
+) : SignatureSpi() {
+    private var key: CardBackedPrivateKey? = null
+    private val message = ZeroizingMessageBuffer(MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH)
+    private var hasSigned = false
+
+    final override fun engineInitVerify(publicKey: PublicKey) {
+        reset()
+        throw InvalidKeyException("card-backed signatures do not verify")
+    }
+
+    final override fun engineInitSign(privateKey: PrivateKey) {
+        initSign(privateKey)
+    }
+
+    final override fun engineInitSign(
+        privateKey: PrivateKey,
+        random: SecureRandom,
+    ) {
+        initSign(privateKey)
+    }
+
+    private fun initSign(privateKey: PrivateKey) {
+        reset()
+        val cardKey =
+            privateKey as? CardBackedPrivateKey
+                ?: throw InvalidKeyException("a ReFineID card key is required")
+        if (cardKey.algorithm != algorithm.jcaKeyAlgorithm()) {
+            throw InvalidKeyException("card key algorithm does not match the signature")
+        }
+        key = cardKey
+    }
+
+    final override fun engineUpdate(input: Byte) {
+        requireReady()
+        message.append(input)
+    }
+
+    final override fun engineUpdate(
+        input: ByteArray,
+        offset: Int,
+        length: Int,
+    ) {
+        requireReady()
+        try {
+            message.append(input, offset, length)
+        } catch (error: IndexOutOfBoundsException) {
+            throw SignatureException("invalid message range", error)
+        } catch (error: IllegalArgumentException) {
+            throw SignatureException("authentication message is too large", error)
+        }
+    }
+
+    final override fun engineSign(): ByteArray {
+        val cardKey = requireReady()
+        val ownedMessage = message.take()
+        hasSigned = true
+        return try {
+            val signature = cardKey.operation.sign(algorithm, ownedMessage)
+            try {
+                when (algorithm) {
+                    AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
+                    AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
+                    -> signature.useBytes(P384EcdsaSignature::toDer)
+                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
+                    AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+                    -> signature.copyBytes()
+                }
+            } finally {
+                signature.close()
+            }
+        } finally {
+            ownedMessage.fill(ZERO_BYTE)
+        }
+    }
+
+    final override fun engineVerify(signature: ByteArray): Boolean {
+        throw SignatureException("card-backed signatures do not verify")
+    }
+
+    final override fun engineSetParameter(
+        parameter: String,
+        value: Any,
+    ) {
+        throw InvalidParameterException("signature parameters are fixed")
+    }
+
+    final override fun engineGetParameter(parameter: String): Any? {
+        throw InvalidParameterException("signature parameters are fixed")
+    }
+
+    final override fun engineSetParameter(parameters: AlgorithmParameterSpec) {
+        throw InvalidParameterException("signature parameters are fixed")
+    }
+
+    private fun requireReady(): CardBackedPrivateKey {
+        if (hasSigned) {
+            throw SignatureException("card signature operation was already consumed")
+        }
+        return key ?: throw SignatureException("card signature is not initialized")
+    }
+
+    private fun reset() {
+        message.clear()
+        key = null
+        hasSigned = false
+    }
+
+    private fun AuthenticationSigningAlgorithm.jcaKeyAlgorithm(): String =
+        when (this) {
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+            -> JCA_KEY_ALGORITHM_RSA
+            AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
+            AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
+            -> JCA_KEY_ALGORITHM_EC
+        }
+
+    private companion object {
+        const val JCA_KEY_ALGORITHM_RSA = "RSA"
+        const val JCA_KEY_ALGORITHM_EC = "EC"
+        const val ZERO_BYTE: Byte = 0
+    }
+}
+
+private class ZeroizingMessageBuffer(
+    private val maximumLength: Int,
+) {
+    private var bytes = ByteArray(INITIAL_CAPACITY)
+    private var length = 0
+
+    fun append(value: Byte) {
+        ensureCapacity(length + Byte.SIZE_BYTES)
+        bytes[length] = value
+        length += Byte.SIZE_BYTES
+    }
+
+    fun append(
+        source: ByteArray,
+        offset: Int,
+        count: Int,
+    ) {
+        if (offset < 0 || count < 0 || offset > source.size || count > source.size - offset) {
+            throw IndexOutOfBoundsException("message range is outside the source")
+        }
+        ensureCapacity(length + count)
+        source.copyInto(
+            destination = bytes,
+            destinationOffset = length,
+            startIndex = offset,
+            endIndex = offset + count,
+        )
+        length += count
+    }
+
+    fun take(): ByteArray =
+        bytes.copyOf(length).also {
+            clear()
+        }
+
+    fun clear() {
+        bytes.fill(ZERO_BYTE)
+        length = 0
+    }
+
+    private fun ensureCapacity(requiredLength: Int) {
+        require(requiredLength <= maximumLength) {
+            "message exceeds its maximum length"
+        }
+        if (requiredLength <= bytes.size) {
+            return
+        }
+        var capacity = bytes.size
+        while (capacity < requiredLength) {
+            capacity = (capacity * CAPACITY_GROWTH_FACTOR).coerceAtMost(maximumLength)
+        }
+        val replacement = bytes.copyOf(capacity)
+        bytes.fill(ZERO_BYTE)
+        bytes = replacement
+    }
+
+    private companion object {
+        const val INITIAL_CAPACITY = 256
+        const val CAPACITY_GROWTH_FACTOR = 2
+        const val ZERO_BYTE: Byte = 0
+    }
+}

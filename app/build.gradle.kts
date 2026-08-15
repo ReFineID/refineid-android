@@ -1,0 +1,444 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.StringReader
+import java.nio.charset.StandardCharsets
+import java.time.LocalDate
+import java.util.Properties
+import java.util.zip.ZipFile
+
+val rustDebugJniLibs = layout.buildDirectory.dir("rustJniLibs/debug")
+val rustReleaseJniLibs = layout.buildDirectory.dir("rustJniLibs/release")
+val minimumAndroidApi = 33
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+}
+
+val versionPropertiesFile = rootProject.layout.projectDirectory.file("version.properties")
+val versionProperties =
+    Properties().apply {
+        load(
+            StringReader(
+                providers.fileContents(versionPropertiesFile).asText.get(),
+            ),
+        )
+    }
+val refineIdVersionName =
+    requireNotNull(versionProperties.getProperty("versionName")) {
+        "version.properties is missing versionName"
+    }.trim()
+val calendarVersionPattern =
+    Regex("""([0-9]{2})\.([1-9]|1[0-2])\.([1-9]|[12][0-9]|3[01])""")
+val calendarVersionMatch =
+    requireNotNull(calendarVersionPattern.matchEntire(refineIdVersionName)) {
+        "versionName must use YY.M.D without zero padding"
+    }
+val versionYear = calendarVersionMatch.groupValues[1].toInt()
+val versionMonth = calendarVersionMatch.groupValues[2].toInt()
+val versionDay = calendarVersionMatch.groupValues[3].toInt()
+val calendarVersionDate = LocalDate.of(2000 + versionYear, versionMonth, versionDay)
+val refineIdBuildNumber =
+    requireNotNull(versionProperties.getProperty("buildNumber")) {
+        "version.properties is missing buildNumber"
+    }.trim().toIntOrNull()
+        ?: error("buildNumber must be an integer")
+
+require(refineIdBuildNumber in 0..235 && refineIdBuildNumber % 10 in 0..5) {
+    "buildNumber must be a UTC ten-minute bucket (H * 10 + M / 10)"
+}
+
+val refineIdVersionCode =
+    versionYear * 10_000_000 +
+        calendarVersionDate.monthValue * 100_000 +
+        calendarVersionDate.dayOfMonth * 1_000 +
+        refineIdBuildNumber
+
+require(refineIdVersionCode in 1..2_100_000_000) {
+    "derived versionCode is outside the Google Play range"
+}
+
+android {
+    namespace = "fi.refineid.android"
+    compileSdk = 37
+    ndkVersion = "28.2.13676358"
+
+    defaultConfig {
+        applicationId = "fi.refineid.android"
+        minSdk = minimumAndroidApi
+        targetSdk = 37
+        versionCode = refineIdVersionCode
+        versionName = refineIdVersionName
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += setOf("arm64-v8a", "x86_64")
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        compose = true
+    }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+
+    lint {
+        abortOnError = true
+        checkReleaseBuilds = true
+        warningsAsErrors = true
+        disable +=
+            setOf(
+                "AndroidGradlePluginVersion",
+                "GradleDependency",
+                "NewerVersionAvailable",
+            )
+    }
+
+    sourceSets {
+        getByName("debug").jniLibs.directories.add(
+            rustDebugJniLibs.get().asFile.absolutePath,
+        )
+        getByName("release").jniLibs.directories.add(
+            rustReleaseJniLibs.get().asFile.absolutePath,
+        )
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+        allWarningsAsErrors.set(true)
+    }
+}
+
+dependencies {
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+
+    testImplementation(libs.junit)
+
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.uiautomator)
+    androidTestImplementation(libs.junit)
+
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+val rustCrateDirectory =
+    rootProject.layout.projectDirectory.dir("native/refineid-android-core")
+val androidNdkDirectory = androidComponents.sdkComponents.ndkDirectory
+
+val buildRustDebug =
+    tasks.register<Exec>("buildRustDebug") {
+        group = "build"
+        description = "Build the pinned ReFineID Rust bridge for debug ABIs."
+        workingDir(rustCrateDirectory)
+        inputs.file(rustCrateDirectory.file("Cargo.toml"))
+        inputs.file(rustCrateDirectory.file("Cargo.lock"))
+        inputs.dir(rustCrateDirectory.dir("src"))
+        outputs.dir(rustDebugJniLibs)
+        environment(
+            "ANDROID_NDK_HOME",
+            androidNdkDirectory.get().asFile.absolutePath,
+        )
+        commandLine(
+            "cargo",
+            "ndk",
+            "-t",
+            "arm64-v8a",
+            "-t",
+            "x86_64",
+            "-P",
+            minimumAndroidApi,
+            "-o",
+            rustDebugJniLibs.get().asFile.absolutePath,
+            "build",
+            "--locked",
+        )
+    }
+
+val buildRustRelease =
+    tasks.register<Exec>("buildRustRelease") {
+        group = "build"
+        description = "Build the pinned ReFineID Rust bridge for release ABIs."
+        workingDir(rustCrateDirectory)
+        inputs.file(rustCrateDirectory.file("Cargo.toml"))
+        inputs.file(rustCrateDirectory.file("Cargo.lock"))
+        inputs.dir(rustCrateDirectory.dir("src"))
+        outputs.dir(rustReleaseJniLibs)
+        environment(
+            "ANDROID_NDK_HOME",
+            androidNdkDirectory.get().asFile.absolutePath,
+        )
+        commandLine(
+            "cargo",
+            "ndk",
+            "-t",
+            "arm64-v8a",
+            "-t",
+            "x86_64",
+            "-P",
+            minimumAndroidApi,
+            "-o",
+            rustReleaseJniLibs.get().asFile.absolutePath,
+            "build",
+            "--release",
+            "--locked",
+        )
+    }
+
+tasks.configureEach {
+    when (name) {
+        "mergeDebugJniLibFolders" -> dependsOn(buildRustDebug)
+        "mergeReleaseJniLibFolders" -> dependsOn(buildRustRelease)
+    }
+}
+
+val releaseApk =
+    layout.buildDirectory.file("outputs/apk/release/app-release-unsigned.apk")
+val verifyReleaseNoLogging =
+    tasks.register("verifyReleaseNoLogging") {
+        group = "verification"
+        description = "Reject release APKs that retain logging code or trace literals."
+        dependsOn("assembleRelease")
+        inputs.file(releaseApk)
+
+        doLast {
+            val dexHeaderMinimumSize = 0x70
+            val dexStringIdsSizeOffset = 0x38
+            val dexStringIdsOffsetOffset = 0x3C
+            val dexTypeIdsSizeOffset = 0x40
+            val dexTypeIdsOffsetOffset = 0x44
+            val dexMethodIdsSizeOffset = 0x58
+            val dexMethodIdsOffsetOffset = 0x5C
+            val dexMethodIdSize = 8
+            val dexMethodClassIndexOffset = 0
+            val dexMethodNameIndexOffset = 4
+            val dexLeb128PayloadBits = 7
+            val dexLeb128ContinuationMask = 1 shl dexLeb128PayloadBits
+            val dexUnsignedLeb128MaximumBytes =
+                (Int.SIZE_BITS + dexLeb128PayloadBits - 1) / dexLeb128PayloadBits
+            val dexStringTerminator: Byte = 0
+
+            fun ByteArray.readDexLittleEndian(
+                offset: Int,
+                byteCount: Int,
+            ): Int {
+                check(offset >= 0 && offset + byteCount <= size) {
+                    "DEX integer read is outside the file"
+                }
+                return (0 until byteCount).fold(0) { decoded, byteIndex ->
+                    decoded or
+                        (this[offset + byteIndex].toUByte().toInt() shl
+                            (byteIndex * Byte.SIZE_BITS))
+                }
+            }
+
+            fun ByteArray.readDexUnsignedShort(offset: Int): Int {
+                return readDexLittleEndian(offset, Short.SIZE_BYTES)
+            }
+
+            fun ByteArray.readDexInt(offset: Int): Int {
+                return readDexLittleEndian(offset, Int.SIZE_BYTES)
+            }
+
+            fun ByteArray.skipDexUnsignedLeb128(offset: Int): Int {
+                var cursor = offset
+                repeat(dexUnsignedLeb128MaximumBytes) {
+                    check(cursor in indices) {
+                        "DEX ULEB128 is truncated"
+                    }
+                    val value = this[cursor].toUByte().toInt()
+                    cursor += Byte.SIZE_BYTES
+                    if (value and dexLeb128ContinuationMask == 0) {
+                        return cursor
+                    }
+                }
+                error("DEX ULEB128 exceeds its maximum encoded length")
+            }
+
+            fun ByteArray.readDexString(
+                stringIdsOffset: Int,
+                stringIdsSize: Int,
+                index: Int,
+            ): String {
+                check(index in 0 until stringIdsSize) {
+                    "DEX string index is outside the string table"
+                }
+                val dataOffset = readDexInt(stringIdsOffset + index * Int.SIZE_BYTES)
+                val stringStart = skipDexUnsignedLeb128(dataOffset)
+                var stringEnd = stringStart
+                while (true) {
+                    check(stringEnd in indices) {
+                        "DEX string is unterminated"
+                    }
+                    if (this[stringEnd] == dexStringTerminator) {
+                        break
+                    }
+                    stringEnd += 1
+                }
+                return String(
+                    this,
+                    stringStart,
+                    stringEnd - stringStart,
+                    StandardCharsets.UTF_8,
+                )
+            }
+
+            fun ByteArray.forEachDexMethodReference(action: (String, String) -> Unit) {
+                check(
+                    size >= dexHeaderMinimumSize &&
+                        copyOfRange(0, 4).contentEquals("dex\n".toByteArray()),
+                ) {
+                    "release APK contains a malformed DEX file"
+                }
+                val stringIdsSize = readDexInt(dexStringIdsSizeOffset)
+                val stringIdsOffset = readDexInt(dexStringIdsOffsetOffset)
+                val typeIdsSize = readDexInt(dexTypeIdsSizeOffset)
+                val typeIdsOffset = readDexInt(dexTypeIdsOffsetOffset)
+                val methodIdsSize = readDexInt(dexMethodIdsSizeOffset)
+                val methodIdsOffset = readDexInt(dexMethodIdsOffsetOffset)
+                check(stringIdsSize >= 0 && typeIdsSize >= 0 && methodIdsSize >= 0) {
+                    "release APK contains negative DEX table sizes"
+                }
+
+                repeat(methodIdsSize) { methodIndex ->
+                    val methodOffset = methodIdsOffset + methodIndex * dexMethodIdSize
+                    val classIndex =
+                        readDexUnsignedShort(methodOffset + dexMethodClassIndexOffset)
+                    check(classIndex in 0 until typeIdsSize) {
+                        "DEX method class index is outside the type table"
+                    }
+                    val descriptorIndex =
+                        readDexInt(typeIdsOffset + classIndex * Int.SIZE_BYTES)
+                    val nameIndex = readDexInt(methodOffset + dexMethodNameIndexOffset)
+                    action(
+                        readDexString(stringIdsOffset, stringIdsSize, descriptorIndex),
+                        readDexString(stringIdsOffset, stringIdsSize, nameIndex),
+                    )
+                }
+            }
+
+            val forbiddenLiterals =
+                listOf(
+                    "app:activity",
+                    "native:",
+                    "usb:",
+                    "ccid:",
+                    "card:public",
+                    "card:credential",
+                    "authentication:",
+                    "Lfi/refineid/android/diagnostics/AppTrace;",
+                )
+            val forbiddenMethods: Map<String, Set<String>?> =
+                mapOf(
+                    "Landroid/util/Log;" to null,
+                    "Ljava/io/PrintStream;" to
+                        setOf(
+                            "print",
+                            "println",
+                            "printf",
+                            "format",
+                            "append",
+                            "write",
+                            "flush",
+                        ),
+                    "Ljava/util/logging/Logger;" to
+                        setOf(
+                            "log",
+                            "logp",
+                            "logrb",
+                            "severe",
+                            "warning",
+                            "info",
+                            "config",
+                            "fine",
+                            "finer",
+                            "finest",
+                            "entering",
+                            "exiting",
+                            "throwing",
+                        ),
+                    "Landroid/os/Trace;" to
+                        setOf(
+                            "beginSection",
+                            "endSection",
+                            "beginAsyncSection",
+                            "endAsyncSection",
+                            "setCounter",
+                            "traceBegin",
+                            "traceEnd",
+                            "asyncTraceBegin",
+                            "asyncTraceEnd",
+                            "traceCounter",
+                        ),
+                    "Landroidx/tracing/Trace;" to null,
+                    "Lkotlin/io/ConsoleKt;" to setOf("print", "println"),
+                    "Lorg/slf4j/Logger;" to null,
+                    "Ltimber/log/Timber;" to null,
+                )
+            ZipFile(inputs.files.singleFile).use { apk ->
+                val dexEntries =
+                    apk.entries().asSequence()
+                        .filter { entry ->
+                            entry.name.startsWith("classes") && entry.name.endsWith(".dex")
+                        }.toList()
+                check(dexEntries.isNotEmpty()) {
+                    "release APK contains no DEX files"
+                }
+                dexEntries.forEach { entry ->
+                    val dexBytes =
+                        apk.getInputStream(entry).use { input ->
+                            input.readBytes()
+                        }
+                    val dexText =
+                        dexBytes.toString(Charsets.ISO_8859_1)
+                    forbiddenLiterals.forEach { literal ->
+                        check(!dexText.contains(literal)) {
+                            "release APK retains forbidden logging material: " + literal
+                        }
+                    }
+                    dexBytes.forEachDexMethodReference { owner, method ->
+                        if (owner !in forbiddenMethods) {
+                            return@forEachDexMethodReference
+                        }
+                        val forbiddenNames = forbiddenMethods[owner]
+                        check(forbiddenNames != null && method !in forbiddenNames) {
+                            "release APK retains an output method: " + owner + method
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+tasks.named("check").configure {
+    dependsOn(verifyReleaseNoLogging)
+}
