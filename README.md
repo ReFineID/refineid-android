@@ -29,6 +29,8 @@ instrumented development harness, but it is not the product boundary.
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session
 - Card-backed JCA provider for Chromium's RSA and P-384 authentication schemes
+- Exact-digest signing boundary with mandatory local verification for platform
+  and Gecko-style adapters
 - Fingerprint-pinned FINEID intermediate set, present only in debug builds
 - Live diagnostic handshake verified through Chromium's holder-PIN request
 - No embedded browser, Internet permission, or logging in the release build
@@ -36,7 +38,9 @@ instrumented development harness, but it is not the product boundary.
 
 An ordinary APK cannot publish its process-local external key to every other
 browser process. System-browser support therefore remains privileged platform
-work; see `docs/architecture/0011-browser-authentication-boundary.md`.
+work; see `docs/architecture/0011-browser-authentication-boundary.md` and the
+concrete AOSP design in
+`docs/architecture/0012-platform-keychain-external-key.md`.
 
 Product UI is deliberately terse. Explanations and diagnostics belong in
 documentation or developer tooling.
