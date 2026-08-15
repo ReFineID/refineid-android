@@ -10,18 +10,19 @@ import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
 import fi.refineid.android.browser.BrowserCardService
-import fi.refineid.android.core.NativeCore
-import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
+import fi.refineid.android.core.AuthenticationSigningAlgorithm
+import fi.refineid.android.core.AuthenticationSigningInputMode
 import fi.refineid.android.core.NativeAuthenticationCertificate
+import fi.refineid.android.core.NativeCore
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidUsbSession
 import fi.refineid.android.usb.ccid.CcidUsbSessionOpener
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
@@ -324,6 +325,31 @@ internal class UsbReaderController(
         algorithm: AuthenticationSigningAlgorithm,
         pin1: Pin1Submission,
         message: ByteArray,
+    ): AuthenticationSignResult =
+        signAuthenticationInput(
+            algorithm = algorithm,
+            inputMode = AuthenticationSigningInputMode.MESSAGE,
+            pin1 = pin1,
+            input = message,
+        )
+
+    override fun signAuthenticationDigest(
+        algorithm: AuthenticationSigningAlgorithm,
+        pin1: Pin1Submission,
+        digest: ByteArray,
+    ): AuthenticationSignResult =
+        signAuthenticationInput(
+            algorithm = algorithm,
+            inputMode = AuthenticationSigningInputMode.PREHASHED,
+            pin1 = pin1,
+            input = digest,
+        )
+
+    private fun signAuthenticationInput(
+        algorithm: AuthenticationSigningAlgorithm,
+        inputMode: AuthenticationSigningInputMode,
+        pin1: Pin1Submission,
+        input: ByteArray,
     ): AuthenticationSignResult {
         if (
             Looper.myLooper() == Looper.getMainLooper() ||
@@ -341,11 +367,22 @@ internal class UsbReaderController(
                 val result =
                     try {
                         if (isStarted && generation == probeGeneration) {
-                            activeSession?.authenticateAndSign(
-                                algorithm = algorithm,
-                                pin1 = pin1,
-                                message = message,
-                            ) ?: run {
+                            activeSession?.let { session ->
+                                when (inputMode) {
+                                    AuthenticationSigningInputMode.MESSAGE ->
+                                        session.authenticateAndSign(
+                                            algorithm = algorithm,
+                                            pin1 = pin1,
+                                            message = input,
+                                        )
+                                    AuthenticationSigningInputMode.PREHASHED ->
+                                        session.authenticateAndSignPrehashed(
+                                            algorithm = algorithm,
+                                            pin1 = pin1,
+                                            digest = input,
+                                        )
+                                }
+                            } ?: run {
                                 pin1.close()
                                 AuthenticationSignResult.Failure(
                                     AuthenticationSignFailure.CARD_UNAVAILABLE,

@@ -9,6 +9,62 @@ import org.junit.Test
 
 class NativeAuthenticationSignReplyTest {
     @Test
+    fun mapsEveryMessageAndPrehashedRequestToItsStableWireCode() {
+        val expectedPrehashedRequests =
+            mapOf(
+                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256 to
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PKCS1_SHA256,
+                AuthenticationSigningAlgorithm.RSA_PSS_SHA256 to
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PSS_SHA256,
+                AuthenticationSigningAlgorithm.ECDSA_P384_SHA256 to
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_ECDSA_P384_SHA256,
+                AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 to
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_ECDSA_P384_SHA384,
+            )
+
+        for (algorithm in AuthenticationSigningAlgorithm.entries) {
+            assertEquals(
+                algorithm.wireValue,
+                algorithm.requestWireValue(AuthenticationSigningInputMode.MESSAGE),
+            )
+            assertEquals(
+                expectedPrehashedRequests.getValue(algorithm),
+                algorithm.requestWireValue(AuthenticationSigningInputMode.PREHASHED),
+            )
+        }
+    }
+
+    @Test
+    fun acceptsOnlyBoundedMessagesAndExactAlgorithmDigests() {
+        for (algorithm in AuthenticationSigningAlgorithm.entries) {
+            assertTrue(
+                algorithm.acceptsInputLength(
+                    AuthenticationSigningInputMode.MESSAGE,
+                    MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH,
+                ),
+            )
+            assertFalse(
+                algorithm.acceptsInputLength(
+                    AuthenticationSigningInputMode.MESSAGE,
+                    MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH + SINGLE_EXCESS_BYTE_COUNT,
+                ),
+            )
+            assertTrue(
+                algorithm.acceptsInputLength(
+                    AuthenticationSigningInputMode.PREHASHED,
+                    algorithm.digestLength,
+                ),
+            )
+            assertFalse(
+                algorithm.acceptsInputLength(
+                    AuthenticationSigningInputMode.PREHASHED,
+                    algorithm.digestLength - SINGLE_MISSING_BYTE_COUNT,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun decodesEveryFixedSuccessShapeAndClearsTheBridgeReply() {
         for (algorithm in AuthenticationSigningAlgorithm.entries) {
             val signature = ByteArray(algorithm.signatureLength) { SYNTHETIC_SIGNATURE_BYTE }
@@ -176,5 +232,7 @@ class NativeAuthenticationSignReplyTest {
         const val NON_DIGIT_PIN_TEXT = "123a"
         const val TOO_LONG_PIN_TEXT = "1234567890123"
         const val SYNTHETIC_SIGNATURE_BYTE: Byte = 0x5A
+        const val SINGLE_EXCESS_BYTE_COUNT = 1
+        const val SINGLE_MISSING_BYTE_COUNT = 1
     }
 }

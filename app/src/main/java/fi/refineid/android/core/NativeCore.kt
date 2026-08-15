@@ -245,35 +245,80 @@ internal object NativeCore {
         pin1: Pin1Submission,
         message: ByteArray,
         exchange: NativeBlockExchange,
+    ): NativeAuthenticationSignResult =
+        authenticateAndSignInput(
+            exchangeLevel = exchangeLevel,
+            algorithm = algorithm,
+            inputMode = AuthenticationSigningInputMode.MESSAGE,
+            pin1 = pin1,
+            input = message,
+            exchange = exchange,
+        )
+
+    fun authenticateAndSignPrehashed(
+        exchangeLevel: NativeCardExchangeLevel,
+        algorithm: AuthenticationSigningAlgorithm,
+        pin1: Pin1Submission,
+        digest: ByteArray,
+        exchange: NativeBlockExchange,
+    ): NativeAuthenticationSignResult =
+        authenticateAndSignInput(
+            exchangeLevel = exchangeLevel,
+            algorithm = algorithm,
+            inputMode = AuthenticationSigningInputMode.PREHASHED,
+            pin1 = pin1,
+            input = digest,
+            exchange = exchange,
+        )
+
+    private fun authenticateAndSignInput(
+        exchangeLevel: NativeCardExchangeLevel,
+        algorithm: AuthenticationSigningAlgorithm,
+        inputMode: AuthenticationSigningInputMode,
+        pin1: Pin1Submission,
+        input: ByteArray,
+        exchange: NativeBlockExchange,
     ): NativeAuthenticationSignResult {
-        val startedAt = AppTrace.nativeAuthenticationSignStarted(algorithm)
+        val startedAt =
+            AppTrace.nativeAuthenticationSignStarted(
+                algorithm = algorithm,
+                inputMode = inputMode,
+                inputLength = input.size,
+            )
         val result =
-            try {
-                pin1.consume { pinBytes ->
-                    if (!isLoaded) {
-                        NativeAuthenticationSignResult.Failure(
-                            NativeAuthenticationSignFailure.BRIDGE_ERROR,
-                        )
-                    } else {
-                        NativeAuthenticationSignReply.decode(
-                            authenticateAndSignNative(
-                                exchangeLevel = exchangeLevel.wireValue,
-                                algorithm = algorithm.wireValue,
-                                pin = pinBytes,
-                                message = message,
-                                callback = exchange,
-                            ),
-                        )
+            if (!algorithm.acceptsInputLength(inputMode, input.size)) {
+                pin1.close()
+                NativeAuthenticationSignResult.Failure(
+                    NativeAuthenticationSignFailure.BRIDGE_ERROR,
+                )
+            } else {
+                try {
+                    pin1.consume { pinBytes ->
+                        if (!isLoaded) {
+                            NativeAuthenticationSignResult.Failure(
+                                NativeAuthenticationSignFailure.BRIDGE_ERROR,
+                            )
+                        } else {
+                            NativeAuthenticationSignReply.decode(
+                                authenticateAndSignNative(
+                                    exchangeLevel = exchangeLevel.wireValue,
+                                    request = algorithm.requestWireValue(inputMode),
+                                    pin = pinBytes,
+                                    input = input,
+                                    callback = exchange,
+                                ),
+                            )
+                        }
                     }
+                } catch (_: LinkageError) {
+                    NativeAuthenticationSignResult.Failure(
+                        NativeAuthenticationSignFailure.BRIDGE_ERROR,
+                    )
+                } catch (_: RuntimeException) {
+                    NativeAuthenticationSignResult.Failure(
+                        NativeAuthenticationSignFailure.BRIDGE_ERROR,
+                    )
                 }
-            } catch (_: LinkageError) {
-                NativeAuthenticationSignResult.Failure(
-                    NativeAuthenticationSignFailure.BRIDGE_ERROR,
-                )
-            } catch (_: RuntimeException) {
-                NativeAuthenticationSignResult.Failure(
-                    NativeAuthenticationSignFailure.BRIDGE_ERROR,
-                )
             }
         AppTrace.nativeAuthenticationSignCompleted(
             startedAt = startedAt,
@@ -306,9 +351,9 @@ internal object NativeCore {
     @JvmStatic
     private external fun authenticateAndSignNative(
         exchangeLevel: Int,
-        algorithm: Int,
+        request: Int,
         pin: ByteArray,
-        message: ByteArray,
+        input: ByteArray,
         callback: Any,
     ): ByteArray
 }

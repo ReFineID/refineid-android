@@ -222,6 +222,17 @@ internal class MainScreenTest {
                         AuthenticationSignFailure.CARD_UNAVAILABLE,
                     )
                 }
+
+                override fun signAuthenticationDigest(
+                    algorithm: AuthenticationSigningAlgorithm,
+                    pin1: Pin1Submission,
+                    digest: ByteArray,
+                ): AuthenticationSignResult {
+                    pin1.close()
+                    return AuthenticationSignResult.Failure(
+                        AuthenticationSignFailure.CARD_UNAVAILABLE,
+                    )
+                }
             }
     }
 }

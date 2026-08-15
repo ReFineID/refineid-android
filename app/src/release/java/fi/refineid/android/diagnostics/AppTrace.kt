@@ -1,24 +1,25 @@
 package fi.refineid.android.diagnostics
 
-import fi.refineid.android.usb.ccid.CcidBlockFailureKind
-import fi.refineid.android.usb.ccid.CcidCardStatus
+import fi.refineid.android.browser.BrowserClientCertificateOutcome
+import fi.refineid.android.browser.BrowserSignatureStatus
 import fi.refineid.android.core.AtrValidation
-import fi.refineid.android.core.NativeAuthenticationCertificateReadResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
+import fi.refineid.android.core.AuthenticationSigningInputMode
+import fi.refineid.android.core.NativeAuthenticationCertificateReadResult
 import fi.refineid.android.core.NativeAuthenticationSignResult
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativePin1PreflightResult
-import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.AuthenticationStatus
+import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
+import fi.refineid.android.usb.ccid.CcidBlockFailureKind
+import fi.refineid.android.usb.ccid.CcidCardStatus
 import fi.refineid.android.usb.ccid.CcidDescriptorErrorKind
 import fi.refineid.android.usb.ccid.CcidExchangeLevel
 import fi.refineid.android.usb.ccid.CcidExchangeFailureKind
-import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidProtocolErrorKind
-import fi.refineid.android.browser.BrowserClientCertificateOutcome
-import fi.refineid.android.browser.BrowserSignatureStatus
+import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 
 /** Release sink: deliberately empty. */
 internal object AppTrace {
@@ -53,14 +54,21 @@ internal object AppTrace {
         result: NativePin1PreflightResult,
     ) = Unit
 
-    fun nativeAuthenticationSignStarted(algorithm: AuthenticationSigningAlgorithm): Long = 0L
+    fun nativeAuthenticationSignStarted(
+        algorithm: AuthenticationSigningAlgorithm,
+        inputMode: AuthenticationSigningInputMode,
+        inputLength: Int,
+    ): Long = 0L
 
     fun nativeAuthenticationSignCompleted(
         startedAt: Long,
         result: NativeAuthenticationSignResult,
     ) = Unit
 
-    fun authenticationSignatureVerificationCompleted(isVerified: Boolean) = Unit
+    fun authenticationSignatureVerificationCompleted(
+        inputMode: AuthenticationSigningInputMode,
+        isVerified: Boolean,
+    ) = Unit
 
     fun authenticationRequestIgnored() = Unit
 

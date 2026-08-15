@@ -190,6 +190,15 @@ class BrowserPinCoordinatorTest {
                     ),
                 )
         }
+
+        override fun signAuthenticationDigest(
+            algorithm: AuthenticationSigningAlgorithm,
+            pin1: Pin1Submission,
+            digest: ByteArray,
+        ): AuthenticationSignResult {
+            pin1.close()
+            throw AssertionError("message test unexpectedly requested a digest signature")
+        }
     }
 
     private companion object {

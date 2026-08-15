@@ -1,25 +1,26 @@
 package fi.refineid.android.diagnostics
 
 import android.util.Log
-import fi.refineid.android.usb.ccid.CcidBlockFailureKind
-import fi.refineid.android.usb.ccid.CcidCardStatus
+import fi.refineid.android.browser.BrowserClientCertificateOutcome
+import fi.refineid.android.browser.BrowserSignatureStatus
 import fi.refineid.android.core.AtrValidation
-import fi.refineid.android.core.NativeAuthenticationCertificateReadResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
+import fi.refineid.android.core.AuthenticationSigningInputMode
+import fi.refineid.android.core.NativeAuthenticationCertificateReadResult
 import fi.refineid.android.core.NativeAuthenticationSignResult
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativePin1PreflightResult
-import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.AuthenticationStatus
+import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
+import fi.refineid.android.usb.ccid.CcidBlockFailureKind
+import fi.refineid.android.usb.ccid.CcidCardStatus
 import fi.refineid.android.usb.ccid.CcidDescriptorErrorKind
 import fi.refineid.android.usb.ccid.CcidExchangeLevel
 import fi.refineid.android.usb.ccid.CcidExchangeFailureKind
-import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidProtocolErrorKind
-import fi.refineid.android.browser.BrowserClientCertificateOutcome
-import fi.refineid.android.browser.BrowserSignatureStatus
+import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 
 /** Debug-only application trace. Arguments must already be sanitized. */
 internal object AppTrace {
@@ -104,9 +105,17 @@ internal object AppTrace {
         )
     }
 
-    fun nativeAuthenticationSignStarted(algorithm: AuthenticationSigningAlgorithm): Long =
+    fun nativeAuthenticationSignStarted(
+        algorithm: AuthenticationSigningAlgorithm,
+        inputMode: AuthenticationSigningInputMode,
+        inputLength: Int,
+    ): Long =
         System.nanoTime().also {
-            debug("native:authentication-sign start algorithm=" + algorithm)
+            debug(
+                "native:authentication-sign start algorithm=" + algorithm +
+                    " input-mode=" + inputMode +
+                    " input-length=" + inputLength,
+            )
         }
 
     fun nativeAuthenticationSignCompleted(
@@ -126,8 +135,14 @@ internal object AppTrace {
         )
     }
 
-    fun authenticationSignatureVerificationCompleted(isVerified: Boolean) {
-        debug("authentication:local-verification verified=" + isVerified)
+    fun authenticationSignatureVerificationCompleted(
+        inputMode: AuthenticationSigningInputMode,
+        isVerified: Boolean,
+    ) {
+        debug(
+            "authentication:local-verification input-mode=" + inputMode +
+                " verified=" + isVerified,
+        )
     }
 
     fun authenticationRequestIgnored() {

@@ -9,10 +9,11 @@ import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSignatureVerifier
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
-import fi.refineid.android.core.NativeAuthenticationCertificateReadFailure
+import fi.refineid.android.core.AuthenticationSigningInputMode
 import fi.refineid.android.core.NativeAuthenticationCertificate
-import fi.refineid.android.core.NativeAuthenticationKeyProfile
+import fi.refineid.android.core.NativeAuthenticationCertificateReadFailure
 import fi.refineid.android.core.NativeAuthenticationCertificateReadResult
+import fi.refineid.android.core.NativeAuthenticationKeyProfile
 import fi.refineid.android.core.NativeAuthenticationSignFailure
 import fi.refineid.android.core.NativeAuthenticationSignResult
 import fi.refineid.android.core.NativeCardExchangeLevel
@@ -120,6 +121,31 @@ internal class CcidUsbSession(
         algorithm: AuthenticationSigningAlgorithm,
         pin1: Pin1Submission,
         message: ByteArray,
+    ): AuthenticationSignResult =
+        authenticateAndSignInput(
+            algorithm = algorithm,
+            inputMode = AuthenticationSigningInputMode.MESSAGE,
+            pin1 = pin1,
+            input = message,
+        )
+
+    fun authenticateAndSignPrehashed(
+        algorithm: AuthenticationSigningAlgorithm,
+        pin1: Pin1Submission,
+        digest: ByteArray,
+    ): AuthenticationSignResult =
+        authenticateAndSignInput(
+            algorithm = algorithm,
+            inputMode = AuthenticationSigningInputMode.PREHASHED,
+            pin1 = pin1,
+            input = digest,
+        )
+
+    private fun authenticateAndSignInput(
+        algorithm: AuthenticationSigningAlgorithm,
+        inputMode: AuthenticationSigningInputMode,
+        pin1: Pin1Submission,
+        input: ByteArray,
     ): AuthenticationSignResult {
         checkOwnerThread()
         check(!isClosed) {
@@ -135,22 +161,45 @@ internal class CcidUsbSession(
 
         return when (
             val result =
-                NativeCore.authenticateAndSign(
-                    exchangeLevel = exchangeLevel,
-                    algorithm = algorithm,
-                    pin1 = pin1,
-                    message = message,
-                    exchange = nativeExchange,
-                )
+                when (inputMode) {
+                    AuthenticationSigningInputMode.MESSAGE ->
+                        NativeCore.authenticateAndSign(
+                            exchangeLevel = exchangeLevel,
+                            algorithm = algorithm,
+                            pin1 = pin1,
+                            message = input,
+                            exchange = nativeExchange,
+                        )
+                    AuthenticationSigningInputMode.PREHASHED ->
+                        NativeCore.authenticateAndSignPrehashed(
+                            exchangeLevel = exchangeLevel,
+                            algorithm = algorithm,
+                            pin1 = pin1,
+                            digest = input,
+                            exchange = nativeExchange,
+                        )
+                }
         ) {
             is NativeAuthenticationSignResult.Success -> {
                 val isVerified =
-                    AuthenticationSignatureVerifier.verify(
-                        certificate = certificate,
-                        message = message,
-                        signature = result.signature,
-                    )
-                AppTrace.authenticationSignatureVerificationCompleted(isVerified)
+                    when (inputMode) {
+                        AuthenticationSigningInputMode.MESSAGE ->
+                            AuthenticationSignatureVerifier.verify(
+                                certificate = certificate,
+                                message = input,
+                                signature = result.signature,
+                            )
+                        AuthenticationSigningInputMode.PREHASHED ->
+                            AuthenticationSignatureVerifier.verifyPrehashed(
+                                certificate = certificate,
+                                digest = input,
+                                signature = result.signature,
+                            )
+                    }
+                AppTrace.authenticationSignatureVerificationCompleted(
+                    inputMode = inputMode,
+                    isVerified = isVerified,
+                )
                 if (isVerified) {
                     AuthenticationSignResult.Success(result.signature)
                 } else {

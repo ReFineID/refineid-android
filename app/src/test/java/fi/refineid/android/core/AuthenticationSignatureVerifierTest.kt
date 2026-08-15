@@ -2,6 +2,7 @@ package fi.refineid.android.core
 
 import java.security.KeyPair
 import java.security.KeyPairGenerator
+import java.security.MessageDigest
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.MGF1ParameterSpec
@@ -24,6 +25,8 @@ class AuthenticationSignatureVerifierTest {
             AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
         )) {
             val signature = sign(keyPair, algorithm, MESSAGE)
+            val digest = digest(algorithm, MESSAGE)
+            val otherDigest = digest(algorithm, OTHER_MESSAGE)
             assertTrue(
                 AuthenticationSignatureVerifier.verify(
                     publicKey = keyPair.public,
@@ -37,6 +40,22 @@ class AuthenticationSignatureVerifierTest {
                     publicKey = keyPair.public,
                     algorithm = algorithm,
                     message = OTHER_MESSAGE,
+                    signature = signature,
+                ),
+            )
+            assertTrue(
+                AuthenticationSignatureVerifier.verifyPrehashed(
+                    publicKey = keyPair.public,
+                    algorithm = algorithm,
+                    digest = digest,
+                    signature = signature,
+                ),
+            )
+            assertFalse(
+                AuthenticationSignatureVerifier.verifyPrehashed(
+                    publicKey = keyPair.public,
+                    algorithm = algorithm,
+                    digest = otherDigest,
                     signature = signature,
                 ),
             )
@@ -57,11 +76,29 @@ class AuthenticationSignatureVerifierTest {
         )) {
             val derSignature = sign(keyPair, algorithm, MESSAGE)
             val rawSignature = derP384EcdsaToRaw(derSignature)
+            val digest = digest(algorithm, MESSAGE)
+            val otherDigest = digest(algorithm, OTHER_MESSAGE)
             assertTrue(
                 AuthenticationSignatureVerifier.verify(
                     publicKey = keyPair.public,
                     algorithm = algorithm,
                     message = MESSAGE,
+                    signature = rawSignature,
+                ),
+            )
+            assertTrue(
+                AuthenticationSignatureVerifier.verifyPrehashed(
+                    publicKey = keyPair.public,
+                    algorithm = algorithm,
+                    digest = digest,
+                    signature = rawSignature,
+                ),
+            )
+            assertFalse(
+                AuthenticationSignatureVerifier.verifyPrehashed(
+                    publicKey = keyPair.public,
+                    algorithm = algorithm,
+                    digest = otherDigest,
                     signature = rawSignature,
                 ),
             )
@@ -102,6 +139,21 @@ class AuthenticationSignatureVerifierTest {
         signer.update(message)
         return signer.sign()
     }
+
+    private fun digest(
+        algorithm: AuthenticationSigningAlgorithm,
+        message: ByteArray,
+    ): ByteArray =
+        MessageDigest
+            .getInstance(
+                when (algorithm) {
+                    AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
+                    AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
+                    AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
+                    -> "SHA-256"
+                    AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> "SHA-384"
+                },
+            ).digest(message)
 
     private fun derP384EcdsaToRaw(der: ByteArray): ByteArray {
         var offset = DER_INITIAL_OFFSET
@@ -205,8 +257,6 @@ class AuthenticationSignatureVerifierTest {
                 PSSParameterSpec.DEFAULT.trailerField,
             )
 
-        const val SHA256_DIGEST_LENGTH_BITS = 256
-        const val SHA256_DIGEST_LENGTH_BYTES = SHA256_DIGEST_LENGTH_BITS / Byte.SIZE_BITS
         const val P384_COORDINATE_LENGTH = P384_COORDINATE_LENGTH_BITS / Byte.SIZE_BITS
         const val ECDSA_COORDINATE_COUNT = 2
         const val P384_RAW_SIGNATURE_LENGTH =

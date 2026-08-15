@@ -5,6 +5,10 @@ internal const val PIN1_MAXIMUM_LENGTH = 12
 internal const val MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH = 1_024 * 1_024
 internal const val RSA_3072_KEY_LENGTH_BITS = 3_072
 internal const val P384_COORDINATE_LENGTH_BITS = 384
+internal const val SHA256_DIGEST_LENGTH_BITS = 256
+internal const val SHA384_DIGEST_LENGTH_BITS = 384
+internal const val SHA256_DIGEST_LENGTH_BYTES = SHA256_DIGEST_LENGTH_BITS / Byte.SIZE_BITS
+internal const val SHA384_DIGEST_LENGTH_BYTES = SHA384_DIGEST_LENGTH_BITS / Byte.SIZE_BITS
 private const val RSA_3072_SIGNATURE_LENGTH_BYTES = RSA_3072_KEY_LENGTH_BITS / Byte.SIZE_BITS
 private const val P384_RAW_SIGNATURE_LENGTH_BYTES =
     2 * P384_COORDINATE_LENGTH_BITS / Byte.SIZE_BITS
@@ -14,6 +18,10 @@ internal object NativeAuthenticationSignWire {
     const val ALGORITHM_RSA_PSS_SHA256 = 1
     const val ALGORITHM_ECDSA_P384_SHA256 = 2
     const val ALGORITHM_ECDSA_P384_SHA384 = 3
+    const val REQUEST_PREHASHED_RSA_PKCS1_SHA256 = 4
+    const val REQUEST_PREHASHED_RSA_PSS_SHA256 = 5
+    const val REQUEST_PREHASHED_ECDSA_P384_SHA256 = 6
+    const val REQUEST_PREHASHED_ECDSA_P384_SHA384 = 7
 
     const val BRIDGE_ERROR_TAG = 0
     const val SUCCESS_TAG = 1
@@ -32,32 +40,70 @@ internal object NativeAuthenticationSignWire {
     const val SIGNATURE_REPLY_HEADER_LENGTH = 2
 }
 
+internal enum class AuthenticationSigningInputMode {
+    MESSAGE,
+    PREHASHED,
+}
+
 internal enum class AuthenticationSigningAlgorithm(
     val wireValue: Int,
     val keyProfile: NativeAuthenticationKeyProfile,
     val signatureLength: Int,
+    val digestLength: Int,
 ) {
     RSA_PKCS1_SHA256(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_RSA_PKCS1_SHA256,
         keyProfile = NativeAuthenticationKeyProfile.RSA_3072,
         signatureLength = RSA_3072_SIGNATURE_LENGTH_BYTES,
+        digestLength = SHA256_DIGEST_LENGTH_BYTES,
     ),
     RSA_PSS_SHA256(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_RSA_PSS_SHA256,
         keyProfile = NativeAuthenticationKeyProfile.RSA_3072,
         signatureLength = RSA_3072_SIGNATURE_LENGTH_BYTES,
+        digestLength = SHA256_DIGEST_LENGTH_BYTES,
     ),
     ECDSA_P384_SHA256(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_ECDSA_P384_SHA256,
         keyProfile = NativeAuthenticationKeyProfile.ECDSA_P384,
         signatureLength = P384_RAW_SIGNATURE_LENGTH_BYTES,
+        digestLength = SHA256_DIGEST_LENGTH_BYTES,
     ),
     ECDSA_P384_SHA384(
         wireValue = NativeAuthenticationSignWire.ALGORITHM_ECDSA_P384_SHA384,
         keyProfile = NativeAuthenticationKeyProfile.ECDSA_P384,
         signatureLength = P384_RAW_SIGNATURE_LENGTH_BYTES,
+        digestLength = SHA384_DIGEST_LENGTH_BYTES,
     ),
 }
+
+internal fun AuthenticationSigningAlgorithm.requestWireValue(
+    inputMode: AuthenticationSigningInputMode,
+): Int =
+    when (inputMode) {
+        AuthenticationSigningInputMode.MESSAGE -> wireValue
+        AuthenticationSigningInputMode.PREHASHED ->
+            when (this) {
+                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256 ->
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PKCS1_SHA256
+                AuthenticationSigningAlgorithm.RSA_PSS_SHA256 ->
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PSS_SHA256
+                AuthenticationSigningAlgorithm.ECDSA_P384_SHA256 ->
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_ECDSA_P384_SHA256
+                AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 ->
+                    NativeAuthenticationSignWire.REQUEST_PREHASHED_ECDSA_P384_SHA384
+            }
+    }
+
+internal fun AuthenticationSigningAlgorithm.acceptsInputLength(
+    inputMode: AuthenticationSigningInputMode,
+    inputLength: Int,
+): Boolean =
+    when (inputMode) {
+        AuthenticationSigningInputMode.MESSAGE ->
+            inputLength in 0..MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH
+        AuthenticationSigningInputMode.PREHASHED -> inputLength == digestLength
+    }
 
 /** One manually entered PIN1 submission, transferred to at most one native call. */
 internal class Pin1Submission private constructor(
