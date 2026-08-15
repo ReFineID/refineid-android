@@ -17,6 +17,8 @@ import fi.refineid.android.usb.ccid.CcidExchangeLevel
 import fi.refineid.android.usb.ccid.CcidExchangeFailureKind
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidProtocolErrorKind
+import fi.refineid.android.browser.BrowserClientCertificateOutcome
+import fi.refineid.android.browser.BrowserSignatureStatus
 
 /** Release sink: deliberately empty. */
 internal object AppTrace {
@@ -65,6 +67,29 @@ internal object AppTrace {
     fun authenticationRequestStarted() = Unit
 
     fun authenticationRequestCompleted(status: AuthenticationStatus) = Unit
+
+    fun browserOpened() = Unit
+
+    fun browserClosed() = Unit
+
+    fun browserInitialized(
+        providerReady: Boolean,
+        issuerCount: Int,
+    ) = Unit
+
+    fun browserNavigationBlocked() = Unit
+
+    fun browserTlsError() = Unit
+
+    fun browserClientCertificateRequested(
+        originAllowed: Boolean,
+        keyTypeCount: Int,
+        issuerCount: Int,
+    ) = Unit
+
+    fun browserClientCertificateCompleted(outcome: BrowserClientCertificateOutcome) = Unit
+
+    fun browserSignatureStatus(status: BrowserSignatureStatus) = Unit
 
     fun usbControllerStartIgnored() = Unit
 

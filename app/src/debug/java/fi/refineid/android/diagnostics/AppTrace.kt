@@ -18,6 +18,8 @@ import fi.refineid.android.usb.ccid.CcidExchangeLevel
 import fi.refineid.android.usb.ccid.CcidExchangeFailureKind
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidProtocolErrorKind
+import fi.refineid.android.browser.BrowserClientCertificateOutcome
+import fi.refineid.android.browser.BrowserSignatureStatus
 
 /** Debug-only application trace. Arguments must already be sanitized. */
 internal object AppTrace {
@@ -138,6 +140,52 @@ internal object AppTrace {
 
     fun authenticationRequestCompleted(status: AuthenticationStatus) {
         debug("authentication:request-completed status=" + status)
+    }
+
+    fun browserOpened() {
+        debug("browser:opened")
+    }
+
+    fun browserClosed() {
+        debug("browser:closed")
+    }
+
+    fun browserInitialized(
+        providerReady: Boolean,
+        issuerCount: Int,
+    ) {
+        debug(
+            "browser:initialized provider-ready=" + providerReady +
+                " issuer-count=" + issuerCount,
+        )
+    }
+
+    fun browserNavigationBlocked() {
+        debug("browser:navigation-blocked")
+    }
+
+    fun browserTlsError() {
+        debug("browser:tls-error")
+    }
+
+    fun browserClientCertificateRequested(
+        originAllowed: Boolean,
+        keyTypeCount: Int,
+        issuerCount: Int,
+    ) {
+        debug(
+            "browser:client-certificate-request origin-allowed=" + originAllowed +
+                " key-type-count=" + keyTypeCount +
+                " issuer-count=" + issuerCount,
+        )
+    }
+
+    fun browserClientCertificateCompleted(outcome: BrowserClientCertificateOutcome) {
+        debug("browser:client-certificate-completed outcome=" + outcome)
+    }
+
+    fun browserSignatureStatus(status: BrowserSignatureStatus) {
+        debug("browser:signature status=" + status)
     }
 
     fun usbControllerStartIgnored() {

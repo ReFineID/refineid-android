@@ -9,6 +9,7 @@ import java.security.PrivateKey
 import java.security.Provider
 import java.security.PublicKey
 import java.security.SecureRandom
+import java.security.Security
 import java.security.SignatureException
 import java.security.SignatureSpi
 import java.security.spec.AlgorithmParameterSpec
@@ -63,6 +64,25 @@ internal class ReFineIdCardProvider : Provider(NAME, VERSION, DESCRIPTION) {
         private const val VERSION = 1.0
         private const val DESCRIPTION = "ReFineID external smart-card signatures"
     }
+}
+
+/** Installs the provider only when no different provider owns its reserved name. */
+internal object ReFineIdCardProviderRegistration {
+    @Synchronized
+    fun install(): Boolean {
+        val existing = Security.getProvider(ReFineIdCardProvider.NAME)
+        if (existing != null) {
+            return existing is ReFineIdCardProvider
+        }
+        val position =
+            Security.insertProviderAt(
+                ReFineIdCardProvider(),
+                FIRST_PROVIDER_POSITION,
+            )
+        return position == FIRST_PROVIDER_POSITION
+    }
+
+    private const val FIRST_PROVIDER_POSITION = 1
 }
 
 internal class Sha256WithRsaCardSignature :

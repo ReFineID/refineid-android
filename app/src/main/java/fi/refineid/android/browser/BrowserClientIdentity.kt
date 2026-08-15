@@ -12,6 +12,15 @@ import java.security.interfaces.ECPublicKey
 import java.security.interfaces.RSAPublicKey
 import javax.security.auth.x500.X500Principal
 
+internal enum class BrowserClientCertificateOutcome {
+    PROCEEDED,
+    ORIGIN_REJECTED,
+    CARD_UNAVAILABLE,
+    IDENTITY_INVALID,
+    HINT_MISMATCH,
+    CLOSED,
+}
+
 /** One browser identity whose private key is a live, non-exportable card handle. */
 internal class BrowserClientIdentity private constructor(
     val privateKey: CardBackedPrivateKey,
@@ -37,9 +46,13 @@ internal class BrowserClientIdentity private constructor(
             issuerCandidates: List<X509Certificate>,
             operation: CardSignatureOperation,
         ): BrowserClientIdentity? {
-            val leafDer = ownedLeaf.copyDer()
             val profile = ownedLeaf.keyProfile
-            ownedLeaf.close()
+            val leafDer =
+                try {
+                    ownedLeaf.copyDer()
+                } finally {
+                    ownedLeaf.close()
+                }
             val leaf =
                 try {
                     CertificateFactory
@@ -120,16 +133,28 @@ internal class BrowserClientIdentity private constructor(
 internal object BrowserClientCertificateMatcher {
     fun accepts(
         identity: BrowserClientIdentity,
-        keyTypes: Array<String>,
+        keyTypes: Array<out String>?,
+        principals: Array<out Principal>?,
+    ): Boolean =
+        accepts(
+            keyAlgorithm = identity.privateKey.algorithm,
+            acceptedIssuerNames = identity.acceptedIssuerNames(),
+            keyTypes = keyTypes,
+            principals = principals,
+        )
+
+    internal fun accepts(
+        keyAlgorithm: String,
+        acceptedIssuerNames: Set<X500Principal>,
+        keyTypes: Array<out String>?,
         principals: Array<out Principal>?,
     ): Boolean {
-        if (keyTypes.none { requested -> requested == identity.privateKey.algorithm }) {
+        if (keyTypes.isNullOrEmpty() || keyTypes.none { requested -> requested == keyAlgorithm }) {
             return false
         }
         if (principals.isNullOrEmpty()) {
             return true
         }
-        val acceptedIssuerNames = identity.acceptedIssuerNames()
         return principals.any { principal ->
             principal is X500Principal && principal in acceptedIssuerNames
         }

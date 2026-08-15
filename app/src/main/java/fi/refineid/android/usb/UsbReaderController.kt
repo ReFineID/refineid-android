@@ -293,25 +293,29 @@ internal class UsbReaderController(
             return
         }
         val generation = probeGeneration
-        ioExecutor.execute {
-            val certificate =
-                if (isStarted && generation == probeGeneration) {
-                    try {
-                        activeSession?.copyAuthenticationCertificate()
-                    } catch (_: IllegalStateException) {
+        try {
+            ioExecutor.execute {
+                val certificate =
+                    if (isStarted && generation == probeGeneration) {
+                        try {
+                            activeSession?.copyAuthenticationCertificate()
+                        } catch (_: IllegalStateException) {
+                            null
+                        }
+                    } else {
                         null
                     }
-                } else {
-                    null
-                }
-            mainHandler.post {
-                if (isStarted && generation == probeGeneration) {
-                    onResult(certificate)
-                } else {
-                    certificate?.close()
-                    onResult(null)
+                mainHandler.post {
+                    if (isStarted && generation == probeGeneration) {
+                        onResult(certificate)
+                    } else {
+                        certificate?.close()
+                        onResult(null)
+                    }
                 }
             }
+        } catch (_: RejectedExecutionException) {
+            onResult(null)
         }
     }
 

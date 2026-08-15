@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity() {
                     snapshot = readerSnapshot,
                     onRequestPermission = readerController::requestPermission,
                     onAuthenticate = readerController::authenticate,
+                    browserCardService = readerController,
                 )
             }
         }
