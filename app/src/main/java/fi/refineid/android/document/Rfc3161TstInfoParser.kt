@@ -6,11 +6,63 @@ import java.time.Instant
 
 /** Ordered parsing of the message imprint and optional fields in one TSTInfo. */
 internal object Rfc3161TstInfoParser {
-    data class Binding(
+    class Binding(
         val algorithm: ByteArray,
         val digest: ByteArray,
         val generatedAt: Instant,
         val nonce: ByteArray?,
+        val tsaName: Rfc3161TsaName?,
+    ) : AutoCloseable {
+        override fun close() {
+            algorithm.fill(ZERO_BYTE)
+            digest.fill(ZERO_BYTE)
+            nonce?.fill(ZERO_BYTE)
+            tsaName?.close()
+        }
+
+        private companion object {
+            const val ZERO_BYTE: Byte = 0
+        }
+    }
+
+    class Rfc3161TsaName internal constructor(
+        val kind: Kind,
+        private val ownedValue: ByteArray,
+    ) : AutoCloseable {
+        enum class Kind {
+            DIRECTORY_NAME,
+            MAILBOX,
+        }
+
+        private var isClosed = false
+
+        fun <T> useValue(operation: (ByteArray) -> T): T {
+            check(!isClosed) {
+                "timestamp authority name is closed"
+            }
+            return operation(ownedValue)
+        }
+
+        override fun close() {
+            if (!isClosed) {
+                ownedValue.fill(ZERO_BYTE)
+                isClosed = true
+            }
+        }
+
+        override fun toString(): String =
+            "Rfc3161TsaName(kind=" + kind +
+                ", length=" + ownedValue.size +
+                ", closed=" + isClosed + ")"
+
+        private companion object {
+            const val ZERO_BYTE: Byte = 0
+        }
+    }
+
+    private data class OptionalFields(
+        val nonce: ByteArray?,
+        val tsaName: Rfc3161TsaName?,
     )
 
     private data class RequiredFields(
@@ -27,16 +79,28 @@ internal object Rfc3161TstInfoParser {
         val fields = outer.children(sequence)
         val required = requiredFields(fields)
         val (algorithm, digest) = messageImprint(fields, required.imprint)
-        val optional = mutableListOf<DerReader.Element>()
-        while (!fields.isAtEnd) {
-            optional += fields.next() ?: throw malformed()
+        var transferred = false
+        try {
+            val optional = mutableListOf<DerReader.Element>()
+            while (!fields.isAtEnd) {
+                optional += fields.next() ?: throw malformed()
+            }
+            val parsedOptional = optionalFields(fields, optional)
+            return Binding(
+                algorithm = algorithm,
+                digest = digest,
+                generatedAt = required.generatedAt,
+                nonce = parsedOptional.nonce,
+                tsaName = parsedOptional.tsaName,
+            ).also {
+                transferred = true
+            }
+        } finally {
+            if (!transferred) {
+                algorithm.fill(ZERO_BYTE)
+                digest.fill(ZERO_BYTE)
+            }
         }
-        return Binding(
-            algorithm = algorithm,
-            digest = digest,
-            generatedAt = required.generatedAt,
-            nonce = optionalFields(fields, optional),
-        )
     }
 
     private fun requiredFields(fields: DerReader): RequiredFields {
@@ -74,7 +138,7 @@ internal object Rfc3161TstInfoParser {
     private fun optionalFields(
         source: DerReader,
         fields: List<DerReader.Element>,
-    ): ByteArray? {
+    ): OptionalFields {
         var index = FIRST_COLLECTION_INDEX
         if (fields.getOrNull(index)?.tag == DerValues.TAG_SEQUENCE) {
             validateAccuracy(source.children(fields[index]))
@@ -92,26 +156,36 @@ internal object Rfc3161TstInfoParser {
             index += COLLECTION_INDEX_STEP
         }
         var nonce: ByteArray? = null
-        if (fields.getOrNull(index)?.tag == DerValues.TAG_INTEGER) {
-            if (!Rfc3161DerValidation.isCanonicalNonNegativeInteger(source, fields[index])) {
+        var tsaName: Rfc3161TsaName? = null
+        var transferred = false
+        try {
+            if (fields.getOrNull(index)?.tag == DerValues.TAG_INTEGER) {
+                if (!Rfc3161DerValidation.isCanonicalNonNegativeInteger(source, fields[index])) {
+                    throw malformed()
+                }
+                nonce = source.raw(fields[index])
+                index += COLLECTION_INDEX_STEP
+            }
+            if (fields.getOrNull(index)?.tag == DerValues.TAG_CONTEXT_0_CONSTRUCTED) {
+                tsaName = tsaName(source.children(fields[index]))
+                index += COLLECTION_INDEX_STEP
+            }
+            if (fields.getOrNull(index)?.tag == DerValues.TAG_CONTEXT_1_CONSTRUCTED) {
+                validateTimestampExtensions(source.children(fields[index]))
+                index += COLLECTION_INDEX_STEP
+            }
+            if (index != fields.size) {
                 throw malformed()
             }
-            nonce = source.raw(fields[index])
-            index += COLLECTION_INDEX_STEP
+            return OptionalFields(nonce = nonce, tsaName = tsaName).also {
+                transferred = true
+            }
+        } finally {
+            if (!transferred) {
+                nonce?.fill(ZERO_BYTE)
+                tsaName?.close()
+            }
         }
-        if (fields.getOrNull(index)?.tag == DerValues.TAG_CONTEXT_0_CONSTRUCTED) {
-            validateTsaName(source.children(fields[index]))
-            index += COLLECTION_INDEX_STEP
-        }
-        if (fields.getOrNull(index)?.tag == DerValues.TAG_CONTEXT_1_CONSTRUCTED) {
-            validateTimestampExtensions(source.children(fields[index]))
-            index += COLLECTION_INDEX_STEP
-        }
-        if (index != fields.size) {
-            nonce?.fill(ZERO_BYTE)
-            throw malformed()
-        }
-        return nonce
     }
 
     private fun validateAccuracy(reader: DerReader) {
@@ -140,27 +214,41 @@ internal object Rfc3161TstInfoParser {
         }
     }
 
-    private fun validateTsaName(reader: DerReader) {
+    private fun tsaName(reader: DerReader): Rfc3161TsaName {
         val name = reader.next() ?: throw malformed()
         if (!reader.isAtEnd) {
             throw malformed()
         }
-        val accepted =
-            when (name.tag) {
-                DerValues.TAG_CONTEXT_4_CONSTRUCTED -> {
-                    reader.content(name).isNotEmpty()
+        return when (name.tag) {
+            DerValues.TAG_CONTEXT_4_CONSTRUCTED -> {
+                val encodedName = reader.content(name)
+                val distinguishedName = DerReader.single(encodedName)
+                if (distinguishedName?.tag != DerValues.TAG_SEQUENCE) {
+                    encodedName.fill(ZERO_BYTE)
+                    throw malformed()
                 }
-
-                DerValues.TAG_CONTEXT_1_PRIMITIVE -> {
-                    Rfc3161TextValidation.isMailbox(reader.content(name))
-                }
-
-                else -> {
-                    false
-                }
+                Rfc3161TsaName(
+                    kind = Rfc3161TsaName.Kind.DIRECTORY_NAME,
+                    ownedValue = encodedName,
+                )
             }
-        if (!accepted) {
-            throw malformed()
+
+            DerValues.TAG_CONTEXT_1_PRIMITIVE -> {
+                val mailbox = reader.content(name)
+                val validationCopy = mailbox.copyOf()
+                if (!Rfc3161TextValidation.isMailbox(validationCopy)) {
+                    mailbox.fill(ZERO_BYTE)
+                    throw malformed()
+                }
+                Rfc3161TsaName(
+                    kind = Rfc3161TsaName.Kind.MAILBOX,
+                    ownedValue = mailbox,
+                )
+            }
+
+            else -> {
+                throw malformed()
+            }
         }
     }
 

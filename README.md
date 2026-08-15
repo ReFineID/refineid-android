@@ -39,7 +39,10 @@ instrumented development harness, but it is not the product boundary.
 - Independent OpenSSL, qpdf, and Poppler validation for synthetic RSA-3072 and
   P-384 end-to-end PAdES output, including signed-byte tamper rejection
 - Bounded canonical RFC 3161 request/response binding with an explicitly
-  unverified token type; TSA cryptographic verification remains in progress
+  unverified token type
+- Strict TSA CMS signature, signed-attribute, ESS certificate, timestamp-only
+  certificate-profile, exact TSA-name, and offline exclusive-anchor PKIX
+  verification before promotion to an owned verified-token capability
 - Debug-only terse PDF choose/save/PIN2 harness; release stays hidden until the
   timestamp and validation-evidence stages reach PAdES-B-LTA
 - Secure, debug-only on-device signing harness; no manual harness in release

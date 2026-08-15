@@ -37,9 +37,7 @@ internal object Rfc3161TimestampParser {
                 transferred = true
                 return result
             } finally {
-                binding.algorithm.fill(ZERO_BYTE)
-                binding.digest.fill(ZERO_BYTE)
-                binding.nonce?.fill(ZERO_BYTE)
+                binding.close()
             }
         } finally {
             if (!transferred) {
