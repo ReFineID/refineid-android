@@ -7,6 +7,7 @@ internal object PdfFormat {
     const val FILE_PREFIX = "%PDF-"
     const val START_XREF_KEYWORD = "startxref"
     const val XREF_KEYWORD = "xref"
+    const val XREF_STREAM_KEY = "/XRefStm"
     const val TRAILER_KEYWORD = "trailer"
     const val END_OF_FILE_MARKER = "%%EOF"
     const val OBJECT_KEYWORD = "obj"
@@ -21,6 +22,7 @@ internal object PdfFormat {
     const val DICTIONARY_MARKER_LENGTH = 2
     const val DECIMAL_RADIX = 10
     const val MAXIMUM_XREF_CHAIN_DEPTH = 64
+    const val MAXIMUM_PAGE_TREE_DEPTH = 32
 
     const val XREF_SUBSECTION_HEADER_TOKEN_COUNT = 2
     const val XREF_ENTRY_TOKEN_COUNT = 3

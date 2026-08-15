@@ -7,12 +7,15 @@ internal class PdfDocumentIndex private constructor(
     private val locations: Map<Int, ObjectLocation>,
     val trailer: String,
     val previousStartXref: Int,
+    val highestObjectNumber: Int,
 ) {
     data class Reference(
         val number: Int,
         val generation: Int,
     ) {
-        fun encoded(): String = "$number $generation $REFERENCE_MARKER"
+        fun encodedIndirectReference(): String = "$number $generation $REFERENCE_MARKER"
+
+        fun encodedObjectHeader(): String = "$number $generation ${PdfFormat.OBJECT_KEYWORD}\n"
 
         private companion object {
             const val REFERENCE_MARKER = "R"
@@ -121,6 +124,15 @@ internal class PdfDocumentIndex private constructor(
                     }
                 }
                 val syntax = PdfDictionarySyntax(section.trailer)
+                val encryptName = dictionaryKeyName(PdfFormat.ENCRYPT_KEY) ?: throw unreadable()
+                if (syntax.entry(encryptName) != null) {
+                    throw failure(PdfSigningFailure.ENCRYPTED)
+                }
+                val xrefStreamName =
+                    dictionaryKeyName(PdfFormat.XREF_STREAM_KEY) ?: throw unreadable()
+                if (syntax.entry(xrefStreamName) != null) {
+                    throw failure(PdfSigningFailure.CROSS_REFERENCE_STREAM_UNSUPPORTED)
+                }
                 val previousName =
                     dictionaryKeyName(PdfFormat.PREVIOUS_XREF_KEY) ?: throw unreadable()
                 offset =
@@ -129,15 +141,11 @@ internal class PdfDocumentIndex private constructor(
                     }
             }
             val newest = newestTrailer ?: throw unreadable()
-            val newestSyntax = PdfDictionarySyntax(newest)
-            val encryptName = dictionaryKeyName(PdfFormat.ENCRYPT_KEY) ?: throw unreadable()
-            if (newestSyntax.entry(encryptName) != null) {
-                throw failure(PdfSigningFailure.ENCRYPTED)
-            }
             return PdfDocumentIndex(
                 locations = collected,
                 trailer = newest,
                 previousStartXref = startXref,
+                highestObjectNumber = claimed.maxOrNull() ?: MINIMUM_OBJECT_NUMBER,
             )
         }
 

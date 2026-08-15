@@ -7,6 +7,7 @@ internal enum class PdfSigningFailure {
     ENCRYPTED,
     NOT_A_PDF,
     PLACEHOLDER_MALFORMED,
+    SIGNATURE_CLAIM_MALFORMED,
     SIGNATURE_TOO_LARGE,
     STRUCTURE_UNREADABLE,
 }

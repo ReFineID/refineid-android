@@ -62,6 +62,14 @@ class PdfDocumentIndexTest {
             PdfSigningFailure.CROSS_REFERENCE_STREAM_UNSUPPORTED,
             crossReferenceStreamShape(),
         )
+        assertIndexFailure(
+            PdfSigningFailure.CROSS_REFERENCE_STREAM_UNSUPPORTED,
+            PdfTestDocuments.minimalClassic(trailerExtra = HYBRID_XREF_STREAM_ENTRY).document,
+        )
+        assertIndexFailure(
+            PdfSigningFailure.ENCRYPTED,
+            appendRevision(PdfTestDocuments.minimalClassic(trailerExtra = ENCRYPTED_TRAILER_ENTRY)),
+        )
         assertIndexFailure(PdfSigningFailure.STRUCTURE_UNREADABLE, cyclicRevision())
         assertIndexFailure(
             PdfSigningFailure.STRUCTURE_UNREADABLE,
@@ -197,6 +205,7 @@ class PdfDocumentIndexTest {
         const val LATIN1_CATALOG = "<< /Type /Catalog /Pages 2 0 R /Note (\u00E9) >>"
         const val UPDATED_CATALOG = "<< /Type /Catalog /Pages 2 0 R /Updated true >>"
         const val ENCRYPTED_TRAILER_ENTRY = " /Encrypt 9 0 R"
+        const val HYBRID_XREF_STREAM_ENTRY = " /XRefStm 9"
         const val NON_ENCRYPTION_NAME_ENTRY = " /EncryptNote 9 0 R"
         const val MALFORMED_PREVIOUS_ENTRY = " /Prev nope"
         const val NOT_A_PDF = "not a document"

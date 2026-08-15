@@ -32,6 +32,8 @@ instrumented development harness, but it is not the product boundary.
   bound to the exact qualified certificate with mandatory local verification
 - Canonical detached PAdES CMS assembly for RSA-3072 and P-384, with strict DER
   parsing and exact signed-attribute reconstruction
+- Bounded classic-PDF incremental revisions with invisible signature fields,
+  fixed byte ranges, repeat-signing support, and qpdf compatibility checks
 - Secure, debug-only on-device signing harness; no manual harness in release
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session

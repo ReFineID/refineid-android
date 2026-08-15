@@ -227,6 +227,24 @@ internal class PdfValueParser(
         }
     }
 
+    private fun referenceAtCurrent(): PdfDocumentIndex.Reference? {
+        skipTrivia()
+        val numberRange = atomOrNull() ?: return null
+        val number = PdfValueLexemes.unsignedInteger(bytes, numberRange) ?: return null
+        skipTrivia()
+        val generationRange = atomOrNull() ?: return null
+        val generation = PdfValueLexemes.unsignedInteger(bytes, generationRange) ?: return null
+        if (generation !in MINIMUM_GENERATION..MAXIMUM_GENERATION) {
+            return null
+        }
+        skipTrivia()
+        val marker = atomOrNull() ?: return null
+        if (PdfValueLexemes.text(bytes, marker) != REFERENCE_MARKER) {
+            return null
+        }
+        return PdfDocumentIndex.Reference(number = number, generation = generation)
+    }
+
     private data class ParsedName(
         val decoded: String,
         val raw: PdfBytes.Range,
@@ -236,25 +254,34 @@ internal class PdfValueParser(
         fun reference(text: String): PdfDocumentIndex.Reference? {
             val encoded = PdfValueLexemes.strictLatin1(text) ?: return null
             val parser = PdfValueParser(encoded)
-            parser.skipTrivia()
-            val numberRange = parser.atomOrNull() ?: return null
-            val number = PdfValueLexemes.unsignedInteger(encoded, numberRange) ?: return null
-            parser.skipTrivia()
-            val generationRange = parser.atomOrNull() ?: return null
-            val generation = PdfValueLexemes.unsignedInteger(encoded, generationRange) ?: return null
-            if (generation !in MINIMUM_GENERATION..MAXIMUM_GENERATION) {
-                return null
-            }
-            parser.skipTrivia()
-            val marker = parser.atomOrNull() ?: return null
-            if (PdfValueLexemes.text(encoded, marker) != REFERENCE_MARKER) {
-                return null
-            }
+            val reference = parser.referenceAtCurrent() ?: return null
             return try {
                 parser.requireEnd()
-                PdfDocumentIndex.Reference(number = number, generation = generation)
+                reference
             } catch (_: PdfSigningException) {
                 null
+            }
+        }
+
+        fun referenceArray(text: String): List<PdfDocumentIndex.Reference>? {
+            val encoded = PdfValueLexemes.strictLatin1(text) ?: return null
+            val parser = PdfValueParser(encoded)
+            parser.skipTrivia()
+            if (!parser.consume(ARRAY_OPEN)) {
+                return null
+            }
+            val references = mutableListOf<PdfDocumentIndex.Reference>()
+            while (true) {
+                parser.skipTrivia()
+                if (parser.consume(ARRAY_CLOSE)) {
+                    return try {
+                        parser.requireEnd()
+                        references
+                    } catch (_: PdfSigningException) {
+                        null
+                    }
+                }
+                references.add(parser.referenceAtCurrent() ?: return null)
             }
         }
 

@@ -69,6 +69,22 @@ internal object PdfValueLexemes {
         return encoded.isNotEmpty() && encoded.none(::isDelimiter)
     }
 
+    fun name(text: String): String? {
+        val encoded = strictLatin1(text) ?: return null
+        if (encoded.size <= NAME_PREFIX_LENGTH || encoded.first() != NAME_PREFIX_BYTE) {
+            return null
+        }
+        val range = PdfBytes.Range(start = FIRST_BYTE_OFFSET, endExclusive = encoded.size)
+        if (
+            (range.start + NAME_PREFIX_LENGTH until range.endExclusive).any { index ->
+                isDelimiter(encoded[index])
+            }
+        ) {
+            return null
+        }
+        return decodedName(encoded, range)
+    }
+
     fun strictLatin1(text: String): ByteArray? =
         text
             .takeIf { value ->
@@ -99,6 +115,7 @@ internal object PdfValueLexemes {
         }
 
     private const val NAME_PREFIX_LENGTH = 1
+    private const val FIRST_BYTE_OFFSET = 0
     private const val NAME_ESCAPE_DIGIT_COUNT = 2
     private const val FIRST_ESCAPE_DIGIT_OFFSET = 1
     private const val SECOND_ESCAPE_DIGIT_OFFSET = 2
@@ -110,6 +127,7 @@ internal object PdfValueLexemes {
     private const val MAXIMUM_LATIN1_CODE_POINT = 0xFF
     private const val BYTE_OFFSET_STEP = 1
     private val NAME_ESCAPE_BYTE = '#'.code.toByte()
+    private val NAME_PREFIX_BYTE = '/'.code.toByte()
     private val ASCII_ZERO_BYTE = '0'.code.toByte()
     private val ASCII_NINE_BYTE = '9'.code.toByte()
     private val ASCII_UPPER_A_BYTE = 'A'.code.toByte()

@@ -30,6 +30,8 @@ internal class PdfDictionarySyntax(
     fun value(entry: PdfDictionaryEntry): String =
         latin1(source.copyOfRange(entry.valueRange.start, entry.valueRange.endExclusive))
 
+    fun encoded(): String = latin1(source.copyOf())
+
     fun replacing(
         name: String,
         value: String,
