@@ -312,6 +312,34 @@ internal object AppTrace {
         )
     }
 
+    fun documentInputStarted() {
+        debug("qualified-pdf:input-started")
+    }
+
+    fun documentInputCompleted(
+        isAccepted: Boolean,
+        documentLength: Int?,
+    ) {
+        debug(
+            "qualified-pdf:input-completed accepted=" + isAccepted +
+                " document-length=" + (documentLength ?: "none"),
+        )
+    }
+
+    fun documentDestinationSelected(isAccepted: Boolean) {
+        debug("qualified-pdf:destination-selected accepted=" + isAccepted)
+    }
+
+    fun documentOutputCompleted(
+        isSuccessful: Boolean,
+        documentLength: Int,
+    ) {
+        debug(
+            "qualified-pdf:output-completed successful=" + isSuccessful +
+                " document-length=" + documentLength,
+        )
+    }
+
     fun authenticationSignatureVerificationCompleted(
         inputMode: AuthenticationSigningInputMode,
         isVerified: Boolean,

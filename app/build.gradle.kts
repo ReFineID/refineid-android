@@ -377,6 +377,7 @@ val verifyReleaseNoLogging =
                     "card:public",
                     "card:credential",
                     "authentication:",
+                    "qualified-pdf:",
                     "Lfi/refineid/android/diagnostics/AppTrace;",
                 )
             val forbiddenMethods: Map<String, Set<String>?> =

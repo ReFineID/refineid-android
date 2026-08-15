@@ -77,3 +77,11 @@ browser handshake separately:
 
 The test stops at the secure PIN1 field and dismisses it. It never enters or
 submits a credential and therefore must not consume a retry.
+
+The debug-only document harness follows the file-commit ordering used by the
+Apple application: select a PDF, select its distinct output destination, and
+only then expose PIN2. Compose tests verify those three UI states, secure PIN2
+semantics, decimal and length bounds, one synthetic one-shot submission,
+immediate field clearing, disabled working state, and terse status text. A
+separate device test verifies bounded PDF input ownership and zeroization. No
+automated test enters PIN2 into the real card service.

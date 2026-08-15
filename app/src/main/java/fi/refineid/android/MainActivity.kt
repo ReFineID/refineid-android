@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
                     onRequestPermission = readerController::requestPermission,
                     onAuthenticate = readerController::authenticate,
                     browserCardService = readerController,
+                    qualifiedCardService = readerController.qualifiedCardService,
                 )
             }
         }

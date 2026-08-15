@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pdf">PDF</string>
+    <string name="choose_pdf">Choose PDF</string>
+    <string name="pdf_selected">PDF selected</string>
+    <string name="save_as">Save as</string>
+    <string name="pin2">PIN2</string>
+    <string name="sign_pdf">Sign PDF</string>
+    <string name="saving">Saving</string>
+</resources>

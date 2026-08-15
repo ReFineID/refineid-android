@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,6 +17,7 @@ import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import fi.refineid.android.R
 import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.Pin1Submission
+import fi.refineid.android.core.QualifiedCardService
 import fi.refineid.android.diagnostics.BuildDiagnostics
 import fi.refineid.android.usb.AuthenticationStatus
 import fi.refineid.android.usb.CardPresence
@@ -54,6 +57,7 @@ internal fun MainScreen(
     onRequestPermission: () -> Unit,
     onAuthenticate: (Pin1Submission) -> Unit,
     browserCardService: AuthenticationCardService? = null,
+    qualifiedCardService: QualifiedCardService? = null,
 ) {
     Scaffold(
         modifier =
@@ -65,6 +69,7 @@ internal fun MainScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(contentPadding)
                     .padding(
                         horizontal = SCREEN_HORIZONTAL_PADDING,
@@ -81,6 +86,11 @@ internal fun MainScreen(
             ReaderCard(
                 snapshot = snapshot,
                 onRequestPermission = onRequestPermission,
+            )
+
+            DocumentSigningHarness(
+                snapshot = snapshot,
+                cardService = qualifiedCardService,
             )
 
             if (
