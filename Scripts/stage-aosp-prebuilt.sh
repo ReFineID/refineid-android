@@ -14,6 +14,7 @@ readonly RELEASE_PACKAGE='package="fi.refineid.android"'
 readonly PROVIDER_SERVICE='android:name="fi.refineid.android.keychain.ExternalKeyProviderService"'
 readonly KEYCHAIN_BIND_PERMISSION='android:permission="com.android.keychain.permission.BIND_EXTERNAL_KEY_PROVIDER"'
 readonly PROVIDER_INTERFACE_ACTION='android:name="com.android.keychain.external.IExternalKeyProviderService"'
+readonly BACKGROUND_ACTIVITY_PERMISSION='android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"'
 readonly INTERNET_PERMISSION="android.permission.INTERNET"
 
 ./gradlew :app:verifyReleaseNoLogging
@@ -31,7 +32,8 @@ for required_manifest_entry in \
   "$RELEASE_PACKAGE" \
   "$PROVIDER_SERVICE" \
   "$KEYCHAIN_BIND_PERMISSION" \
-  "$PROVIDER_INTERFACE_ACTION"; do
+  "$PROVIDER_INTERFACE_ACTION" \
+  "$BACKGROUND_ACTIVITY_PERMISSION"; do
   grep -Fq "$required_manifest_entry" "$RELEASE_MERGED_MANIFEST" || {
     echo "release manifest is missing a required provider declaration" >&2
     exit 1

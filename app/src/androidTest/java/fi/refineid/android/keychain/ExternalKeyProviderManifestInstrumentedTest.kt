@@ -44,7 +44,7 @@ class ExternalKeyProviderManifestInstrumentedTest {
     }
 
     @Test
-    fun pinPromptIsPrivateAndExcludedFromRecents() {
+    fun pinPromptIsPrivateExcludedFromRecentsAndDeclaresItsPlatformLaunchPermission() {
         val context = ApplicationProvider.getApplicationContext<ReFineIdApplication>()
         val activityInfo =
             context.packageManager.getActivityInfo(
@@ -60,9 +60,9 @@ class ExternalKeyProviderManifestInstrumentedTest {
                 context.packageName,
                 PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()),
             )
-        assertTrue(
-            requireNotNull(packageInfo.requestedPermissions).contains(HIDE_OVERLAY_WINDOWS_PERMISSION),
-        )
+        val permissions = requireNotNull(packageInfo.requestedPermissions).toSet()
+        assertTrue(permissions.contains(HIDE_OVERLAY_WINDOWS_PERMISSION))
+        assertTrue(permissions.contains(START_BACKGROUND_ACTIVITIES_PERMISSION))
     }
 
     private companion object {
@@ -71,6 +71,8 @@ class ExternalKeyProviderManifestInstrumentedTest {
         const val PROVIDER_INTERFACE_ACTION =
             "com.android.keychain.external.IExternalKeyProviderService"
         const val HIDE_OVERLAY_WINDOWS_PERMISSION = "android.permission.HIDE_OVERLAY_WINDOWS"
+        const val START_BACKGROUND_ACTIVITIES_PERMISSION =
+            "android.permission.START_ACTIVITIES_FROM_BACKGROUND"
         const val NO_PACKAGE_MANAGER_FLAGS = 0L
         const val NO_ACTIVITY_FLAGS = 0
     }

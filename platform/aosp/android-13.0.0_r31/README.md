@@ -14,8 +14,9 @@ Binder connection guarded by a dedicated signature permission and install-time
 trust checks. The native chooser unions active external aliases with
 AndroidKeyStore aliases before applying its existing user-selectability,
 key-type, and issuer filters. The application now supplies the privileged
-provider service, generation-bound USB backend, secure PIN prompt, product
-priv-app import, and a dedicated non-network SELinux domain.
+provider service, generation-bound USB backend, secure PIN prompt with the
+platform-only background launch permission, product priv-app import, and a
+dedicated non-network SELinux domain.
 
 ## Upstream bases
 

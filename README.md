@@ -66,7 +66,8 @@ instrumented development harness, but it is not the product boundary.
   browser-liveness token, and statically trusted provider-binding patches for
   the exact Android 13 Pixel 4 base
 - Privileged external-key service with a generation-bound USB backend, secure
-  caller-labelled PIN prompt, one-result replay, and coarse failures
+  caller-labelled PIN prompt, platform-only background launch permission,
+  one-result replay, and coarse failures
 - Product priv-app import and a dedicated non-network SELinux app domain for
   the Android 13 Pixel 4 image
 - Fingerprint-pinned public FINEID intermediates shared by the diagnostic and

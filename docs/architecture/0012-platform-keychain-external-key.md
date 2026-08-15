@@ -212,6 +212,9 @@ different salts and therefore do not match the lease key.
   self-grants an alias.
 - Every new card operation requires fresh holder PIN1 entry. PIN values are
   neither cached nor sent through KeyChain or the browser process.
+- The platform-signed provider holds the Android 13 background-activity launch
+  permission solely to show its own unexported secure PIN activity for an
+  authenticated KeyChain request; ADR 0027 defines the restriction.
 - The secure prompt identifies the requesting application. The JCA boundary
   does not carry a trustworthy web origin, so the design does not claim
   origin-level consent beyond Android's existing UID grant model.
