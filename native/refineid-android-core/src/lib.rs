@@ -16,7 +16,7 @@ use authentication_certificate::{
 };
 use authentication_signer::{
     AuthenticationSignFailure, AuthenticationSignature, AuthenticationSigningAlgorithm,
-    authenticate_and_sign,
+    AuthenticationSigningInput, authenticate_and_sign,
 };
 use card_transport::{AndroidCardTransport, CardExchangeLevel};
 use jni::objects::{JByteArray, JClass, JObject};
@@ -71,6 +71,10 @@ const AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA256: u8 = 0;
 const AUTHENTICATION_ALGORITHM_RSA_PSS_SHA256: u8 = 1;
 const AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA256: u8 = 2;
 const AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA384: u8 = 3;
+const AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256: u8 = 4;
+const AUTHENTICATION_PREHASHED_RSA_PSS_SHA256: u8 = 5;
+const AUTHENTICATION_PREHASHED_ECDSA_P384_SHA256: u8 = 6;
+const AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384: u8 = 7;
 
 const PIN_REFERENCE_CITIZEN: u8 = 0;
 const PIN_REFERENCE_ORGANIZATIONAL: u8 = 1;
@@ -105,7 +109,7 @@ const _: NativeMethod = jni::native_method! {
     java_type = "fi.refineid.android.core.NativeCore",
     static extern fn authenticate_and_sign_native(
         exchange_level: jint,
-        algorithm: jint,
+        request: jint,
         pin: [jbyte],
         message: [jbyte],
         callback: JObject,
@@ -240,7 +244,7 @@ fn authenticate_and_sign_native<'local>(
     env: &mut Env<'local>,
     _class: JClass<'local>,
     exchange_level: jint,
-    algorithm: jint,
+    request: jint,
     pin: JByteArray<'local>,
     message: JByteArray<'local>,
     callback: JObject<'local>,
@@ -261,7 +265,7 @@ fn authenticate_and_sign_native<'local>(
         pin_bytes.fill(0);
         return one_byte_reply(env, AUTHENTICATION_SIGNATURE_BRIDGE_ERROR);
     };
-    let Some(algorithm) = authentication_algorithm_from_jint(algorithm) else {
+    let Some((algorithm, input_mode)) = authentication_request_from_jint(request) else {
         pin_bytes.fill(0);
         return one_byte_reply(env, AUTHENTICATION_SIGNATURE_BRIDGE_ERROR);
     };
@@ -280,7 +284,15 @@ fn authenticate_and_sign_native<'local>(
     let (result, bridge_failed) = {
         let exchange = JniBlockExchange::new(env, callback);
         let mut transport = AndroidCardTransport::new(exchange, level);
-        let result = authenticate_and_sign(&mut transport, algorithm, pin_bytes, &message_bytes);
+        let input = match input_mode {
+            AuthenticationSigningInputMode::Message => {
+                AuthenticationSigningInput::Message(&message_bytes)
+            }
+            AuthenticationSigningInputMode::Prehashed => {
+                AuthenticationSigningInput::Prehashed(&message_bytes)
+            }
+        };
+        let result = authenticate_and_sign(&mut transport, algorithm, pin_bytes, input);
         let exchange = transport.into_exchange();
         (result, exchange.bridge_failed())
     };
@@ -337,6 +349,42 @@ fn authentication_algorithm_from_jint(value: jint) -> Option<AuthenticationSigni
         value if value == jint::from(AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA384) => {
             Some(AuthenticationSigningAlgorithm::EcdsaP384Sha384)
         }
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AuthenticationSigningInputMode {
+    Message,
+    Prehashed,
+}
+
+fn authentication_request_from_jint(
+    value: jint,
+) -> Option<(
+    AuthenticationSigningAlgorithm,
+    AuthenticationSigningInputMode,
+)> {
+    if let Some(algorithm) = authentication_algorithm_from_jint(value) {
+        return Some((algorithm, AuthenticationSigningInputMode::Message));
+    }
+    match value {
+        value if value == jint::from(AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256) => Some((
+            AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
+            AuthenticationSigningInputMode::Prehashed,
+        )),
+        value if value == jint::from(AUTHENTICATION_PREHASHED_RSA_PSS_SHA256) => Some((
+            AuthenticationSigningAlgorithm::RsaPssSha256,
+            AuthenticationSigningInputMode::Prehashed,
+        )),
+        value if value == jint::from(AUTHENTICATION_PREHASHED_ECDSA_P384_SHA256) => Some((
+            AuthenticationSigningAlgorithm::EcdsaP384Sha256,
+            AuthenticationSigningInputMode::Prehashed,
+        )),
+        value if value == jint::from(AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384) => Some((
+            AuthenticationSigningAlgorithm::EcdsaP384Sha384,
+            AuthenticationSigningInputMode::Prehashed,
+        )),
         _ => None,
     }
 }
@@ -479,6 +527,7 @@ mod tests {
     use super::{
         ATR_INVALID, ATR_VALID_NON_T0_DIRECT, ATR_VALID_T0_DIRECT, ATR_VALID_T0_INVERSE,
         AUTHENTICATION_ALGORITHM_ECDSA_P384_SHA384, AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA256,
+        AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384, AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256,
         AUTHENTICATION_SIGNATURE_CARD_UNAVAILABLE, AUTHENTICATION_SIGNATURE_REPLY_HEADER_LENGTH,
         AUTHENTICATION_SIGNATURE_SUCCEEDED, CARD_OPERATION_CARD_UNAVAILABLE,
         CARD_OPERATION_REJECTED, CARD_OPERATION_SUCCEEDED, CARD_OPERATION_TRANSPORT_ERROR,
@@ -487,9 +536,9 @@ mod tests {
         NO_RETRY_COUNT, PIN_REFERENCE_CITIZEN, PIN1_PREFLIGHT_BRIDGE_ERROR,
         PIN1_PREFLIGHT_CARD_UNAVAILABLE, PIN1_PREFLIGHT_REPLY_LENGTH, PIN1_PREFLIGHT_SUCCEEDED,
         PIN1_STATE_REMAINING, POLICY_PERMITTED, authentication_algorithm_from_jint,
-        encode_authentication_certificate_reply, encode_authentication_signature_reply,
-        encode_pin1_preflight_reply, exchange_level_from_jint, map_pkcs15_selection_result,
-        validate_atr_bytes,
+        authentication_request_from_jint, encode_authentication_certificate_reply,
+        encode_authentication_signature_reply, encode_pin1_preflight_reply,
+        exchange_level_from_jint, map_pkcs15_selection_result, validate_atr_bytes,
     };
     use crate::authentication_certificate::{
         AuthenticationCertificate, AuthenticationCertificateReadFailure, AuthenticationKeyProfile,
@@ -506,6 +555,8 @@ mod tests {
     const UNSUPPORTED_EXCHANGE_LEVEL: i32 = 2;
     const AUTHENTICATION_ALGORITHM_BELOW_RANGE: i32 = -1;
     const AUTHENTICATION_ALGORITHM_ABOVE_RANGE: i32 = 4;
+    const AUTHENTICATION_REQUEST_BELOW_RANGE: i32 = -1;
+    const AUTHENTICATION_REQUEST_ABOVE_RANGE: i32 = 8;
     const SYNTHETIC_REJECTED_STATUS_WORD: u16 = 0x6a82;
     const SYNTHETIC_DER_SEQUENCE_TAG: u8 = 0x30;
     const SYNTHETIC_DER_EMPTY_LENGTH: u8 = 0x00;
@@ -567,6 +618,39 @@ mod tests {
         );
         assert_eq!(
             authentication_algorithm_from_jint(AUTHENTICATION_ALGORITHM_ABOVE_RANGE),
+            None
+        );
+    }
+
+    #[test]
+    fn accepts_only_stable_authentication_request_codes() {
+        assert_eq!(
+            authentication_request_from_jint(i32::from(AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA256)),
+            Some((
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
+                super::AuthenticationSigningInputMode::Message,
+            ))
+        );
+        assert_eq!(
+            authentication_request_from_jint(i32::from(AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256)),
+            Some((
+                AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
+                super::AuthenticationSigningInputMode::Prehashed,
+            ))
+        );
+        assert_eq!(
+            authentication_request_from_jint(i32::from(AUTHENTICATION_PREHASHED_ECDSA_P384_SHA384)),
+            Some((
+                AuthenticationSigningAlgorithm::EcdsaP384Sha384,
+                super::AuthenticationSigningInputMode::Prehashed,
+            ))
+        );
+        assert_eq!(
+            authentication_request_from_jint(AUTHENTICATION_REQUEST_BELOW_RANGE),
+            None
+        );
+        assert_eq!(
+            authentication_request_from_jint(AUTHENTICATION_REQUEST_ABOVE_RANGE),
             None
         );
     }

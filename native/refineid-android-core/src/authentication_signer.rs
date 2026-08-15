@@ -41,6 +41,21 @@ pub(crate) enum AuthenticationSigningAlgorithm {
     EcdsaP384Sha384,
 }
 
+/// Whether this boundary hashes a message or accepts a caller-asserted digest.
+pub(crate) enum AuthenticationSigningInput<'a> {
+    /// Hash these complete message bytes with the algorithm's named digest.
+    Message(&'a [u8]),
+    /// Use these bytes as an already-computed digest after exact-length validation.
+    Prehashed(&'a [u8]),
+}
+
+enum PreparedAuthenticationSigningInput {
+    RsaPkcs1Sha256(Sha256),
+    RsaPssSha256(Sha256),
+    EcdsaP384Sha256(Sha256),
+    EcdsaP384Sha384(Sha384),
+}
+
 /// Locally shaped signature returned by the card.
 pub(crate) struct AuthenticationSignature {
     /// Algorithm that produced the bytes.
@@ -88,7 +103,7 @@ pub(crate) enum AuthenticationSignFailure {
     Bridge,
 }
 
-/// Present one fresh PIN1 exactly once and sign one owned request message.
+/// Present one fresh PIN1 exactly once and sign one validated request input.
 ///
 /// FINEID S1 v4.2 sections 3.5, 3.6, 3.7.2.3, and 3.8 govern the sequence:
 /// header-only VERIFY preflight, credential VERIFY, MSE:SET DST, PSO:HASH,
@@ -98,13 +113,14 @@ pub(crate) fn authenticate_and_sign<T>(
     transport: &mut T,
     algorithm: AuthenticationSigningAlgorithm,
     pin_bytes: Vec<u8>,
-    message: &[u8],
+    input: AuthenticationSigningInput<'_>,
 ) -> Result<AuthenticationSignature, AuthenticationSignFailure>
 where
     T: CardTransport,
 {
-    let pin = Pin1::reconstruct(UnvalidatedSecret::from_owned_bytes(pin_bytes))
-        .map_err(|_| AuthenticationSignFailure::InvalidPin)?;
+    let pin_input = UnvalidatedSecret::from_owned_bytes(pin_bytes);
+    let prepared_input = prepare_signing_input(algorithm, input)?;
+    let pin = Pin1::reconstruct(pin_input).map_err(|_| AuthenticationSignFailure::InvalidPin)?;
     let preflight = probe_pin1_preflight(transport).map_err(map_preflight_failure)?;
     if !preflight.consumer_authentication_permitted {
         return Err(match preflight.state {
@@ -132,8 +148,52 @@ where
     }
 
     let scheme = sign_scheme(preflight.scheme);
-    let bytes = sign_message(transport, scheme, algorithm, message).map_err(map_sign_error)?;
+    let bytes = sign_prepared(transport, scheme, prepared_input).map_err(map_sign_error)?;
     Ok(AuthenticationSignature { algorithm, bytes })
+}
+
+fn prepare_signing_input(
+    algorithm: AuthenticationSigningAlgorithm,
+    input: AuthenticationSigningInput<'_>,
+) -> Result<PreparedAuthenticationSigningInput, AuthenticationSignFailure> {
+    match algorithm {
+        AuthenticationSigningAlgorithm::RsaPkcs1Sha256 => {
+            sha256_input(input).map(PreparedAuthenticationSigningInput::RsaPkcs1Sha256)
+        }
+        AuthenticationSigningAlgorithm::RsaPssSha256 => {
+            sha256_input(input).map(PreparedAuthenticationSigningInput::RsaPssSha256)
+        }
+        AuthenticationSigningAlgorithm::EcdsaP384Sha256 => {
+            sha256_input(input).map(PreparedAuthenticationSigningInput::EcdsaP384Sha256)
+        }
+        AuthenticationSigningAlgorithm::EcdsaP384Sha384 => {
+            sha384_input(input).map(PreparedAuthenticationSigningInput::EcdsaP384Sha384)
+        }
+    }
+}
+
+fn sha256_input(
+    input: AuthenticationSigningInput<'_>,
+) -> Result<Sha256, AuthenticationSignFailure> {
+    match input {
+        AuthenticationSigningInput::Message(message) => Ok(Sha256::of(message)),
+        AuthenticationSigningInput::Prehashed(digest) => digest
+            .try_into()
+            .map(Sha256::from_bytes)
+            .map_err(|_| AuthenticationSignFailure::Bridge),
+    }
+}
+
+fn sha384_input(
+    input: AuthenticationSigningInput<'_>,
+) -> Result<Sha384, AuthenticationSignFailure> {
+    match input {
+        AuthenticationSigningInput::Message(message) => Ok(Sha384::of(message)),
+        AuthenticationSigningInput::Prehashed(digest) => digest
+            .try_into()
+            .map(Sha384::from_bytes)
+            .map_err(|_| AuthenticationSignFailure::Bridge),
+    }
 }
 
 fn sign_scheme(scheme: PinReferenceScheme) -> SignScheme {
@@ -143,27 +203,26 @@ fn sign_scheme(scheme: PinReferenceScheme) -> SignScheme {
     }
 }
 
-fn sign_message<T>(
+fn sign_prepared<T>(
     transport: &mut T,
     scheme: SignScheme,
-    algorithm: AuthenticationSigningAlgorithm,
-    message: &[u8],
+    input: PreparedAuthenticationSigningInput,
 ) -> Result<Vec<u8>, SignError<T::Error>>
 where
     T: CardTransport,
 {
-    match algorithm {
-        AuthenticationSigningAlgorithm::RsaPkcs1Sha256 => transport
-            .sign_prehashed_sha256_rsa(scheme, KeyRef::Auth, Sha256::of(message).into_bytes())
+    match input {
+        PreparedAuthenticationSigningInput::RsaPkcs1Sha256(digest) => transport
+            .sign_prehashed_sha256_rsa(scheme, KeyRef::Auth, digest.into_bytes())
             .map(|signature| signature.into_bytes()),
-        AuthenticationSigningAlgorithm::RsaPssSha256 => transport
-            .sign_prehashed_sha256_rsa_pss(scheme, KeyRef::Auth, Sha256::of(message).into_bytes())
+        PreparedAuthenticationSigningInput::RsaPssSha256(digest) => transport
+            .sign_prehashed_sha256_rsa_pss(scheme, KeyRef::Auth, digest.into_bytes())
             .map(|signature| signature.into_bytes()),
-        AuthenticationSigningAlgorithm::EcdsaP384Sha256 => transport
-            .sign_prehashed_sha256_ecdsa(scheme, KeyRef::Auth, Sha256::of(message).into_bytes())
+        PreparedAuthenticationSigningInput::EcdsaP384Sha256(digest) => transport
+            .sign_prehashed_sha256_ecdsa(scheme, KeyRef::Auth, digest.into_bytes())
             .map(|signature| signature.into_bytes()),
-        AuthenticationSigningAlgorithm::EcdsaP384Sha384 => transport
-            .sign_prehashed_sha384_ecdsa(scheme, KeyRef::Auth, Sha384::of(message).into_bytes())
+        PreparedAuthenticationSigningInput::EcdsaP384Sha384(digest) => transport
+            .sign_prehashed_sha384_ecdsa(scheme, KeyRef::Auth, digest.into_bytes())
             .map(|signature| signature.into_bytes()),
     }
 }
@@ -204,22 +263,31 @@ mod tests {
         CardTransport, CommandApdu, CredentialCommand, PinRetries, ResponseApdu, StatusWord,
         TransportOutcome,
     };
+    use refineid_digest::SHA256_LEN;
     use refineid_sign::{ECDSA_P384_SIG_BYTES, RSA_3072_SIG_BYTES};
 
-    use super::{AuthenticationSignFailure, AuthenticationSigningAlgorithm, authenticate_and_sign};
+    use super::{
+        AuthenticationSignFailure, AuthenticationSigningAlgorithm, AuthenticationSigningInput,
+        authenticate_and_sign,
+    };
 
     const SAFE_RETRIES: u8 = 3;
     const LOW_RETRIES: u8 = 2;
     const PUBLIC_VERIFY_CALLS: usize = 2;
     const FULL_RSA_PUBLIC_CALLS: usize = 5;
+    const PSO_HASH_PUBLIC_COMMAND_INDEX: usize = 3;
     const VERIFY_INSTRUCTION: u8 = 0x20;
     const INSTRUCTION_OFFSET: usize = 1;
     const SYNTHETIC_PIN: &[u8] = b"1357";
     const SYNTHETIC_MESSAGE: &[u8] = b"authentication request";
+    const SYNTHETIC_DIGEST_FILL: u8 = 0x3C;
+    const SYNTHETIC_SHA256_DIGEST: [u8; SHA256_LEN] = [SYNTHETIC_DIGEST_FILL; SHA256_LEN];
+    const SINGLE_MISSING_BYTE_COUNT: usize = 1;
     const SIGNATURE_FILL: u8 = 0xA5;
 
     struct ScriptedTransport {
         public_responses: VecDeque<TransportOutcome>,
+        public_commands: Vec<Vec<u8>>,
         credential_response: TransportOutcome,
         public_calls: usize,
         credential_calls: usize,
@@ -229,6 +297,7 @@ mod tests {
         fn new(public_responses: Vec<TransportOutcome>, credential_status: StatusWord) -> Self {
             Self {
                 public_responses: public_responses.into(),
+                public_commands: Vec::new(),
                 credential_response: response(credential_status, Vec::new()),
                 public_calls: 0,
                 credential_calls: 0,
@@ -241,6 +310,7 @@ mod tests {
 
         fn transmit(&mut self, command: &CommandApdu) -> Result<TransportOutcome, Self::Error> {
             self.public_calls += 1;
+            self.public_commands.push(command.as_bytes().to_vec());
             if self.public_calls <= PUBLIC_VERIFY_CALLS {
                 assert_eq!(
                     command.as_bytes().get(INSTRUCTION_OFFSET).copied(),
@@ -307,7 +377,7 @@ mod tests {
             &mut transport,
             AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
             SYNTHETIC_PIN.to_vec(),
-            SYNTHETIC_MESSAGE,
+            AuthenticationSigningInput::Message(SYNTHETIC_MESSAGE),
         )
         .expect("scripted authentication signature succeeds");
 
@@ -325,7 +395,7 @@ mod tests {
             &mut transport,
             AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
             Vec::new(),
-            SYNTHETIC_MESSAGE,
+            AuthenticationSigningInput::Message(SYNTHETIC_MESSAGE),
         );
 
         assert!(matches!(result, Err(AuthenticationSignFailure::InvalidPin)));
@@ -342,7 +412,7 @@ mod tests {
             &mut transport,
             AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
             SYNTHETIC_PIN.to_vec(),
-            SYNTHETIC_MESSAGE,
+            AuthenticationSigningInput::Message(SYNTHETIC_MESSAGE),
         );
 
         assert!(matches!(
@@ -362,12 +432,47 @@ mod tests {
             &mut transport,
             AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
             SYNTHETIC_PIN.to_vec(),
-            SYNTHETIC_MESSAGE,
+            AuthenticationSigningInput::Message(SYNTHETIC_MESSAGE),
         );
 
         assert!(matches!(result, Err(AuthenticationSignFailure::WrongPin)));
         assert_eq!(transport.public_calls, PUBLIC_VERIFY_CALLS);
         assert_eq!(transport.credential_calls, 1);
+    }
+
+    #[test]
+    fn prehashed_input_reaches_the_card_without_being_hashed_again() {
+        let mut transport = rsa_success_script();
+
+        authenticate_and_sign(
+            &mut transport,
+            AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
+            SYNTHETIC_PIN.to_vec(),
+            AuthenticationSigningInput::Prehashed(&SYNTHETIC_SHA256_DIGEST),
+        )
+        .expect("scripted prehashed authentication signature succeeds");
+
+        assert!(
+            transport.public_commands[PSO_HASH_PUBLIC_COMMAND_INDEX]
+                .ends_with(&SYNTHETIC_SHA256_DIGEST)
+        );
+    }
+
+    #[test]
+    fn malformed_prehashed_input_never_touches_the_card() {
+        let mut transport = rsa_success_script();
+        let malformed_digest = [SYNTHETIC_DIGEST_FILL; SHA256_LEN - SINGLE_MISSING_BYTE_COUNT];
+
+        let result = authenticate_and_sign(
+            &mut transport,
+            AuthenticationSigningAlgorithm::RsaPkcs1Sha256,
+            SYNTHETIC_PIN.to_vec(),
+            AuthenticationSigningInput::Prehashed(&malformed_digest),
+        );
+
+        assert!(matches!(result, Err(AuthenticationSignFailure::Bridge)));
+        assert_eq!(transport.public_calls, 0);
+        assert_eq!(transport.credential_calls, 0);
     }
 
     #[test]
@@ -406,7 +511,7 @@ mod tests {
                 &mut transport,
                 algorithm,
                 SYNTHETIC_PIN.to_vec(),
-                SYNTHETIC_MESSAGE,
+                AuthenticationSigningInput::Message(SYNTHETIC_MESSAGE),
             )
             .expect("scripted algorithm succeeds");
             assert_eq!(result.algorithm, algorithm);
