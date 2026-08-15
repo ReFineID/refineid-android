@@ -86,6 +86,7 @@ class Rfc3161TimestampClientTest {
 
         val ownedCertificate = authority.copyTrustedCertificates().single()
         val authorization = checkNotNull(authority.credentials()).authorizationHeader()
+        assertEquals(SigningTimestampTrust.EXPLICIT_CERTIFICATES, authority.trust)
         assertArrayEquals(SYNTHETIC_TRUST_CERTIFICATE, ownedCertificate)
         assertEquals(SYNTHETIC_AUTHORIZATION_HEADER, authorization)
         assertFalse(authority.toString().contains(SYNTHETIC_PASSWORD.concatToString()))
@@ -97,6 +98,45 @@ class Rfc3161TimestampClientTest {
                 authority.copyTrustedCertificates()
             }
         assertEquals(TimestampAcquisitionFailure.AUTHORITY_CLOSED, failure.kind)
+    }
+
+    @Test
+    fun configuredAuthorityOwnsCredentialsWithoutPretendingToHavePinnedTrust() {
+        val password = SYNTHETIC_PASSWORD.copyOf()
+        val authority =
+            SigningTimestampAuthority.configured(
+                address = TIMESTAMP_ADDRESS,
+                username = SYNTHETIC_USERNAME,
+                password = password,
+            )
+        password[FIRST_CHARACTER_INDEX] = CHANGED_CHARACTER
+
+        assertEquals(SigningTimestampTrust.CONFIGURED_AUTHORITY, authority.trust)
+        assertEquals(NO_TRUST_CERTIFICATES, authority.trustedCertificateCount)
+        assertTrue(authority.copyTrustedCertificates().isEmpty())
+        assertEquals(
+            SYNTHETIC_AUTHORIZATION_HEADER,
+            checkNotNull(authority.credentials()).authorizationHeader(),
+        )
+        assertFalse(authority.toString().contains(TIMESTAMP_ADDRESS))
+        assertFalse(authority.toString().contains(SYNTHETIC_PASSWORD.concatToString()))
+
+        authority.close()
+    }
+
+    @Test
+    fun authorityConfigurationRejectsUnusableAddressesBeforeNetworkAccess() {
+        for (address in UNUSABLE_TIMESTAMP_ADDRESSES) {
+            assertThrows(IllegalArgumentException::class.java) {
+                SigningTimestampAuthority.configured(address)
+            }
+            assertThrows(IllegalArgumentException::class.java) {
+                SigningTimestampAuthority.copyOf(
+                    address = address,
+                    trustedCertificates = listOf(SYNTHETIC_TRUST_CERTIFICATE),
+                )
+            }
+        }
     }
 
     private class RecordingRandom(
@@ -151,6 +191,7 @@ class Rfc3161TimestampClientTest {
         const val WRONG_NONCE_BYTE_COUNT = EXACT_NONCE_BYTE_COUNT - 1
         const val NO_TRANSPORT_CALLS = 0
         const val SINGLE_TRANSPORT_CALL = 1
+        const val NO_TRUST_CERTIFICATES = 0
         const val FIRST_BYTE_INDEX = 0
         const val FIRST_CHARACTER_INDEX = 0
         const val SYNTHETIC_DIGEST_BYTE: Byte = 0x31
@@ -165,5 +206,16 @@ class Rfc3161TimestampClientTest {
         val SYNTHETIC_TRUST_CERTIFICATE = byteArrayOf(SYNTHETIC_CERTIFICATE_BYTE)
         val SYNTHETIC_PASSWORD = "synthetic-password".toCharArray()
         val MALFORMED_TIMESTAMP_RESPONSE = byteArrayOf(MALFORMED_TIMESTAMP_RESPONSE_BYTE)
+        val UNUSABLE_TIMESTAMP_ADDRESSES =
+            listOf(
+                EMPTY_TIMESTAMP_ADDRESS,
+                SCHEMELESS_TIMESTAMP_ADDRESS,
+                UNSUPPORTED_SCHEME_TIMESTAMP_ADDRESS,
+                USER_INFORMATION_TIMESTAMP_ADDRESS,
+            )
+        const val EMPTY_TIMESTAMP_ADDRESS = ""
+        const val SCHEMELESS_TIMESTAMP_ADDRESS = "timestamp.example"
+        const val UNSUPPORTED_SCHEME_TIMESTAMP_ADDRESS = "ftp://timestamp.example"
+        const val USER_INFORMATION_TIMESTAMP_ADDRESS = "https://user@timestamp.example"
     }
 }

@@ -52,7 +52,7 @@ internal class VerifiedTimestampCertificatePath internal constructor(
     }
 }
 
-/** RFC 3161 token authenticated to one explicit offline trust anchor. */
+/** RFC 3161 token authenticated to one exclusive trust anchor. */
 internal class VerifiedTimestampToken internal constructor(
     private val ownedEncoding: ByteArray,
     private val ownedMessageImprint: ByteArray,
@@ -154,10 +154,20 @@ internal object TimestampTokenVerifier {
             verifyEncoding(
                 encoding = encoding,
                 requestBoundGenerationTime = token.generatedAt,
-                trustedCertificates = trustedCertificates,
+                trust = TimestampTrust.Explicit(trustedCertificates),
             )
         }
     }
+
+    /** Verifies under the certificate set returned by one holder-configured authority. */
+    fun verifyConfiguredAuthority(token: UnverifiedTimestampToken): VerifiedTimestampToken =
+        token.useEncoding { encoding ->
+            verifyEncoding(
+                encoding = encoding,
+                requestBoundGenerationTime = token.generatedAt,
+                trust = TimestampTrust.ConfiguredAuthority,
+            )
+        }
 
     internal fun certificateProfileIsValid(
         certificateDer: ByteArray,
@@ -170,7 +180,7 @@ internal object TimestampTokenVerifier {
     private fun verifyEncoding(
         encoding: ByteArray,
         requestBoundGenerationTime: Instant,
-        trustedCertificates: List<ByteArray>,
+        trust: TimestampTrust,
     ): VerifiedTimestampToken {
         val authenticated = TimestampCmsVerifier.authenticate(encoding)
         try {
@@ -209,7 +219,7 @@ internal object TimestampTokenVerifier {
                     trustedPath(
                         signer = authenticated.parsedSignerCertificate,
                         embeddedCertificates = authenticated.embeddedCertificates,
-                        trustedCertificates = trustedCertificates,
+                        trustedCertificates = trust.anchors(authenticated.embeddedCertificates),
                         generatedAt = binding.generatedAt,
                     )
                 try {
@@ -330,6 +340,16 @@ internal object TimestampTokenVerifier {
             null
         }
 
+    private fun configuredAuthorityAnchors(embeddedCertificates: List<ByteArray>): List<ByteArray> {
+        val selfIssued =
+            embeddedCertificates.filter { encoded ->
+                parseCertificate(encoded)?.let { certificate ->
+                    certificate.subjectX500Principal == certificate.issuerX500Principal
+                } == true
+            }
+        return selfIssued.ifEmpty { embeddedCertificates }
+    }
+
     private fun failure(kind: TimestampTokenVerificationFailure): TimestampTokenVerificationException =
         TimestampTokenVerificationException(kind)
 
@@ -337,6 +357,21 @@ internal object TimestampTokenVerifier {
         val chain: List<X509Certificate>,
         val anchor: X509Certificate,
     )
+
+    private sealed interface TimestampTrust {
+        fun anchors(embeddedCertificates: List<ByteArray>): List<ByteArray>
+
+        class Explicit(
+            private val trustedCertificates: List<ByteArray>,
+        ) : TimestampTrust {
+            override fun anchors(embeddedCertificates: List<ByteArray>): List<ByteArray> = trustedCertificates
+        }
+
+        data object ConfiguredAuthority : TimestampTrust {
+            override fun anchors(embeddedCertificates: List<ByteArray>): List<ByteArray> =
+                configuredAuthorityAnchors(embeddedCertificates)
+        }
+    }
 
     private const val X509_CERTIFICATE_TYPE = "X.509"
     private const val PKIX_ALGORITHM = "PKIX"

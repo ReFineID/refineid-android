@@ -27,6 +27,7 @@ class TimestampTokenVerifierInteropTest {
         try {
             val fixture = createFixture(executable, directory)
             verifyAuthenticToken(fixture, executable, directory)
+            verifyConfiguredAuthorityTrust(fixture)
             verifyEssCertificateBinding(fixture)
             verifyTsaNameBinding(fixture)
             rejectWrongTrust(fixture)
@@ -162,6 +163,23 @@ class TimestampTokenVerifierInteropTest {
         assertThrows(IllegalStateException::class.java, verified::copyEncoding)
     }
 
+    private fun verifyConfiguredAuthorityTrust(fixture: TimestampFixture) {
+        val unverified = requestBoundToken(fixture.response)
+        val verified =
+            try {
+                TimestampTokenVerifier.verifyConfiguredAuthority(unverified)
+            } finally {
+                unverified.close()
+            }
+        try {
+            assertArrayEquals(fixture.signerCertificate, verified.copySignerCertificate())
+            assertArrayEquals(fixture.trustedCertificate, verified.copyTrustedCertificate())
+            assertEquals(TIMESTAMP_CHAIN_CERTIFICATE_COUNT, verified.verifiedCertificateCount)
+        } finally {
+            verified.close()
+        }
+    }
+
     private fun verifyEssCertificateBinding(fixture: TimestampFixture) {
         val attributes = signingCertificateAttributes(fixture.signerCertificate)
         try {
@@ -258,6 +276,9 @@ class TimestampTokenVerifierInteropTest {
                         token = unverified,
                         trustedCertificates = listOf(fixture.trustedCertificate),
                     ).close()
+            }
+            assertFailure(TimestampTokenVerificationFailure.INVALID_SIGNATURE) {
+                TimestampTokenVerifier.verifyConfiguredAuthority(unverified).close()
             }
         } finally {
             unverified.close()

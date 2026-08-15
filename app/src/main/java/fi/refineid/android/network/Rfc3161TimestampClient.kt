@@ -16,9 +16,15 @@ internal class TimestampAcquisitionException(
     val kind: TimestampAcquisitionFailure,
 ) : Exception(kind.name)
 
+internal enum class SigningTimestampTrust {
+    EXPLICIT_CERTIFICATES,
+    CONFIGURED_AUTHORITY,
+}
+
 /** Owned timestamp-authority trust and optional Basic credentials. */
 internal class SigningTimestampAuthority private constructor(
     val address: String,
+    val trust: SigningTimestampTrust,
     private val ownedTrustedCertificates: List<ByteArray>,
     private val credentials: SigningNetworkBasicCredentials?,
 ) : AutoCloseable {
@@ -49,7 +55,7 @@ internal class SigningTimestampAuthority private constructor(
     }
 
     override fun toString(): String =
-        "SigningTimestampAuthority(trustedCertificates=$trustedCertificateCount, " +
+        "SigningTimestampAuthority(trust=$trust, trustedCertificates=$trustedCertificateCount, " +
             "credentials=$hasCredentials, closed=$isClosed)"
 
     private fun requireOpen() {
@@ -65,21 +71,55 @@ internal class SigningTimestampAuthority private constructor(
             username: String? = null,
             password: CharArray? = null,
         ): SigningTimestampAuthority {
-            if (trustedCertificatesAreInvalid(trustedCertificates) || credentialsAreIncomplete(username, password)) {
+            if (
+                addressIsInvalid(address) ||
+                trustedCertificatesAreInvalid(trustedCertificates) ||
+                credentialsAreIncomplete(username, password)
+            ) {
                 throw IllegalArgumentException("invalid timestamp-authority configuration")
             }
-            val credentials =
-                if (username == null || password == null) {
-                    null
-                } else {
-                    SigningNetworkBasicCredentials.copyOf(username, password)
-                }
             return SigningTimestampAuthority(
                 address = address,
+                trust = SigningTimestampTrust.EXPLICIT_CERTIFICATES,
                 ownedTrustedCertificates = trustedCertificates.map(ByteArray::copyOf),
-                credentials = credentials,
+                credentials = credentials(username, password),
             )
         }
+
+        /** The holder-configured endpoint defines the exclusive token trust set. */
+        fun configured(
+            address: String,
+            username: String? = null,
+            password: CharArray? = null,
+        ): SigningTimestampAuthority {
+            if (addressIsInvalid(address) || credentialsAreIncomplete(username, password)) {
+                throw IllegalArgumentException("invalid timestamp-authority configuration")
+            }
+            return SigningTimestampAuthority(
+                address = address,
+                trust = SigningTimestampTrust.CONFIGURED_AUTHORITY,
+                ownedTrustedCertificates = emptyList(),
+                credentials = credentials(username, password),
+            )
+        }
+
+        private fun credentials(
+            username: String?,
+            password: CharArray?,
+        ): SigningNetworkBasicCredentials? =
+            if (username == null || password == null) {
+                null
+            } else {
+                SigningNetworkBasicCredentials.copyOf(username, password)
+            }
+
+        private fun addressIsInvalid(address: String): Boolean =
+            try {
+                SigningNetworkPolicy.httpUri(address, SigningNetworkEndpoint.AUTHORITY)
+                false
+            } catch (_: SigningNetworkException) {
+                true
+            }
 
         private fun trustedCertificatesAreInvalid(certificates: List<ByteArray>): Boolean =
             certificates.isEmpty() ||
@@ -132,11 +172,19 @@ internal class Rfc3161TimestampClient(
                     nonce = generatedNonce,
                 )
             return unverified.use {
-                trustedCertificates = authority.copyTrustedCertificates()
-                TimestampTokenVerifier.verify(
-                    token = unverified,
-                    trustedCertificates = checkNotNull(trustedCertificates),
-                )
+                when (authority.trust) {
+                    SigningTimestampTrust.EXPLICIT_CERTIFICATES -> {
+                        trustedCertificates = authority.copyTrustedCertificates()
+                        TimestampTokenVerifier.verify(
+                            token = unverified,
+                            trustedCertificates = checkNotNull(trustedCertificates),
+                        )
+                    }
+
+                    SigningTimestampTrust.CONFIGURED_AUTHORITY -> {
+                        TimestampTokenVerifier.verifyConfiguredAuthority(unverified)
+                    }
+                }
             }
         } finally {
             ownedDigest.fill(CLEARED_BYTE)
