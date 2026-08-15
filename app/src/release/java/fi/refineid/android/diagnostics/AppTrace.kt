@@ -17,9 +17,11 @@ import fi.refineid.android.core.NativeQualifiedSignResult
 import fi.refineid.android.core.QualifiedSigningAlgorithm
 import fi.refineid.android.document.QualifiedPdfArchivalResult
 import fi.refineid.android.document.QualifiedPdfArchivalStage
+import fi.refineid.android.document.QualifiedPdfPreparationResult
 import fi.refineid.android.document.QualifiedPdfSigningResult
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
+import fi.refineid.android.network.SigningTimestampAttemptOutcome
 import fi.refineid.android.usb.AuthenticationStatus
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
@@ -126,6 +128,13 @@ internal object AppTrace {
         result: QualifiedPdfSigningResult,
     ) = Unit
 
+    fun qualifiedPdfPreparationStarted(documentLength: Int): Long = 0L
+
+    fun qualifiedPdfPreparationCompleted(
+        startedAt: Long,
+        result: QualifiedPdfPreparationResult,
+    ) = Unit
+
     fun qualifiedPdfArchivalStarted(): Long = 0L
 
     fun qualifiedPdfArchivalStage(stage: QualifiedPdfArchivalStage) = Unit
@@ -134,6 +143,18 @@ internal object AppTrace {
         startedAt: Long,
         result: QualifiedPdfArchivalResult,
     ) = Unit
+
+    fun signingTimestampAttemptStarted(
+        authorityOrdinal: Int,
+        authorityCount: Int,
+    ) = Unit
+
+    fun signingTimestampAttemptCompleted(
+        authorityOrdinal: Int,
+        outcome: SigningTimestampAttemptOutcome,
+    ) = Unit
+
+    fun signingTimestampRetryScheduled(delaySeconds: Long) = Unit
 
     fun authenticationSignatureVerificationCompleted(
         inputMode: AuthenticationSigningInputMode,

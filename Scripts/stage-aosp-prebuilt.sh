@@ -16,9 +16,10 @@ readonly KEYCHAIN_BIND_PERMISSION='android:permission="com.android.keychain.perm
 readonly PROVIDER_INTERFACE_ACTION='android:name="com.android.keychain.external.IExternalKeyProviderService"'
 readonly BACKGROUND_ACTIVITY_PERMISSION='android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"'
 readonly INTERNET_PERMISSION="android.permission.INTERNET"
+readonly CLEARTEXT_DISABLED='android:usesCleartextTraffic="false"'
 
 Scripts/verify-aosp-provider-contract.sh
-./gradlew :app:verifyReleaseNoLogging
+./gradlew :app:verifyReleaseNoLogging :app:verifyReleaseNetworkIsolation
 
 [[ -f "$RELEASE_APK" ]] || {
   echo "release APK was not produced" >&2
@@ -43,6 +44,10 @@ done
 
 if grep -Fq "$INTERNET_PERMISSION" "$RELEASE_MERGED_MANIFEST"; then
   echo "release manifest must not request Internet access" >&2
+  exit 1
+fi
+if ! grep -Fq "$CLEARTEXT_DISABLED" "$RELEASE_MERGED_MANIFEST"; then
+  echo "release manifest must explicitly disable cleartext traffic" >&2
   exit 1
 fi
 

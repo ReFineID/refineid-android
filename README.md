@@ -62,8 +62,11 @@ instrumented development harness, but it is not the product boundary.
 - Injected synchronous PAdES-B-LTA completion in the fixed signature-timestamp,
   validation, DSS, and archive-timestamp order, with exact digest checks and
   clearing of all intermediate owners
-- Debug-only terse PDF choose/save/PIN2 harness; release stays hidden until the
-  trust configuration, retry policy, and off-main signing orchestration are wired
+- Debug-only terse PDF choose/save/PIN2 PAdES-B-LTA harness with a pinned HTTPS
+  authority, pinned signer trust, Apple-compatible retry, cancellation, and
+  off-main network work
+- Live card-free RFC 3161 acquisition verified on the Android 13 Pixel 4 under
+  the bundled offline timestamp root
 - Secure, debug-only on-device signing harness; no manual harness in release
 - Debug-only, origin-pinned WebView client-certificate harness backed by the
   retained smart-card session
@@ -139,7 +142,9 @@ The `check` task treats Kotlin compiler and Android Lint warnings as errors,
 runs Detekt and ktlint, tests and lints the Rust bridge with rustfmt and Clippy,
 runs ShellCheck, proves that the application and AOSP provider wire contracts
 match, builds the minimized release APK, and verifies that release bytecode
-contains no logging calls or diagnostic trace literals.
+contains no logging calls or diagnostic trace literals. It also verifies that
+the merged release manifest has no Internet permission and explicitly rejects
+cleartext traffic.
 
 ## Security
 

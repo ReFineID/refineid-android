@@ -163,6 +163,44 @@ class QualifiedPdfArchivalCompletionTest {
         )
     }
 
+    @Test
+    fun interruptionEscapesAfterClearingThePreparedCardMaterial() {
+        val events = mutableListOf<CompletionEvent>()
+        val cryptography = RecordingCryptography(events)
+        val preparedFixture = preparedFixture(cryptography)
+        var borrowedDigest: ByteArray? = null
+
+        assertThrows(InterruptedException::class.java) {
+            QualifiedPdfArchivalCompletion
+                .complete(
+                    prepared = preparedFixture.prepared,
+                    timestampSource =
+                        QualifiedPdfTimestampSource { digest ->
+                            borrowedDigest = digest
+                            throw InterruptedException()
+                        },
+                    validationSource =
+                        QualifiedPdfValidationSource { _, _ ->
+                            error("validation must not follow interruption")
+                        },
+                ).closeDocument()
+        }
+
+        assertEquals(
+            listOf(CompletionEvent.SIGNATURE_DIGEST),
+            events,
+        )
+        assertAllZero(checkNotNull(borrowedDigest))
+        assertAllZero(preparedFixture.attributes)
+        assertAllZero(preparedFixture.signature)
+        assertAllZero(preparedFixture.certificate)
+        assertAllZero(checkNotNull(cryptography.returnedSignatureDigest))
+        assertThrows(
+            IllegalStateException::class.java,
+            preparedFixture.prepared::copySignerCertificate,
+        )
+    }
+
     private fun preparedFixture(cryptography: QualifiedPdfCryptography): PreparedFixture {
         val attributes = SYNTHETIC_SIGNED_ATTRIBUTES.copyOf()
         val signatureBytes =
@@ -230,6 +268,12 @@ class QualifiedPdfArchivalCompletionTest {
 
     private fun assertAllZero(bytes: ByteArray) {
         assertTrue(bytes.all { byte -> byte == CLEARED_BYTE })
+    }
+
+    private fun QualifiedPdfArchivalResult.closeDocument() {
+        if (this is QualifiedPdfArchivalResult.Success) {
+            document.close()
+        }
     }
 
     private class RecordingCryptography(

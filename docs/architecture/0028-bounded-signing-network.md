@@ -86,12 +86,12 @@ identifier is stored in the repository or test reports.
 
 The existing authenticated timestamp and validation core now has a bounded
 live adapter, but it is not exposed by product UI or release orchestration.
-The release manifest still has no Internet permission. The debug manifest has
-Internet permission while the application-wide cleartext policy remains off,
-so HTTPS can be exercised first; authenticated HTTP certificate endpoints need
-an explicit Android cleartext decision before device integration.
+The release manifest still has no Internet permission. The debug manifest
+initially kept application-wide cleartext off so HTTPS could be exercised
+first. ADR 0030 now permits cleartext in the debug variant only, behind this
+transport's vetted certificate-endpoint policy; release cleartext and Internet
+access remain off.
 
-The next product step must provide approved signer and timestamp trust
-configuration, invoke both signing-network phases off the UI thread, define
-retry and cancellation behavior, and pass only verified capabilities into the
-existing PDF orchestration.
+ADR 0030 supplies pinned debug trust, retry, cancellation, and off-main
+orchestration. Product release still needs holder-managed authority
+configuration and a reviewed production revocation-transport policy.

@@ -18,9 +18,11 @@ import fi.refineid.android.core.NativeQualifiedSignResult
 import fi.refineid.android.core.QualifiedSigningAlgorithm
 import fi.refineid.android.document.QualifiedPdfArchivalResult
 import fi.refineid.android.document.QualifiedPdfArchivalStage
+import fi.refineid.android.document.QualifiedPdfPreparationResult
 import fi.refineid.android.document.QualifiedPdfSigningResult
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
+import fi.refineid.android.network.SigningTimestampAttemptOutcome
 import fi.refineid.android.usb.AuthenticationStatus
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
@@ -314,6 +316,31 @@ internal object AppTrace {
         )
     }
 
+    fun qualifiedPdfPreparationStarted(documentLength: Int): Long =
+        System.nanoTime().also {
+            debug("qualified-pdf:preparation-started document-length=" + documentLength)
+        }
+
+    fun qualifiedPdfPreparationCompleted(
+        startedAt: Long,
+        result: QualifiedPdfPreparationResult,
+    ) {
+        val outcome =
+            when (result) {
+                is QualifiedPdfPreparationResult.Success -> {
+                    "success document-length=" + result.prepared.documentLength
+                }
+
+                is QualifiedPdfPreparationResult.Failure -> {
+                    "failure kind=" + result.kind
+                }
+            }
+        debug(
+            "qualified-pdf:preparation-completed " + outcome +
+                " duration-us=" + elapsedMicroseconds(startedAt),
+        )
+    }
+
     fun qualifiedPdfArchivalStarted(): Long =
         System.nanoTime().also {
             debug("qualified-pdf:archival-started")
@@ -341,6 +368,30 @@ internal object AppTrace {
             "qualified-pdf:archival-completed " + outcome +
                 " duration-us=" + elapsedMicroseconds(startedAt),
         )
+    }
+
+    fun signingTimestampAttemptStarted(
+        authorityOrdinal: Int,
+        authorityCount: Int,
+    ) {
+        debug(
+            "signing-network:timestamp-attempt-started authority=" + authorityOrdinal +
+                " of=" + authorityCount,
+        )
+    }
+
+    fun signingTimestampAttemptCompleted(
+        authorityOrdinal: Int,
+        outcome: SigningTimestampAttemptOutcome,
+    ) {
+        debug(
+            "signing-network:timestamp-attempt-completed authority=" + authorityOrdinal +
+                " outcome=" + outcome,
+        )
+    }
+
+    fun signingTimestampRetryScheduled(delaySeconds: Long) {
+        debug("signing-network:timestamp-retry-scheduled delay-seconds=" + delaySeconds)
     }
 
     fun documentInputStarted() {

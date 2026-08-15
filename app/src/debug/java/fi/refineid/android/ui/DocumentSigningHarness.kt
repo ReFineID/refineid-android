@@ -17,9 +17,14 @@ import fi.refineid.android.core.QualifiedCardService
 import fi.refineid.android.core.QualifiedSignFailure
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.document.PdfSignatureClaim
+import fi.refineid.android.document.PreparedQualifiedPdfSignature
+import fi.refineid.android.document.QualifiedPdfArchivalCompletion
+import fi.refineid.android.document.QualifiedPdfArchivalFailure
+import fi.refineid.android.document.QualifiedPdfArchivalResult
+import fi.refineid.android.document.QualifiedPdfPreparationResult
 import fi.refineid.android.document.QualifiedPdfSigningCoordinator
 import fi.refineid.android.document.QualifiedPdfSigningFailure
-import fi.refineid.android.document.QualifiedPdfSigningResult
+import fi.refineid.android.document.SignedPdfDocument
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
 import fi.refineid.android.usb.UsbReaderSnapshot
@@ -27,12 +32,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.time.Instant
 
-/** Debug-only PAdES-B-B file-picker harness; archival completion is not implied. */
+/** Debug-only PAdES-B-LTA file-picker harness. */
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun DocumentSigningHarness(
@@ -54,6 +61,7 @@ internal fun DocumentSigningHarness(
                 contentResolver = context.contentResolver,
                 cardService = cardService,
                 scope = scope,
+                archivalSources = DebugDocumentSigningSources.create(context.applicationContext),
             )
         }
     DisposableEffect(session) {
@@ -84,11 +92,13 @@ private class DocumentSigningHarnessSession(
     private val contentResolver: ContentResolver,
     cardService: QualifiedCardService,
     private val scope: CoroutineScope,
+    private val archivalSources: DebugDocumentSigningSources,
 ) : AutoCloseable {
     private val coordinator = QualifiedPdfSigningCoordinator(cardService)
     private var selected by mutableStateOf<SelectedPdfDocument?>(null)
     private var destination by mutableStateOf<Uri?>(null)
     private var isClosed = false
+    private var archivalJob: Job? = null
 
     var status by mutableStateOf(DocumentSigningStatus.IDLE)
         private set
@@ -171,7 +181,7 @@ private class DocumentSigningHarnessSession(
         status = DocumentSigningStatus.SIGNING
         try {
             input.useBytes { bytes ->
-                coordinator.sign(
+                coordinator.prepare(
                     document = bytes,
                     claim =
                         PdfSignatureClaim(
@@ -180,7 +190,7 @@ private class DocumentSigningHarnessSession(
                             location = null,
                         ),
                     pin2 = pin2,
-                    onResult = { result -> signingCompleted(result, output) },
+                    onResult = { result -> preparationCompleted(result, output) },
                 )
             }
         } catch (_: RuntimeException) {
@@ -197,39 +207,95 @@ private class DocumentSigningHarnessSession(
         selected?.close()
         selected = null
         destination = null
+        val running = archivalJob
+        running?.cancel()
+        if (running == null || running.isCompleted) {
+            archivalSources.close()
+        } else {
+            running.invokeOnCompletion { archivalSources.close() }
+        }
     }
 
-    private fun signingCompleted(
-        result: QualifiedPdfSigningResult,
+    private fun preparationCompleted(
+        result: QualifiedPdfPreparationResult,
+        output: Uri,
+    ) {
+        if (isClosed) {
+            result.closePreparedSignature()
+            return
+        }
+        when (result) {
+            is QualifiedPdfPreparationResult.Failure -> {
+                status = result.kind.status()
+            }
+
+            is QualifiedPdfPreparationResult.Success -> {
+                completeArchival(result.prepared, output)
+            }
+        }
+    }
+
+    private fun completeArchival(
+        prepared: PreparedQualifiedPdfSignature,
+        output: Uri,
+    ) {
+        val running =
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                try {
+                    val result =
+                        runInterruptible(Dispatchers.IO) {
+                            QualifiedPdfArchivalCompletion.complete(
+                                prepared = prepared,
+                                timestampSource = archivalSources.timestamp,
+                                validationSource = archivalSources.validation,
+                            )
+                        }
+                    archivalCompleted(result, output)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (interrupted: InterruptedException) {
+                    throw CancellationException("archival signing was interrupted").also { cancellation ->
+                        cancellation.initCause(interrupted)
+                    }
+                } catch (_: RuntimeException) {
+                    if (!isClosed) {
+                        status = DocumentSigningStatus.ERROR
+                    }
+                }
+            }
+        archivalJob = running
+        running.invokeOnCompletion { prepared.close() }
+    }
+
+    private suspend fun archivalCompleted(
+        result: QualifiedPdfArchivalResult,
         output: Uri,
     ) {
         if (isClosed) {
             result.closeDocument()
             return
         }
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            when (result) {
-                is QualifiedPdfSigningResult.Failure -> {
-                    status = result.kind.status()
-                }
+        when (result) {
+            is QualifiedPdfArchivalResult.Failure -> {
+                status = result.kind.status()
+            }
 
-                is QualifiedPdfSigningResult.Success -> {
-                    status = DocumentSigningStatus.SAVING
-                    val documentLength = result.document.length
-                    val saved = save(result, output)
-                    AppTrace.documentOutputCompleted(
-                        isSuccessful = saved,
-                        documentLength = documentLength,
-                    )
-                    if (!isClosed) {
-                        if (saved) {
-                            selected?.close()
-                            selected = null
-                            destination = null
-                            status = DocumentSigningStatus.SIGNED
-                        } else {
-                            status = DocumentSigningStatus.ERROR
-                        }
+            is QualifiedPdfArchivalResult.Success -> {
+                status = DocumentSigningStatus.SAVING
+                val documentLength = result.document.length
+                val saved = save(result.document, output)
+                AppTrace.documentOutputCompleted(
+                    isSuccessful = saved,
+                    documentLength = documentLength,
+                )
+                if (!isClosed) {
+                    if (saved) {
+                        selected?.close()
+                        selected = null
+                        destination = null
+                        status = DocumentSigningStatus.SIGNED
+                    } else {
+                        status = DocumentSigningStatus.ERROR
                     }
                 }
             }
@@ -237,13 +303,13 @@ private class DocumentSigningHarnessSession(
     }
 
     private suspend fun save(
-        result: QualifiedPdfSigningResult.Success,
+        document: SignedPdfDocument,
         output: Uri,
     ): Boolean =
         try {
             withContext(Dispatchers.IO) {
                 contentResolver.openOutputStream(output, WRITE_MODE)?.use { stream ->
-                    result.document.useBytes(stream::write)
+                    document.useBytes(stream::write)
                     stream.flush()
                 } ?: throw IOException("signed PDF destination cannot be opened")
             }
@@ -257,7 +323,7 @@ private class DocumentSigningHarnessSession(
         } catch (_: RuntimeException) {
             false
         } finally {
-            result.document.close()
+            document.close()
         }
 
     private fun isWorking(): Boolean =
@@ -265,11 +331,30 @@ private class DocumentSigningHarnessSession(
             status == DocumentSigningStatus.SIGNING ||
             status == DocumentSigningStatus.SAVING
 
-    private fun QualifiedPdfSigningResult.closeDocument() {
-        if (this is QualifiedPdfSigningResult.Success) {
+    private fun QualifiedPdfPreparationResult.closePreparedSignature() {
+        if (this is QualifiedPdfPreparationResult.Success) {
+            prepared.close()
+        }
+    }
+
+    private fun QualifiedPdfArchivalResult.closeDocument() {
+        if (this is QualifiedPdfArchivalResult.Success) {
             document.close()
         }
     }
+
+    private fun QualifiedPdfArchivalFailure.status(): DocumentSigningStatus =
+        when (this) {
+            is QualifiedPdfArchivalFailure.Timestamp,
+            QualifiedPdfArchivalFailure.ValidationUnavailable,
+            -> DocumentSigningStatus.UNAVAILABLE
+
+            is QualifiedPdfArchivalFailure.Cms,
+            is QualifiedPdfArchivalFailure.Document,
+            is QualifiedPdfArchivalFailure.Validation,
+            QualifiedPdfArchivalFailure.InternalError,
+            -> DocumentSigningStatus.ERROR
+        }
 
     private fun QualifiedPdfSigningFailure.status(): DocumentSigningStatus =
         when (this) {

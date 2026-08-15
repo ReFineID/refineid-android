@@ -99,6 +99,11 @@ internal class QualifiedPdfSigningCoordinator(
         pin2: Pin2Submission,
         onResult: (QualifiedPdfPreparationResult) -> Unit,
     ) {
+        val startedAt = AppTrace.qualifiedPdfPreparationStarted(document.size)
+        val tracedResult: (QualifiedPdfPreparationResult) -> Unit = { result ->
+            AppTrace.qualifiedPdfPreparationCompleted(startedAt = startedAt, result = result)
+            onResult(result)
+        }
         val placeholder =
             try {
                 PdfIncrementalSigner.prepare(
@@ -107,7 +112,7 @@ internal class QualifiedPdfSigningCoordinator(
                 )
             } catch (failure: PdfSigningException) {
                 pin2.close()
-                onResult(
+                tracedResult(
                     QualifiedPdfPreparationResult.Failure(
                         QualifiedPdfSigningFailure.Document(failure.kind),
                     ),
@@ -115,7 +120,7 @@ internal class QualifiedPdfSigningCoordinator(
                 return
             } catch (_: RuntimeException) {
                 pin2.close()
-                onResult(internalPreparationFailure())
+                tracedResult(internalPreparationFailure())
                 return
             }
         cardService.requestQualifiedCertificate { certificateResult ->
@@ -123,7 +128,7 @@ internal class QualifiedPdfSigningCoordinator(
                 result = certificateResult,
                 placeholder = placeholder,
                 pin2 = pin2,
-                onResult = onResult,
+                onResult = tracedResult,
             )
         }
     }
