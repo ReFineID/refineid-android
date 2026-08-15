@@ -48,6 +48,16 @@ internal class CertificateFacts private constructor(
         }
     }
 
+    fun <T> useSubjectName(operation: (ByteArray) -> T): T {
+        requireOpen()
+        val subjectName = identity.subjectName.copyOf()
+        return try {
+            operation(subjectName)
+        } finally {
+            subjectName.fill(ZERO_BYTE)
+        }
+    }
+
     internal fun issuerNameMatches(issuer: CertificateFacts): Boolean {
         requireOpen()
         issuer.requireOpen()
