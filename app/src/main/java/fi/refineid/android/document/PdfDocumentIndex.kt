@@ -76,28 +76,19 @@ internal class PdfDocumentIndex private constructor(
         fun integer(
             key: String,
             dictionary: String,
-        ): Int? = dictionaryDecimalToken(key, dictionary)?.first
+        ): Int? {
+            val syntax = dictionarySyntaxOrNull(dictionary) ?: return null
+            val entry = syntax.entry(dictionaryKeyName(key) ?: return null) ?: return null
+            return PdfValueParser.unsignedInteger(syntax.value(entry))
+        }
 
         fun reference(
             key: String,
             dictionary: String,
         ): Reference? {
-            val token = dictionaryDecimalToken(key, dictionary) ?: return null
-            val rest = dictionary.substring(token.second).dropWhile(::isPdfWhitespace)
-            val generationText = rest.takeWhile(::isAsciiDigit)
-            val generation = generationText.toIntOrNull() ?: return null
-            if (generation !in MINIMUM_GENERATION..MAXIMUM_GENERATION) {
-                return null
-            }
-            val afterGeneration = rest.drop(generationText.length).dropWhile(::isPdfWhitespace)
-            val afterMarker = afterGeneration.getOrNull(REFERENCE_MARKER.length)
-            if (
-                !afterGeneration.startsWith(REFERENCE_MARKER) ||
-                (afterMarker != null && !isDictionaryBoundary(afterMarker))
-            ) {
-                return null
-            }
-            return Reference(number = token.first, generation = generation)
+            val syntax = dictionarySyntaxOrNull(dictionary) ?: return null
+            val entry = syntax.entry(dictionaryKeyName(key) ?: return null) ?: return null
+            return PdfValueParser.reference(syntax.value(entry))
         }
 
         fun parse(document: ByteArray): PdfDocumentIndex {
@@ -129,17 +120,18 @@ internal class PdfDocumentIndex private constructor(
                         collected[record.number] = record.location
                     }
                 }
-                val previous = integer(PdfFormat.PREVIOUS_XREF_KEY, section.trailer)
-                if (
-                    dictionaryValueStart(PdfFormat.PREVIOUS_XREF_KEY, section.trailer) != null &&
-                    previous == null
-                ) {
-                    throw unreadable()
-                }
-                offset = previous
+                val syntax = PdfDictionarySyntax(section.trailer)
+                val previousName =
+                    dictionaryKeyName(PdfFormat.PREVIOUS_XREF_KEY) ?: throw unreadable()
+                offset =
+                    syntax.entry(previousName)?.let { entry ->
+                        PdfValueParser.unsignedInteger(syntax.value(entry)) ?: throw unreadable()
+                    }
             }
             val newest = newestTrailer ?: throw unreadable()
-            if (dictionaryValueStart(PdfFormat.ENCRYPT_KEY, newest) != null) {
+            val newestSyntax = PdfDictionarySyntax(newest)
+            val encryptName = dictionaryKeyName(PdfFormat.ENCRYPT_KEY) ?: throw unreadable()
+            if (newestSyntax.entry(encryptName) != null) {
                 throw failure(PdfSigningFailure.ENCRYPTED)
             }
             return PdfDocumentIndex(
@@ -149,53 +141,18 @@ internal class PdfDocumentIndex private constructor(
             )
         }
 
-        private fun dictionaryDecimalToken(
-            key: String,
-            dictionary: String,
-        ): Pair<Int, Int>? {
-            var cursor = dictionaryValueStart(key, dictionary) ?: return null
-            val digitsStart = cursor
-            while (cursor < dictionary.length && isAsciiDigit(dictionary[cursor])) {
-                cursor += TEXT_OFFSET_STEP
+        private fun dictionarySyntaxOrNull(dictionary: String): PdfDictionarySyntax? =
+            try {
+                PdfDictionarySyntax(dictionary)
+            } catch (_: PdfSigningException) {
+                null
             }
-            if (cursor == digitsStart) {
-                return null
-            }
-            if (cursor < dictionary.length && !isDictionaryBoundary(dictionary[cursor])) {
-                return null
-            }
-            val value = dictionary.substring(digitsStart, cursor).toIntOrNull() ?: return null
-            return value to cursor
-        }
 
-        private fun dictionaryValueStart(
-            key: String,
-            dictionary: String,
-        ): Int? {
-            var searchFrom = FIRST_TEXT_OFFSET
-            while (searchFrom < dictionary.length) {
-                val keyStart = dictionary.indexOf(key, startIndex = searchFrom)
-                if (keyStart == MISSING_INDEX) {
-                    return null
-                }
-                var cursor = keyStart + key.length
-                if (cursor < dictionary.length && isDictionaryBoundary(dictionary[cursor])) {
-                    while (cursor < dictionary.length && isPdfWhitespace(dictionary[cursor])) {
-                        cursor += TEXT_OFFSET_STEP
-                    }
-                    return cursor
-                }
-                searchFrom = keyStart + TEXT_OFFSET_STEP
-            }
-            return null
-        }
-
-        private fun isDictionaryBoundary(character: Char): Boolean =
-            isPdfWhitespace(character) || character in PDF_DELIMITER_CHARACTERS
-
-        private fun isPdfWhitespace(character: Char): Boolean = character in PDF_WHITESPACE_CHARACTERS
-
-        private fun isAsciiDigit(character: Char): Boolean = character in ASCII_ZERO..ASCII_NINE
+        private fun dictionaryKeyName(key: String): String? =
+            key
+                .takeIf { candidate -> candidate.startsWith(NAME_PREFIX) }
+                ?.drop(NAME_PREFIX.length)
+                ?.takeIf(String::isNotEmpty)
 
         private fun startXref(bytes: PdfBytes): Int? {
             val found = bytes.lastRange(PdfFormat.START_XREF_KEYWORD) ?: return null
@@ -230,6 +187,7 @@ internal class PdfDocumentIndex private constructor(
             val trailer =
                 bytes.balancedDictionary(trailerRange.endExclusive)
                     ?: throw unreadable()
+            PdfDictionarySyntax(trailer.first)
             return Section(records = records, trailer = trailer.first)
         }
 
@@ -323,15 +281,8 @@ internal class PdfDocumentIndex private constructor(
 
         private fun unreadable(): PdfSigningException = failure(PdfSigningFailure.STRUCTURE_UNREADABLE)
 
-        private const val REFERENCE_MARKER = "R"
+        private const val NAME_PREFIX = "/"
         private const val WHITESPACE_PATTERN = "[\\u0000\\u0009\\u000A\\u000C\\u000D\\u0020]+"
-        private const val PDF_WHITESPACE_CHARACTERS = "\u0000\u0009\u000A\u000C\u000D\u0020"
-        private const val PDF_DELIMITER_CHARACTERS = "()<>[]{}/%"
-        private const val ASCII_ZERO = '0'
-        private const val ASCII_NINE = '9'
-        private const val MISSING_INDEX = -1
-        private const val FIRST_TEXT_OFFSET = 0
-        private const val TEXT_OFFSET_STEP = 1
         private const val FIRST_BYTE_OFFSET = 0
         private const val INITIAL_CHAIN_DEPTH = 0
         private const val CHAIN_DEPTH_STEP = 1
