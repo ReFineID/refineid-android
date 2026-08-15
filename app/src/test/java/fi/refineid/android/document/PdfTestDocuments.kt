@@ -38,6 +38,23 @@ internal object PdfTestDocuments {
                 ),
         )
 
+    fun classicWithExtraObjects(
+        catalog: String,
+        extraObjects: Map<Int, String>,
+        trailerExtra: String = EMPTY_TEXT,
+    ): Classic {
+        require(extraObjects.keys.none(REQUIRED_OBJECT_NUMBERS::contains))
+        return classic(
+            objects =
+                listOf(
+                    ObjectDefinition(CATALOG_OBJECT_NUMBER, catalog),
+                    ObjectDefinition(PAGE_TREE_OBJECT_NUMBER, DEFAULT_PAGE_TREE),
+                    ObjectDefinition(PAGE_OBJECT_NUMBER, DEFAULT_PAGE),
+                ) + extraObjects.map { (number, body) -> ObjectDefinition(number, body) },
+            trailerExtra = trailerExtra,
+        )
+    }
+
     private fun classic(
         objects: List<ObjectDefinition>,
         lineEnding: String = LINE_FEED,
@@ -120,4 +137,10 @@ internal object PdfTestDocuments {
     private const val OBJECT_COUNT_OFFSET = 1
     private const val FREE_XREF_ENTRY = "0000000000 65535 f "
     private const val IN_USE_XREF_ENTRY_FORMAT = "%010d 00000 n "
+    private val REQUIRED_OBJECT_NUMBERS =
+        setOf(
+            CATALOG_OBJECT_NUMBER,
+            PAGE_TREE_OBJECT_NUMBER,
+            PAGE_OBJECT_NUMBER,
+        )
 }

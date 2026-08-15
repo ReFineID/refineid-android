@@ -56,5 +56,6 @@ temporary directory and are deleted afterward.
 
 The document layer can now construct a cryptographically bound PAdES-B-T stage
 without accepting arbitrary ASN.1 from callers. Network acquisition,
-revocation evidence, DSS construction, a document timestamp, archive
-validation, and user-facing orchestration remain separate work.
+revocation evidence, a document timestamp, archive validation, and user-facing
+orchestration remain separate work. ADR 0022 provides the DSS carrier but does
+not claim LT until its material has passed the later validation collector.

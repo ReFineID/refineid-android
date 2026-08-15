@@ -10,6 +10,8 @@ internal enum class PdfSigningFailure {
     SIGNATURE_CLAIM_MALFORMED,
     SIGNATURE_TOO_LARGE,
     STRUCTURE_UNREADABLE,
+    VALIDATION_MATERIAL_MALFORMED,
+    VALIDATION_MATERIAL_UNAVAILABLE,
 }
 
 internal class PdfSigningException(

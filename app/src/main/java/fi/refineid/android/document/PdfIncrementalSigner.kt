@@ -169,7 +169,7 @@ internal object PdfIncrementalSigner {
         body: String,
     ): String = "${reference.encodedObjectHeader()}$body\n${PdfFormat.END_OBJECT_KEYWORD}\n"
 
-    private fun crossReferenceSection(
+    internal fun crossReferenceSection(
         offsets: Map<PdfDocumentIndex.Reference, Int>,
         size: Int,
         root: PdfDocumentIndex.Reference,

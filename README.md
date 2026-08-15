@@ -45,6 +45,8 @@ instrumented development harness, but it is not the product boundary.
   verification before promotion to an owned verified-token capability
 - PAdES-B-T CMS assembly that binds each verified token to the exact stored
   signature value and emits canonical, sorted, deduplicated unsigned attributes
+- Bounded, byte-preserving PDF DSS revisions with deduplicated new evidence and
+  fail-closed retention of earlier certificate, OCSP, CRL, VRI, and extension data
 - Debug-only terse PDF choose/save/PIN2 harness; release stays hidden until the
   complete validation-evidence and archive stages reach PAdES-B-LTA
 - Secure, debug-only on-device signing harness; no manual harness in release
