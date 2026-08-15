@@ -47,6 +47,8 @@ instrumented development harness, but it is not the product boundary.
   signature value and emits canonical, sorted, deduplicated unsigned attributes
 - Bounded, byte-preserving PDF DSS revisions with deduplicated new evidence and
   fail-closed retention of earlier certificate, OCSP, CRL, VRI, and extension data
+- Exact DER certificate facts, direct-issuer checks, nonce-bound authenticated
+  OCSP responses, and complete authenticated CRLs for validation evidence
 - Debug-only terse PDF choose/save/PIN2 harness; release stays hidden until the
   complete validation-evidence and archive stages reach PAdES-B-LTA
 - Secure, debug-only on-device signing harness; no manual harness in release

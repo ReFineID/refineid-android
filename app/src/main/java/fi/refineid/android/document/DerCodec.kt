@@ -350,6 +350,7 @@ internal object DerValues {
     const val TAG_OCTET_STRING = 0x04
     const val TAG_NULL = 0x05
     const val TAG_OBJECT_IDENTIFIER = 0x06
+    const val TAG_ENUMERATED = 0x0A
     const val TAG_UTF8_STRING = 0x0C
     const val TAG_GENERALIZED_TIME = 0x18
     const val TAG_SEQUENCE = 0x30
