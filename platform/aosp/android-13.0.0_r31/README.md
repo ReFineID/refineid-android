@@ -3,9 +3,11 @@
 This directory carries the ReFineID AOSP patch series for the Pixel 4 build
 `TP1A.221005.002.B2`, which maps to the AOSP tag `android-13.0.0_r31`.
 
-The series currently contains the compatibility-only first step from ADR 0012.
-It adds a hidden typed private-key descriptor while preserving the existing
-Keystore2 grant path. It does not yet expose an external card key.
+The series currently contains the first two compatibility steps from ADR 0012.
+They add a hidden typed private-key descriptor and an exact-digest signature
+contract while preserving the existing Keystore2 grant path. Until provider
+integration lands, KeyChain rejects every external signing request with a
+coarse unavailable result. The series does not yet expose an external card key.
 
 ## Upstream bases
 
@@ -20,15 +22,17 @@ existing Binder transaction numbers remain unchanged.
 
 ## Current verification
 
-- Both patches pass `git apply --check` against their exact upstream bases.
+- Both project patch sequences pass `git apply --check` in filename order from
+  their exact upstream bases.
 - The AIDL interface generates with Build Tools 36; all new warnings are
   errors. The only suppressed error is the pre-existing Android 13
   interface-wide missing-permission-annotation warning.
 - The descriptor and its test compile as Java 17 with warnings treated as
   errors, excluding the deprecation warning introduced by the newer local
   AndroidX test runner.
-- Descriptor parcel round trips, defensive copies, and sanitized string forms
-  pass on the physical Android 13 Pixel 4 using synthetic values only.
+- Descriptor and signature-contract parcel round trips, defensive copies,
+  close behavior, algorithm mappings, coarse failures, and sanitized string
+  forms pass on the physical Android 13 Pixel 4 using synthetic values only.
 - The framework and KeyChain diffs pass Gitleaks.
 
 The patch series has not yet passed a Soong platform build. Android 11 and
