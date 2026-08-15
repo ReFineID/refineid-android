@@ -1,5 +1,6 @@
 package fi.refineid.android.keychain
 
+import fi.refineid.android.core.AuthenticationIssuerCertificateSource
 import fi.refineid.android.core.NativeCardKeyProfile
 import fi.refineid.android.diagnostics.AppTrace
 import java.util.concurrent.ScheduledExecutorService
@@ -13,6 +14,7 @@ import kotlin.concurrent.withLock
 internal class ReFineIdExternalKeyProviderBackend(
     private val cardSession: ExternalKeyCardSession,
     private val signingCoordinator: ExternalKeySigningCoordinator,
+    private val issuerCertificateSource: AuthenticationIssuerCertificateSource,
 ) : ExternalKeyProviderBackend,
     AutoCloseable {
     private val identityLock = ReentrantLock(FAIR_IDENTITY_LOCK)
@@ -25,14 +27,21 @@ internal class ReFineIdExternalKeyProviderBackend(
                 val identity = refreshCurrentIdentityLocked() ?: return@withLock null
                 identity.use { currentIdentity ->
                     val leafCertificate = currentIdentity.certificate.copyDer()
+                    val issuerCertificate = copyIssuerCertificate(leafCertificate)
                     try {
+                        if (issuerCertificate == null) {
+                            signingCoordinator.updateProviderGeneration(null)
+                            return@withLock null
+                        }
+                        signingCoordinator.updateProviderGeneration(currentIdentity.providerGeneration)
                         ExternalKeyIdentitySnapshot.create(
                             providerGeneration = currentIdentity.providerGeneration,
                             leafCertificate = leafCertificate,
-                            caCertificates = null,
+                            caCertificates = issuerCertificate,
                         )
                     } finally {
                         leafCertificate.fill(CLEARED_BYTE)
+                        issuerCertificate?.fill(CLEARED_BYTE)
                     }
                 }
             }
@@ -52,6 +61,11 @@ internal class ReFineIdExternalKeyProviderBackend(
             identityLock.withLock {
                 val identity = refreshCurrentIdentityLocked() ?: return@withLock null
                 identity.use { currentIdentity ->
+                    if (!hasCompleteCertificateChain(currentIdentity)) {
+                        signingCoordinator.updateProviderGeneration(null)
+                        return@withLock null
+                    }
+                    signingCoordinator.updateProviderGeneration(currentIdentity.providerGeneration)
                     ActiveIdentityMetadata(
                         providerGeneration = currentIdentity.providerGeneration,
                         keyProfile = currentIdentity.certificate.keyProfile,
@@ -77,11 +91,14 @@ internal class ReFineIdExternalKeyProviderBackend(
                 identity.use { currentIdentity ->
                     val currentGeneration = currentIdentity.providerGeneration
                     clearSuppressionForNewGenerationLocked(currentGeneration)
+                    val isPublishable =
+                        currentIdentity.certificate.keyProfile.isSupportedExternalKeyProfile() &&
+                            hasCompleteCertificateChain(currentIdentity)
                     if (
-                        !currentIdentity.certificate.keyProfile.isSupportedExternalKeyProfile() ||
+                        !isPublishable ||
                         currentGeneration != providerGeneration
                     ) {
-                        updateCoordinatorForIdentityLocked(currentIdentity)
+                        updateCoordinatorForIdentityLocked(currentIdentity, isPublishable)
                         return@withLock false
                     }
                     suppressedGeneration = currentGeneration
@@ -131,7 +148,6 @@ internal class ReFineIdExternalKeyProviderBackend(
             identity.close()
             return null
         }
-        signingCoordinator.updateProviderGeneration(identity.providerGeneration)
         return identity
     }
 
@@ -154,13 +170,42 @@ internal class ReFineIdExternalKeyProviderBackend(
         }
     }
 
-    private fun updateCoordinatorForIdentityLocked(identity: ExternalKeyCardIdentity) {
+    private fun updateCoordinatorForIdentityLocked(
+        identity: ExternalKeyCardIdentity,
+        isPublishable: Boolean,
+    ) {
         val availableGeneration =
             identity.providerGeneration.takeIf {
-                suppressedGeneration != identity.providerGeneration &&
+                isPublishable &&
+                    suppressedGeneration != identity.providerGeneration &&
                     identity.certificate.keyProfile.isSupportedExternalKeyProfile()
             }
         signingCoordinator.updateProviderGeneration(availableGeneration)
+    }
+
+    private fun hasCompleteCertificateChain(identity: ExternalKeyCardIdentity): Boolean {
+        val leafCertificate = identity.certificate.copyDer()
+        val issuerCertificate = copyIssuerCertificate(leafCertificate)
+        return try {
+            issuerCertificate != null
+        } finally {
+            leafCertificate.fill(CLEARED_BYTE)
+            issuerCertificate?.fill(CLEARED_BYTE)
+        }
+    }
+
+    private fun copyIssuerCertificate(leafCertificate: ByteArray): ByteArray? {
+        val issuerCertificate =
+            try {
+                issuerCertificateSource.copyIssuerCertificate(leafCertificate)
+            } catch (_: RuntimeException) {
+                null
+            } ?: return null
+        if (issuerCertificate.isEmpty()) {
+            issuerCertificate.fill(CLEARED_BYTE)
+            return null
+        }
+        return issuerCertificate
     }
 
     private data class ActiveIdentityMetadata(
@@ -178,6 +223,7 @@ internal class ReFineIdExternalKeyProviderBackend(
 internal class ExternalKeyProviderRuntime(
     cardSession: ExternalKeyCardSession,
     pinAuthorizer: ExternalKeyPinAuthorizer,
+    issuerCertificateSource: AuthenticationIssuerCertificateSource,
     private val replayExecutor: ScheduledExecutorService = createReplayExecutor(),
 ) : AutoCloseable {
     private val isClosed = AtomicBoolean(false)
@@ -196,6 +242,7 @@ internal class ExternalKeyProviderRuntime(
         ReFineIdExternalKeyProviderBackend(
             cardSession = cardSession,
             signingCoordinator = signingCoordinator,
+            issuerCertificateSource = issuerCertificateSource,
         )
 
     val backend: ExternalKeyProviderBackend

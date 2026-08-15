@@ -1,6 +1,8 @@
 package fi.refineid.android
 
 import android.app.Application
+import fi.refineid.android.browser.BundledIssuerCertificates
+import fi.refineid.android.core.AuthenticationIssuerCertificateStore
 import fi.refineid.android.keychain.AndroidExternalKeyCallerLabelResolver
 import fi.refineid.android.keychain.ExternalKeyPinPromptBroker
 import fi.refineid.android.keychain.ExternalKeyProviderRuntime
@@ -26,6 +28,10 @@ class ReFineIdApplication : Application() {
             ExternalKeyProviderRuntime(
                 cardSession = readerController.externalKeyCardSession,
                 pinAuthorizer = pinPromptBroker,
+                issuerCertificateSource =
+                    AuthenticationIssuerCertificateStore(
+                        BundledIssuerCertificates.load(this),
+                    ),
             )
         readerController.start()
     }

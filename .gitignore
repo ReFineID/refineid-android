@@ -60,4 +60,4 @@ traces/
 !app/src/test/resources/synthetic/**
 
 # Public, fingerprint-pinned issuer certificates may be committed.
-!app/src/debug/res/raw/fineid_intermediate_*.pem
+!app/src/main/res/raw/fineid_intermediate_*.pem

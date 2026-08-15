@@ -69,8 +69,11 @@ instrumented development harness, but it is not the product boundary.
   caller-labelled PIN prompt, one-result replay, and coarse failures
 - Product priv-app import and a dedicated non-network SELinux app domain for
   the Android 13 Pixel 4 image
-- Fingerprint-pinned FINEID intermediate set, present only in debug builds
+- Fingerprint-pinned public FINEID intermediates shared by the diagnostic and
+  system-KeyChain paths, with fail-closed direct-issuer verification
 - Live diagnostic handshake verified through Chromium's holder-PIN request
+- Live credential-free publication of the card leaf and its verified issuing
+  intermediate through the external-key provider
 - Live credential-free qualified-certificate and PIN2 preflight checks
 - No embedded browser, Internet permission, or logging in the release build
 - Compose UI Test v2 and UI Automator 2.4 instrumentation on a physical device

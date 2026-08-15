@@ -69,7 +69,9 @@ SELinux policy.
 The provider exposes active public identities. KeyChain assigns a stable,
 non-personal alias in its own namespace; the alias must not contain a card
 serial, certificate subject, identity code, reader model, or device detail.
-The leaf certificate and chain are read dynamically from the active card.
+The leaf certificate is read dynamically from the active card. Its issuing
+certificate comes from the fingerprint-pinned public FINEID set only after an
+exact direct-issuer check; ADR 0026 defines that fail-closed boundary.
 
 `KeyChainActivity` unions active external aliases with AndroidKeyStore aliases
 before applying the existing key-type, issuer, user-selectable, and policy

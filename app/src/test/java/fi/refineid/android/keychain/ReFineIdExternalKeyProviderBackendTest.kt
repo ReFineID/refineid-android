@@ -1,5 +1,6 @@
 package fi.refineid.android.keychain
 
+import fi.refineid.android.core.AuthenticationIssuerCertificateSource
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.NativeAuthenticationCertificate
@@ -22,7 +23,7 @@ class ReFineIdExternalKeyProviderBackendTest {
             checkNotNull(identity)
             assertEquals(CURRENT_PROVIDER_GENERATION, identity.providerGeneration.value)
             assertArrayEquals(SYNTHETIC_CERTIFICATE, identity.copyLeafCertificate())
-            assertNull(identity.copyCaCertificates())
+            assertArrayEquals(SYNTHETIC_ISSUER_CERTIFICATE, identity.copyCaCertificates())
         }
 
         val currentRequest = request()
@@ -97,6 +98,31 @@ class ReFineIdExternalKeyProviderBackendTest {
     }
 
     @Test
+    fun missingIssuerPreventsPublicationRemovalAndSigning() {
+        val fixture =
+            Fixture(
+                issuerCertificateSource = AuthenticationIssuerCertificateSource { null },
+            )
+        val request = request()
+
+        assertNull(fixture.backend.copyActiveIdentity())
+        assertFalse(
+            fixture.backend.removeIdentity(
+                ExternalKeyProviderGeneration(CURRENT_PROVIDER_GENERATION),
+            ),
+        )
+        assertEquals(
+            ExternalKeySignFailure.PROVIDER_UNAVAILABLE,
+            fixture.backend.sign(request).failureKind(),
+        )
+        assertEquals(NO_OPERATIONS, fixture.authorizer.authorizationCount)
+        assertEquals(NO_OPERATIONS, fixture.cardSession.signCount)
+
+        request.close()
+        fixture.close()
+    }
+
+    @Test
     fun generationChangeAtWorkerBoundaryFailsWithoutUsingThePin() {
         val fixture = Fixture()
         val request = request()
@@ -116,6 +142,7 @@ class ReFineIdExternalKeyProviderBackendTest {
 
     private class Fixture(
         keyProfile: NativeCardKeyProfile = NativeCardKeyProfile.RSA_3072,
+        issuerCertificateSource: AuthenticationIssuerCertificateSource = SYNTHETIC_ISSUER_SOURCE,
     ) : AutoCloseable {
         val cardSession = RecordingCardSession(keyProfile)
         val authorizer = RecordingAuthorizer()
@@ -129,6 +156,7 @@ class ReFineIdExternalKeyProviderBackendTest {
             ReFineIdExternalKeyProviderBackend(
                 cardSession = cardSession,
                 signingCoordinator = coordinator,
+                issuerCertificateSource = issuerCertificateSource,
             )
 
         override fun close() {
@@ -247,5 +275,10 @@ class ReFineIdExternalKeyProviderBackendTest {
         const val DIGEST_FILL: Byte = 0x31
         const val SIGNATURE_FILL: Byte = 0x35
         val SYNTHETIC_CERTIFICATE = "synthetic-certificate".encodeToByteArray()
+        val SYNTHETIC_ISSUER_CERTIFICATE = "synthetic-issuer-certificate".encodeToByteArray()
+        val SYNTHETIC_ISSUER_SOURCE =
+            AuthenticationIssuerCertificateSource {
+                SYNTHETIC_ISSUER_CERTIFICATE.copyOf()
+            }
     }
 }

@@ -27,6 +27,7 @@ class ExternalKeyProviderBinderInstrumentedTest {
             assertNotNull(identity)
             identity ?: return@use
             assertArrayEquals(SYNTHETIC_LEAF_CERTIFICATE, identity.copyLeafCertificate())
+            assertArrayEquals(SYNTHETIC_CA_CERTIFICATES, identity.copyCaCertificates())
             assertEquals(SYNTHETIC_PROVIDER_GENERATION, identity.providerGeneration)
         }
 
@@ -233,7 +234,7 @@ class ExternalKeyProviderBinderInstrumentedTest {
             ExternalKeyIdentitySnapshot.create(
                 providerGeneration = ExternalKeyProviderGeneration(SYNTHETIC_PROVIDER_GENERATION),
                 leafCertificate = SYNTHETIC_LEAF_CERTIFICATE,
-                caCertificates = null,
+                caCertificates = SYNTHETIC_CA_CERTIFICATES,
             )
 
         override fun sign(request: ExternalKeySignRequest): ExternalKeySignResult {
@@ -294,6 +295,7 @@ class ExternalKeyProviderBinderInstrumentedTest {
         const val DIGEST_FILL: Byte = 0x31
         const val SIGNATURE_FILL: Byte = 0x35
         val SYNTHETIC_LEAF_CERTIFICATE = "synthetic-leaf".encodeToByteArray()
+        val SYNTHETIC_CA_CERTIFICATES = "synthetic-ca-certificates".encodeToByteArray()
         val SYNTHETIC_RSA_SIGNATURE =
             ByteArray(AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256.signatureLength) {
                 SIGNATURE_FILL

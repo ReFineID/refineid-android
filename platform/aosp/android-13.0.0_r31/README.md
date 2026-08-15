@@ -82,6 +82,11 @@ repository.
   stale generations, card-session replacement, removal suppression, caller
   interruption, exact service permission, and private prompt exposure without
   submitting a card credential.
+- The provider publishes the card leaf only with a fingerprint-pinned public
+  issuing certificate whose name, CA profile, key usage, and signature match.
+  A credential-free physical Pixel test verified that complete chain on the
+  attached card, and the minimized release APK retains all four issuer
+  resources.
 - The app, framework, KeyChain, and product-integration diffs pass Gitleaks.
 
 The patch series has not yet passed a Soong platform build. Android 11 and
