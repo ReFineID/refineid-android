@@ -36,6 +36,8 @@ instrumented development harness, but it is not the product boundary.
   fixed byte ranges, repeat-signing support, and qpdf compatibility checks
 - One-shot PAdES-B-B orchestration that binds the exact card certificate,
   signed attributes, verified card signature, and prepared PDF revision
+- Independent OpenSSL, qpdf, and Poppler validation for synthetic RSA-3072 and
+  P-384 end-to-end PAdES output, including signed-byte tamper rejection
 - Debug-only terse PDF choose/save/PIN2 harness; release stays hidden until the
   timestamp and validation-evidence stages reach PAdES-B-LTA
 - Secure, debug-only on-device signing harness; no manual harness in release
