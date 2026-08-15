@@ -50,10 +50,10 @@ awk -v version="$version" -v build="$build" '
 mv "$temporary" "$properties"
 trap - EXIT
 
-grep -q "^versionName=${version}$" "$properties" &&
-  grep -q "^buildNumber=${build}$" "$properties" || {
-    echo "stamp did not take in ${properties}" >&2
-    exit 1
-  }
+if ! grep -q "^versionName=${version}$" "$properties" ||
+  ! grep -q "^buildNumber=${build}$" "$properties"; then
+  echo "stamp did not take in ${properties}" >&2
+  exit 1
+fi
 
 echo "stamped ${version} (${build}), versionCode ${version_code}"

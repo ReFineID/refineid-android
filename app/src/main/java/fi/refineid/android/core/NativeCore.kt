@@ -153,14 +153,29 @@ internal object NativeCore {
                             callback = exchange,
                         )
                     ) {
-                        CARD_OPERATION_SUCCEEDED -> NativeCardOperationResult.SUCCEEDED
-                        CARD_OPERATION_CARD_UNAVAILABLE ->
+                        CARD_OPERATION_SUCCEEDED -> {
+                            NativeCardOperationResult.SUCCEEDED
+                        }
+
+                        CARD_OPERATION_CARD_UNAVAILABLE -> {
                             NativeCardOperationResult.CARD_UNAVAILABLE
-                        CARD_OPERATION_REJECTED -> NativeCardOperationResult.REJECTED
-                        CARD_OPERATION_TRANSPORT_ERROR ->
+                        }
+
+                        CARD_OPERATION_REJECTED -> {
+                            NativeCardOperationResult.REJECTED
+                        }
+
+                        CARD_OPERATION_TRANSPORT_ERROR -> {
                             NativeCardOperationResult.TRANSPORT_ERROR
-                        CARD_OPERATION_BRIDGE_ERROR -> NativeCardOperationResult.BRIDGE_ERROR
-                        else -> NativeCardOperationResult.BRIDGE_ERROR
+                        }
+
+                        CARD_OPERATION_BRIDGE_ERROR -> {
+                            NativeCardOperationResult.BRIDGE_ERROR
+                        }
+
+                        else -> {
+                            NativeCardOperationResult.BRIDGE_ERROR
+                        }
                     }
                 } catch (_: LinkageError) {
                     NativeCardOperationResult.BRIDGE_ERROR
@@ -366,28 +381,48 @@ internal object NativeAuthenticationCertificateReply {
             }
 
             when (reply[CERTIFICATE_REPLY_TAG_OFFSET].toInt()) {
-                CERTIFICATE_SUCCEEDED -> decodeSuccess(reply)
-                CERTIFICATE_CARD_UNAVAILABLE -> decodeFailure(
-                    reply,
-                    NativeAuthenticationCertificateReadFailure.CARD_UNAVAILABLE,
-                )
-                CERTIFICATE_REJECTED -> decodeFailure(
-                    reply,
-                    NativeAuthenticationCertificateReadFailure.REJECTED,
-                )
-                CERTIFICATE_TRANSPORT_ERROR -> decodeFailure(
-                    reply,
-                    NativeAuthenticationCertificateReadFailure.TRANSPORT_ERROR,
-                )
-                CERTIFICATE_INVALID -> decodeFailure(
-                    reply,
-                    NativeAuthenticationCertificateReadFailure.INVALID_CERTIFICATE,
-                )
-                CERTIFICATE_BRIDGE_ERROR -> decodeFailure(
-                    reply,
-                    NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
-                )
-                else -> bridgeFailure()
+                CERTIFICATE_SUCCEEDED -> {
+                    decodeSuccess(reply)
+                }
+
+                CERTIFICATE_CARD_UNAVAILABLE -> {
+                    decodeFailure(
+                        reply,
+                        NativeAuthenticationCertificateReadFailure.CARD_UNAVAILABLE,
+                    )
+                }
+
+                CERTIFICATE_REJECTED -> {
+                    decodeFailure(
+                        reply,
+                        NativeAuthenticationCertificateReadFailure.REJECTED,
+                    )
+                }
+
+                CERTIFICATE_TRANSPORT_ERROR -> {
+                    decodeFailure(
+                        reply,
+                        NativeAuthenticationCertificateReadFailure.TRANSPORT_ERROR,
+                    )
+                }
+
+                CERTIFICATE_INVALID -> {
+                    decodeFailure(
+                        reply,
+                        NativeAuthenticationCertificateReadFailure.INVALID_CERTIFICATE,
+                    )
+                }
+
+                CERTIFICATE_BRIDGE_ERROR -> {
+                    decodeFailure(
+                        reply,
+                        NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
+                    )
+                }
+
+                else -> {
+                    bridgeFailure()
+                }
             }
         } finally {
             reply.fill(0)

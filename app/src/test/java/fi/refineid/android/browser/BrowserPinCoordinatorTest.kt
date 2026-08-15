@@ -6,12 +6,12 @@ import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignature
 import fi.refineid.android.core.Pin1Submission
-import java.security.SignatureException
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.security.SignatureException
 
 class BrowserPinCoordinatorTest {
     @Test
@@ -165,9 +165,7 @@ class BrowserPinCoordinatorTest {
         var observedMessage: ByteArray? = null
         var observedPin1: String? = null
 
-        override fun requestAuthenticationCertificate(
-            onResult: (NativeAuthenticationCertificate?) -> Unit,
-        ) {
+        override fun requestAuthenticationCertificate(onResult: (NativeAuthenticationCertificate?) -> Unit) {
             onResult(null)
         }
 

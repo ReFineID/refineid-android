@@ -1,15 +1,15 @@
 package fi.refineid.android.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
-import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 internal class AuthenticationSignatureVerifierInstrumentedTest {
@@ -30,7 +30,9 @@ internal class AuthenticationSignatureVerifierInstrumentedTest {
             val keyPair =
                 when (algorithm.keyProfile) {
                     NativeAuthenticationKeyProfile.RSA_3072 -> rsaKeyPair
+
                     NativeAuthenticationKeyProfile.ECDSA_P384 -> ecKeyPair
+
                     NativeAuthenticationKeyProfile.RSA_2048,
                     NativeAuthenticationKeyProfile.ECDSA_P256,
                     -> throw AssertionError("unexpected authentication key profile")
@@ -38,14 +40,21 @@ internal class AuthenticationSignatureVerifierInstrumentedTest {
             val providerSignature = sign(keyPair, algorithm, SYNTHETIC_MESSAGE)
             val cardSignature =
                 when (algorithm.keyProfile) {
-                    NativeAuthenticationKeyProfile.RSA_3072 -> providerSignature
-                    NativeAuthenticationKeyProfile.ECDSA_P384 ->
+                    NativeAuthenticationKeyProfile.RSA_3072 -> {
+                        providerSignature
+                    }
+
+                    NativeAuthenticationKeyProfile.ECDSA_P384 -> {
                         derP384EcdsaToRaw(providerSignature).also {
                             providerSignature.fill(ZERO_BYTE)
                         }
+                    }
+
                     NativeAuthenticationKeyProfile.RSA_2048,
                     NativeAuthenticationKeyProfile.ECDSA_P256,
-                    -> throw AssertionError("unexpected authentication key profile")
+                    -> {
+                        throw AssertionError("unexpected authentication key profile")
+                    }
                 }
             val digest = digest(algorithm, SYNTHETIC_MESSAGE)
             val alteredDigest = digest.copyOf()
@@ -102,8 +111,7 @@ internal class AuthenticationSignatureVerifierInstrumentedTest {
     private fun digest(
         algorithm: AuthenticationSigningAlgorithm,
         message: ByteArray,
-    ): ByteArray =
-        MessageDigest.getInstance(algorithm.jcaDigestName()).digest(message)
+    ): ByteArray = MessageDigest.getInstance(algorithm.jcaDigestName()).digest(message)
 
     private fun AuthenticationSigningAlgorithm.jcaSignatureName(): String =
         when (this) {
@@ -119,6 +127,7 @@ internal class AuthenticationSignatureVerifierInstrumentedTest {
             AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
             -> JCA_SHA256_DIGEST
+
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> JCA_SHA384_DIGEST
         }
 
@@ -150,8 +159,7 @@ internal class AuthenticationSignatureVerifierInstrumentedTest {
         offset += length.encodedByteCount
         require(
             length.value in
-                DER_MINIMUM_INTEGER_LENGTH..
-                P384_COORDINATE_LENGTH + DER_OPTIONAL_SIGN_PREFIX_LENGTH,
+                DER_MINIMUM_INTEGER_LENGTH..P384_COORDINATE_LENGTH + DER_OPTIONAL_SIGN_PREFIX_LENGTH,
         )
         return DerInteger(
             bytes = der.copyOfRange(offset, offset + length.value),

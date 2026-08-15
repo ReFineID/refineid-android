@@ -14,12 +14,13 @@ internal class MainActivityUiAutomatorTest {
     fun launchesAndExposesTheStableAutomationSurface() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val launchIntent =
-            Intent.makeMainActivity(
-                ComponentName(
-                    instrumentation.targetContext,
-                    TARGET_ACTIVITY_CLASS,
-                ),
-            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            Intent
+                .makeMainActivity(
+                    ComponentName(
+                        instrumentation.targetContext,
+                        TARGET_ACTIVITY_CLASS,
+                    ),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         instrumentation.targetContext.startActivity(launchIntent)
 
         uiAutomator {

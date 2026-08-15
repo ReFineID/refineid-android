@@ -57,14 +57,25 @@ internal object NativePin1PreflightReply {
                 return bridgeFailure()
             }
             when (reply[TAG_OFFSET].toUnsignedInt()) {
-                PREFLIGHT_SUCCEEDED -> decodeSuccess(reply)
-                PREFLIGHT_CARD_UNAVAILABLE ->
+                PREFLIGHT_SUCCEEDED -> {
+                    decodeSuccess(reply)
+                }
+
+                PREFLIGHT_CARD_UNAVAILABLE -> {
                     decodeFailure(reply, NativePin1PreflightFailure.CARD_UNAVAILABLE)
-                PREFLIGHT_TRANSPORT_ERROR ->
+                }
+
+                PREFLIGHT_TRANSPORT_ERROR -> {
                     decodeFailure(reply, NativePin1PreflightFailure.TRANSPORT_ERROR)
-                PREFLIGHT_BRIDGE_ERROR ->
+                }
+
+                PREFLIGHT_BRIDGE_ERROR -> {
                     decodeFailure(reply, NativePin1PreflightFailure.BRIDGE_ERROR)
-                else -> bridgeFailure()
+                }
+
+                else -> {
+                    bridgeFailure()
+                }
             }
         } finally {
             reply.fill(0)
@@ -83,37 +94,49 @@ internal object NativePin1PreflightReply {
         val retryCount = reply[RETRY_COUNT_OFFSET].toUnsignedInt()
         val state =
             when (reply[STATE_OFFSET].toUnsignedInt()) {
-                PIN1_STATE_VERIFIED ->
+                PIN1_STATE_VERIFIED -> {
                     if (retryCount == NO_RETRY_COUNT) {
                         NativePin1State.Verified
                     } else {
                         return bridgeFailure()
                     }
-                PIN1_STATE_REMAINING ->
+                }
+
+                PIN1_STATE_REMAINING -> {
                     if (retryCount <= MAXIMUM_PIN_RETRY_NIBBLE) {
                         NativePin1State.Remaining(retryCount)
                     } else {
                         return bridgeFailure()
                     }
-                PIN1_STATE_LOCKED ->
+                }
+
+                PIN1_STATE_LOCKED -> {
                     if (retryCount == NO_RETRY_COUNT) {
                         NativePin1State.Locked
                     } else {
                         return bridgeFailure()
                     }
-                PIN1_STATE_NO_INFORMATION ->
+                }
+
+                PIN1_STATE_NO_INFORMATION -> {
                     if (retryCount == NO_RETRY_COUNT) {
                         NativePin1State.NoInformation
                     } else {
                         return bridgeFailure()
                     }
-                PIN1_STATE_UNRECOGNIZED ->
+                }
+
+                PIN1_STATE_UNRECOGNIZED -> {
                     if (retryCount == NO_RETRY_COUNT) {
                         NativePin1State.Unrecognized
                     } else {
                         return bridgeFailure()
                     }
-                else -> return bridgeFailure()
+                }
+
+                else -> {
+                    return bridgeFailure()
+                }
             }
         val permitted =
             when (reply[POLICY_OFFSET].toUnsignedInt()) {
@@ -145,14 +168,21 @@ internal object NativePin1PreflightReply {
 
     private fun expectedConsumerPolicy(state: NativePin1State): Boolean =
         when (state) {
-            NativePin1State.Verified -> true
-            is NativePin1State.Remaining ->
+            NativePin1State.Verified -> {
+                true
+            }
+
+            is NativePin1State.Remaining -> {
                 state.attempts == EXHAUSTED_RETRY_COUNT ||
                     state.attempts in MINIMUM_SAFE_RETRY_COUNT..MAXIMUM_FINEID_RETRY_COUNT
+            }
+
             NativePin1State.Locked,
             NativePin1State.NoInformation,
             NativePin1State.Unrecognized,
-            -> false
+            -> {
+                false
+            }
         }
 
     private fun bridgeFailure(): NativePin1PreflightResult.Failure =

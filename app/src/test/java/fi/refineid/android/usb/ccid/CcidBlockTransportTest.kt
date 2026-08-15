@@ -299,8 +299,7 @@ class CcidBlockTransportTest {
             sequenceCounter = CcidSequenceCounter(TEST_SEQUENCE),
         )
 
-    private fun syntheticBlock(): ByteArray =
-        ByteArray(MINIMUM_BLOCK_LENGTH) { SYNTHETIC_BLOCK_BYTE }
+    private fun syntheticBlock(): ByteArray = ByteArray(MINIMUM_BLOCK_LENGTH) { SYNTHETIC_BLOCK_BYTE }
 
     private fun responseFrame(
         cardStatus: Int = CcidWire.CARD_STATUS_ACTIVE,
@@ -331,8 +330,7 @@ class CcidBlockTransportTest {
         }
     }
 
-    private fun ByteArray.blockPayload(): ByteArray =
-        copyOfRange(CcidWire.HEADER_SIZE, size)
+    private fun ByteArray.blockPayload(): ByteArray = copyOfRange(CcidWire.HEADER_SIZE, size)
 
     private class ScriptedBulkIo(
         responses: List<ByteArray>,

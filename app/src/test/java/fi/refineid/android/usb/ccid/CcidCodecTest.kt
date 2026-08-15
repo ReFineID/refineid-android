@@ -423,10 +423,10 @@ class CcidCodecTest {
         frame: ByteArray,
         length: Int,
     ) {
-        frame[CcidWire.LENGTH_OFFSET] = length.toByte()
-        frame[CcidWire.LENGTH_OFFSET + 1] = (length ushr 8).toByte()
-        frame[CcidWire.LENGTH_OFFSET + 2] = (length ushr 16).toByte()
-        frame[CcidWire.LENGTH_OFFSET + 3] = (length ushr 24).toByte()
+        repeat(LENGTH_FIELD_SIZE) { byteIndex ->
+            frame[CcidWire.LENGTH_OFFSET + byteIndex] =
+                (length ushr (byteIndex * Byte.SIZE_BITS)).toByte()
+        }
     }
 
     private fun assertZeroLength(frame: ByteArray) {
@@ -436,10 +436,13 @@ class CcidCodecTest {
     }
 
     private fun readLength(frame: ByteArray): Int =
-        frame.unsignedByte(CcidWire.LENGTH_OFFSET) or
-            (frame.unsignedByte(CcidWire.LENGTH_OFFSET + 1) shl 8) or
-            (frame.unsignedByte(CcidWire.LENGTH_OFFSET + 2) shl 16) or
-            (frame.unsignedByte(CcidWire.LENGTH_OFFSET + 3) shl 24)
+        (0 until LENGTH_FIELD_SIZE).fold(0) { decoded, byteIndex ->
+            decoded or
+                (
+                    frame.unsignedByte(CcidWire.LENGTH_OFFSET + byteIndex) shl
+                        (byteIndex * Byte.SIZE_BITS)
+                )
+        }
 
     private fun assertProtocolError(
         expectedKind: CcidProtocolErrorKind,
@@ -452,8 +455,7 @@ class CcidCodecTest {
         assertEquals(expectedKind, exception.kind)
     }
 
-    private fun ByteArray.unsignedByte(offset: Int): Int =
-        this[offset].toInt() and CcidWire.BYTE_MAX
+    private fun ByteArray.unsignedByte(offset: Int): Int = this[offset].toInt() and CcidWire.BYTE_MAX
 
     private companion object {
         const val TEST_SLOT = 0

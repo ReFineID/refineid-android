@@ -16,11 +16,17 @@ internal class CcidFunctionalDescriptor private constructor(
     val maximumTransferBlockLength: Int
         get() =
             when (exchangeLevel) {
-                CcidExchangeLevel.TPDU ->
+                CcidExchangeLevel.TPDU -> {
                     minOf(maximumPayloadLength, MAXIMUM_T0_TPDU_LENGTH)
-                CcidExchangeLevel.SHORT_APDU ->
+                }
+
+                CcidExchangeLevel.SHORT_APDU -> {
                     minOf(maximumPayloadLength, MAXIMUM_SHORT_APDU_LENGTH)
-                CcidExchangeLevel.SHORT_AND_EXTENDED_APDU -> maximumPayloadLength
+                }
+
+                CcidExchangeLevel.SHORT_AND_EXTENDED_APDU -> {
+                    maximumPayloadLength
+                }
             }
 
     override fun toString(): String =
@@ -71,13 +77,14 @@ internal class CcidFunctionalDescriptor private constructor(
                         }
                         isTargetInterface =
                             rawDescriptors.unsignedByte(offset + INTERFACE_NUMBER_OFFSET) ==
-                                interfaceNumber &&
+                            interfaceNumber &&
                             rawDescriptors.unsignedByte(offset + ALTERNATE_SETTING_OFFSET) ==
-                                alternateSetting &&
+                            alternateSetting &&
                             rawDescriptors.unsignedByte(offset + INTERFACE_CLASS_OFFSET) ==
-                                CCID_INTERFACE_CLASS
+                            CCID_INTERFACE_CLASS
                     }
-                    CCID_FUNCTIONAL_DESCRIPTOR_TYPE ->
+
+                    CCID_FUNCTIONAL_DESCRIPTOR_TYPE -> {
                         if (isTargetInterface) {
                             return parseCcidDescriptor(
                                 bytes = rawDescriptors,
@@ -85,6 +92,7 @@ internal class CcidFunctionalDescriptor private constructor(
                                 descriptorLength = descriptorLength,
                             )
                         }
+                    }
                 }
 
                 offset = descriptorEnd
@@ -112,20 +120,31 @@ internal class CcidFunctionalDescriptor private constructor(
                 bytes.readUnsignedIntLittleEndian(offset + FEATURES_OFFSET)
             val exchangeLevel =
                 when (features and EXCHANGE_LEVEL_MASK) {
-                    TPDU_EXCHANGE -> CcidExchangeLevel.TPDU
-                    SHORT_APDU_EXCHANGE -> CcidExchangeLevel.SHORT_APDU
-                    SHORT_AND_EXTENDED_APDU_EXCHANGE ->
+                    TPDU_EXCHANGE -> {
+                        CcidExchangeLevel.TPDU
+                    }
+
+                    SHORT_APDU_EXCHANGE -> {
+                        CcidExchangeLevel.SHORT_APDU
+                    }
+
+                    SHORT_AND_EXTENDED_APDU_EXCHANGE -> {
                         CcidExchangeLevel.SHORT_AND_EXTENDED_APDU
-                    CHARACTER_EXCHANGE ->
+                    }
+
+                    CHARACTER_EXCHANGE -> {
                         throw descriptorError(
                             CcidDescriptorErrorKind.UNSUPPORTED_EXCHANGE_LEVEL,
                             "CCID character-level exchange is not supported",
                         )
-                    else ->
+                    }
+
+                    else -> {
                         throw descriptorError(
                             CcidDescriptorErrorKind.INVALID_EXCHANGE_LEVEL,
                             "CCID declares multiple exchange levels",
                         )
+                    }
                 }
 
             val hasAutomaticConfiguration =
@@ -160,6 +179,7 @@ internal class CcidFunctionalDescriptor private constructor(
             val minimumMessageLength =
                 when (exchangeLevel) {
                     CcidExchangeLevel.TPDU -> MINIMUM_T0_TPDU_MESSAGE_LENGTH
+
                     CcidExchangeLevel.SHORT_APDU,
                     CcidExchangeLevel.SHORT_AND_EXTENDED_APDU,
                     -> MINIMUM_SHORT_APDU_MESSAGE_LENGTH
@@ -177,14 +197,7 @@ internal class CcidFunctionalDescriptor private constructor(
             )
         }
 
-        private fun ByteArray.readUnsignedIntLittleEndian(offset: Int): Long =
-            unsignedByte(offset).toLong() or
-                (unsignedByte(offset + 1).toLong() shl Byte.SIZE_BITS) or
-                (unsignedByte(offset + 2).toLong() shl (2 * Byte.SIZE_BITS)) or
-                (unsignedByte(offset + 3).toLong() shl (3 * Byte.SIZE_BITS))
-
-        private fun ByteArray.unsignedByte(offset: Int): Int =
-            this[offset].toInt() and CcidWire.BYTE_MAX
+        private fun ByteArray.unsignedByte(offset: Int): Int = this[offset].toInt() and CcidWire.BYTE_MAX
 
         private fun requireUnsignedByte(
             name: String,

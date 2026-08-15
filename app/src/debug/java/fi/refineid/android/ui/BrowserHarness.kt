@@ -59,6 +59,7 @@ import fi.refineid.android.usb.UsbReaderSnapshot
 import java.security.cert.X509Certificate
 import java.util.concurrent.atomic.AtomicBoolean
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun BrowserHarness(
     snapshot: UsbReaderSnapshot,
@@ -95,6 +96,7 @@ internal fun BrowserHarness(
     }
 }
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 private fun BrowserDialog(
     cardService: BrowserCardService,
@@ -234,6 +236,7 @@ private fun BrowserDialog(
     }
 }
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 private fun BrowserPinDialog(request: BrowserPinRequest) {
     val pinState = remember(request) { TextFieldState() }
@@ -298,6 +301,7 @@ private fun BrowserPinDialog(request: BrowserPinRequest) {
     }
 }
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 private fun BrowserStatus(status: BrowserSignatureStatus) {
     val text =
@@ -306,14 +310,21 @@ private fun BrowserStatus(status: BrowserSignatureStatus) {
             BrowserSignatureStatus.PIN_REQUIRED,
             BrowserSignatureStatus.CANCELLED,
             -> null
+
             BrowserSignatureStatus.SIGNING -> stringResource(R.string.signing)
+
             BrowserSignatureStatus.SUCCEEDED -> stringResource(R.string.signed)
+
             BrowserSignatureStatus.WRONG_PIN -> stringResource(R.string.wrong_pin)
+
             BrowserSignatureStatus.PIN_LOCKED -> stringResource(R.string.pin_locked)
+
             BrowserSignatureStatus.REFUSED -> stringResource(R.string.unavailable)
+
             BrowserSignatureStatus.TIMED_OUT,
             BrowserSignatureStatus.INTERRUPTED,
-            BrowserSignatureStatus.ERROR -> stringResource(R.string.error)
+            BrowserSignatureStatus.ERROR,
+            -> stringResource(R.string.error)
         }
     if (text != null) {
         Text(text)

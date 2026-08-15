@@ -3,10 +3,6 @@ package fi.refineid.android.browser
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH
 import fi.refineid.android.core.NativeAuthenticationSignature
-import java.security.KeyPairGenerator
-import java.security.Security
-import java.security.Signature
-import java.security.SignatureException
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -16,6 +12,10 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.security.KeyPairGenerator
+import java.security.Security
+import java.security.Signature
+import java.security.SignatureException
 
 class CardSignatureProviderTest {
     @Before
@@ -145,9 +145,7 @@ class CardSignatureProviderTest {
         overlengthMessage.fill(ZERO_BYTE)
     }
 
-    private fun syntheticRawEcdsaSignature(
-        algorithm: AuthenticationSigningAlgorithm,
-    ): ByteArray {
+    private fun syntheticRawEcdsaSignature(algorithm: AuthenticationSigningAlgorithm): ByteArray {
         val coordinateLength = algorithm.signatureLength / ECDSA_COORDINATE_COUNT
         return ByteArray(algorithm.signatureLength).also { raw ->
             raw[coordinateLength - LAST_ELEMENT_DISTANCE] = ECDSA_R_VALUE

@@ -35,9 +35,10 @@ internal class CcidCardActivator(
                     AppTrace.ccidSlotExchangeFailed(result.kind)
                     CcidActivationResult.TRANSPORT_ERROR
                 }
-                is CcidExchangeResult.Response ->
+
+                is CcidExchangeResult.Response -> {
                     when (val response = result.value) {
-                        is CcidSlotStatus ->
+                        is CcidSlotStatus -> {
                             when (response.cardStatus) {
                                 CcidCardStatus.ACTIVE,
                                 CcidCardStatus.INACTIVE,
@@ -45,23 +46,32 @@ internal class CcidCardActivator(
                                     AppTrace.ccidCardState(response.cardStatus)
                                     exchangePowerOn(exchange, exchangeLevel)
                                 }
+
                                 CcidCardStatus.NOT_PRESENT -> {
                                     AppTrace.ccidCardState(response.cardStatus)
                                     CcidActivationResult.NO_CARD
                                 }
                             }
-                        is CcidCommandFailure ->
+                        }
+
+                        is CcidCommandFailure -> {
                             if (response.cardStatus == CcidCardStatus.NOT_PRESENT) {
                                 CcidActivationResult.NO_CARD
                             } else {
                                 CcidActivationResult.TRANSPORT_ERROR
                             }
-                        is CcidTimeExtension -> CcidActivationResult.TRANSPORT_ERROR
+                        }
+
+                        is CcidTimeExtension -> {
+                            CcidActivationResult.TRANSPORT_ERROR
+                        }
+
                         is CcidDataBlock -> {
                             response.close()
                             CcidActivationResult.TRANSPORT_ERROR
                         }
                     }
+                }
             }
         } finally {
             command.close()
@@ -83,19 +93,28 @@ internal class CcidCardActivator(
                     AppTrace.ccidPowerExchangeFailed(result.kind)
                     CcidActivationResult.TRANSPORT_ERROR
                 }
-                is CcidExchangeResult.Response ->
+
+                is CcidExchangeResult.Response -> {
                     when (val response = result.value) {
-                        is CcidDataBlock -> validatePoweredCard(response, exchangeLevel)
-                        is CcidCommandFailure ->
+                        is CcidDataBlock -> {
+                            validatePoweredCard(response, exchangeLevel)
+                        }
+
+                        is CcidCommandFailure -> {
                             if (response.cardStatus == CcidCardStatus.NOT_PRESENT) {
                                 CcidActivationResult.NO_CARD
                             } else {
                                 CcidActivationResult.CARD_ERROR
                             }
+                        }
+
                         is CcidTimeExtension,
                         is CcidSlotStatus,
-                        -> CcidActivationResult.TRANSPORT_ERROR
+                        -> {
+                            CcidActivationResult.TRANSPORT_ERROR
+                        }
                     }
+                }
             }
         } finally {
             command.close()
@@ -137,17 +156,27 @@ internal class CcidCardActivator(
         when (validation) {
             AtrValidation.VALID_T0_DIRECT,
             AtrValidation.VALID_T0_INVERSE,
-            -> CcidActivationResult.READY
+            -> {
+                CcidActivationResult.READY
+            }
+
             AtrValidation.VALID_NON_T0_DIRECT,
             AtrValidation.VALID_NON_T0_INVERSE,
-            ->
+            -> {
                 if (exchangeLevel == CcidExchangeLevel.TPDU) {
                     CcidActivationResult.CARD_ERROR
                 } else {
                     CcidActivationResult.READY
                 }
-            AtrValidation.INVALID -> CcidActivationResult.CARD_ERROR
-            AtrValidation.BRIDGE_ERROR -> CcidActivationResult.TRANSPORT_ERROR
+            }
+
+            AtrValidation.INVALID -> {
+                CcidActivationResult.CARD_ERROR
+            }
+
+            AtrValidation.BRIDGE_ERROR -> {
+                CcidActivationResult.TRANSPORT_ERROR
+            }
         }
 
     private companion object {

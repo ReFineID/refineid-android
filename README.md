@@ -62,14 +62,20 @@ Apache-2.0.
 ## Local build
 
 Install JDK 26, Android SDK platform 37, NDK 28.2.13676358, Rust 1.97,
-the aarch64-linux-android and x86_64-linux-android Rust targets, and cargo-ndk.
-Then set JAVA_HOME and ANDROID_SDK_ROOT. Build and run checks with:
+the aarch64-linux-android and x86_64-linux-android Rust targets, cargo-ndk, and
+ShellCheck 0.11. Then set JAVA_HOME and ANDROID_SDK_ROOT. Build and run checks
+with:
 
     ./gradlew check
     ./gradlew assembleDebug
     ./gradlew connectedDebugAndroidTest
 
 Machine-specific SDK paths belong in the ignored local.properties file.
+
+The `check` task treats Kotlin compiler and Android Lint warnings as errors,
+runs Detekt and ktlint, tests and lints the Rust bridge with rustfmt and Clippy,
+runs ShellCheck, builds the minimized release APK, and verifies that release
+bytecode contains no logging calls or diagnostic trace literals.
 
 ## Security
 

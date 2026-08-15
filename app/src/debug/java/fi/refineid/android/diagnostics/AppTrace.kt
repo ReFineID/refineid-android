@@ -17,8 +17,8 @@ import fi.refineid.android.usb.ReaderConnectionStatus
 import fi.refineid.android.usb.ccid.CcidBlockFailureKind
 import fi.refineid.android.usb.ccid.CcidCardStatus
 import fi.refineid.android.usb.ccid.CcidDescriptorErrorKind
-import fi.refineid.android.usb.ccid.CcidExchangeLevel
 import fi.refineid.android.usb.ccid.CcidExchangeFailureKind
+import fi.refineid.android.usb.ccid.CcidExchangeLevel
 import fi.refineid.android.usb.ccid.CcidProtocolErrorKind
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 
@@ -70,11 +70,14 @@ internal object AppTrace {
     ) {
         val outcome =
             when (result) {
-                is NativeAuthenticationCertificateReadResult.Success ->
+                is NativeAuthenticationCertificateReadResult.Success -> {
                     "success profile=" + result.certificate.keyProfile +
                         " length=" + result.certificate.derLength
-                is NativeAuthenticationCertificateReadResult.Failure ->
+                }
+
+                is NativeAuthenticationCertificateReadResult.Failure -> {
                     "failure kind=" + result.kind
+                }
             }
         debug(
             "native:authentication-certificate-read " + outcome +
@@ -93,11 +96,15 @@ internal object AppTrace {
     ) {
         val outcome =
             when (result) {
-                is NativePin1PreflightResult.Success ->
+                is NativePin1PreflightResult.Success -> {
                     "success scheme=" + result.preflight.referenceScheme +
                         " state=" + result.preflight.state +
                         " permitted=" + result.preflight.consumerAuthenticationPermitted
-                is NativePin1PreflightResult.Failure -> "failure kind=" + result.kind
+                }
+
+                is NativePin1PreflightResult.Failure -> {
+                    "failure kind=" + result.kind
+                }
             }
         debug(
             "native:pin1-status-probe " + outcome +
@@ -124,10 +131,14 @@ internal object AppTrace {
     ) {
         val outcome =
             when (result) {
-                is NativeAuthenticationSignResult.Success ->
+                is NativeAuthenticationSignResult.Success -> {
                     "success algorithm=" + result.signature.algorithm +
                         " length=" + result.signature.length
-                is NativeAuthenticationSignResult.Failure -> "failure kind=" + result.kind
+                }
+
+                is NativeAuthenticationSignResult.Failure -> {
+                    "failure kind=" + result.kind
+                }
             }
         debug(
             "native:authentication-sign " + outcome +

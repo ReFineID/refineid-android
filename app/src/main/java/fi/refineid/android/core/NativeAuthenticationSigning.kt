@@ -77,22 +77,31 @@ internal enum class AuthenticationSigningAlgorithm(
     ),
 }
 
-internal fun AuthenticationSigningAlgorithm.requestWireValue(
-    inputMode: AuthenticationSigningInputMode,
-): Int =
+internal fun AuthenticationSigningAlgorithm.requestWireValue(inputMode: AuthenticationSigningInputMode): Int =
     when (inputMode) {
-        AuthenticationSigningInputMode.MESSAGE -> wireValue
-        AuthenticationSigningInputMode.PREHASHED ->
+        AuthenticationSigningInputMode.MESSAGE -> {
+            wireValue
+        }
+
+        AuthenticationSigningInputMode.PREHASHED -> {
             when (this) {
-                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256 ->
+                AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256 -> {
                     NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PKCS1_SHA256
-                AuthenticationSigningAlgorithm.RSA_PSS_SHA256 ->
+                }
+
+                AuthenticationSigningAlgorithm.RSA_PSS_SHA256 -> {
                     NativeAuthenticationSignWire.REQUEST_PREHASHED_RSA_PSS_SHA256
-                AuthenticationSigningAlgorithm.ECDSA_P384_SHA256 ->
+                }
+
+                AuthenticationSigningAlgorithm.ECDSA_P384_SHA256 -> {
                     NativeAuthenticationSignWire.REQUEST_PREHASHED_ECDSA_P384_SHA256
-                AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 ->
+                }
+
+                AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> {
                     NativeAuthenticationSignWire.REQUEST_PREHASHED_ECDSA_P384_SHA384
+                }
             }
+        }
     }
 
 internal fun AuthenticationSigningAlgorithm.acceptsInputLength(
@@ -100,9 +109,13 @@ internal fun AuthenticationSigningAlgorithm.acceptsInputLength(
     inputLength: Int,
 ): Boolean =
     when (inputMode) {
-        AuthenticationSigningInputMode.MESSAGE ->
+        AuthenticationSigningInputMode.MESSAGE -> {
             inputLength in 0..MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH
-        AuthenticationSigningInputMode.PREHASHED -> inputLength == digestLength
+        }
+
+        AuthenticationSigningInputMode.PREHASHED -> {
+            inputLength == digestLength
+        }
     }
 
 /** One manually entered PIN1 submission, transferred to at most one native call. */
@@ -135,11 +148,11 @@ internal class Pin1Submission private constructor(
     override fun toString(): String = "Pin1Submission([redacted])"
 
     companion object {
-        fun acceptsEntry(input: CharSequence): Boolean =
-            input.length <= PIN1_MAXIMUM_LENGTH && input.all { it in '0'..'9' }
+        fun acceptsEntry(input: CharSequence): Boolean {
+            return input.length <= PIN1_MAXIMUM_LENGTH && input.all { it in '0'..'9' }
+        }
 
-        fun isComplete(input: CharSequence): Boolean =
-            input.length >= PIN1_MINIMUM_LENGTH && acceptsEntry(input)
+        fun isComplete(input: CharSequence): Boolean = input.length >= PIN1_MINIMUM_LENGTH && acceptsEntry(input)
 
         fun from(input: CharSequence): Pin1Submission {
             require(isComplete(input)) {
@@ -244,26 +257,49 @@ internal object NativeAuthenticationSignReply {
                 return bridgeFailure()
             }
             when (reply[NativeAuthenticationSignWire.TAG_OFFSET].toUnsignedInt()) {
-                NativeAuthenticationSignWire.SUCCESS_TAG -> decodeSuccess(reply)
-                NativeAuthenticationSignWire.CARD_UNAVAILABLE_TAG ->
+                NativeAuthenticationSignWire.SUCCESS_TAG -> {
+                    decodeSuccess(reply)
+                }
+
+                NativeAuthenticationSignWire.CARD_UNAVAILABLE_TAG -> {
                     decodeFailure(reply, NativeAuthenticationSignFailure.CARD_UNAVAILABLE)
-                NativeAuthenticationSignWire.TRANSPORT_ERROR_TAG ->
+                }
+
+                NativeAuthenticationSignWire.TRANSPORT_ERROR_TAG -> {
                     decodeFailure(reply, NativeAuthenticationSignFailure.TRANSPORT_ERROR)
-                NativeAuthenticationSignWire.INVALID_PIN_TAG ->
+                }
+
+                NativeAuthenticationSignWire.INVALID_PIN_TAG -> {
                     decodeFailure(reply, NativeAuthenticationSignFailure.INVALID_PIN)
-                NativeAuthenticationSignWire.SAFETY_REFUSED_TAG ->
+                }
+
+                NativeAuthenticationSignWire.SAFETY_REFUSED_TAG -> {
                     decodeFailure(reply, NativeAuthenticationSignFailure.SAFETY_REFUSED)
-                NativeAuthenticationSignWire.PIN_LOCKED_TAG ->
+                }
+
+                NativeAuthenticationSignWire.PIN_LOCKED_TAG -> {
                     decodeFailure(reply, NativeAuthenticationSignFailure.PIN_LOCKED)
-                NativeAuthenticationSignWire.WRONG_PIN_TAG ->
+                }
+
+                NativeAuthenticationSignWire.WRONG_PIN_TAG -> {
                     decodeFailure(reply, NativeAuthenticationSignFailure.WRONG_PIN)
-                NativeAuthenticationSignWire.VERIFICATION_REJECTED_TAG ->
+                }
+
+                NativeAuthenticationSignWire.VERIFICATION_REJECTED_TAG -> {
                     decodeFailure(reply, NativeAuthenticationSignFailure.VERIFICATION_REJECTED)
-                NativeAuthenticationSignWire.SIGNING_REJECTED_TAG ->
+                }
+
+                NativeAuthenticationSignWire.SIGNING_REJECTED_TAG -> {
                     decodeFailure(reply, NativeAuthenticationSignFailure.SIGNING_REJECTED)
-                NativeAuthenticationSignWire.BRIDGE_ERROR_TAG ->
+                }
+
+                NativeAuthenticationSignWire.BRIDGE_ERROR_TAG -> {
                     decodeFailure(reply, NativeAuthenticationSignFailure.BRIDGE_ERROR)
-                else -> bridgeFailure()
+                }
+
+                else -> {
+                    bridgeFailure()
+                }
             }
         } finally {
             reply.fill(0)

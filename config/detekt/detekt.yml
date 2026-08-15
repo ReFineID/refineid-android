@@ -1,0 +1,45 @@
+config:
+  validation: true
+  warningsAsErrors: true
+
+complexity:
+  ComplexCondition:
+    allowedConditions: 4
+  CyclomaticComplexMethod:
+    allowedComplexity: 25
+  LongMethod:
+    allowedLines: 130
+  NestedBlockDepth:
+    allowedDepth: 5
+  TooManyFunctions:
+    allowedFunctionsPerFile: 16
+    allowedFunctionsPerClass: 16
+    allowedFunctionsPerInterface: 16
+    allowedFunctionsPerObject: 16
+    allowedFunctionsPerEnum: 16
+
+exceptions:
+  TooGenericExceptionCaught:
+    exceptionNames:
+      - 'ArrayIndexOutOfBoundsException'
+      - 'Error'
+      - 'Exception'
+      - 'IllegalMonitorStateException'
+      - 'NullPointerException'
+      - 'RuntimeException'
+      - 'Throwable'
+
+style:
+  MagicNumber:
+    excludes: []
+    ignorePropertyDeclaration: true
+    ignoreLocalVariableDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: true
+    ignoreEnums: true
+  ReturnCount:
+    max: 10
+    excludeGuardClauses: true
+  ThrowsCount:
+    max: 10
+    excludeGuardClauses: true

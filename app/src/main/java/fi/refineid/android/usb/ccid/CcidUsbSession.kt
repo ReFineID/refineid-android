@@ -51,6 +51,7 @@ internal class CcidUsbSession(
     private val exchangeLevel =
         when (descriptor.exchangeLevel) {
             CcidExchangeLevel.TPDU -> NativeCardExchangeLevel.T0_TPDU
+
             CcidExchangeLevel.SHORT_APDU,
             CcidExchangeLevel.SHORT_AND_EXTENDED_APDU,
             -> NativeCardExchangeLevel.APDU
@@ -162,7 +163,7 @@ internal class CcidUsbSession(
         return when (
             val result =
                 when (inputMode) {
-                    AuthenticationSigningInputMode.MESSAGE ->
+                    AuthenticationSigningInputMode.MESSAGE -> {
                         NativeCore.authenticateAndSign(
                             exchangeLevel = exchangeLevel,
                             algorithm = algorithm,
@@ -170,7 +171,9 @@ internal class CcidUsbSession(
                             message = input,
                             exchange = nativeExchange,
                         )
-                    AuthenticationSigningInputMode.PREHASHED ->
+                    }
+
+                    AuthenticationSigningInputMode.PREHASHED -> {
                         NativeCore.authenticateAndSignPrehashed(
                             exchangeLevel = exchangeLevel,
                             algorithm = algorithm,
@@ -178,23 +181,27 @@ internal class CcidUsbSession(
                             digest = input,
                             exchange = nativeExchange,
                         )
+                    }
                 }
         ) {
             is NativeAuthenticationSignResult.Success -> {
                 val isVerified =
                     when (inputMode) {
-                        AuthenticationSigningInputMode.MESSAGE ->
+                        AuthenticationSigningInputMode.MESSAGE -> {
                             AuthenticationSignatureVerifier.verify(
                                 certificate = certificate,
                                 message = input,
                                 signature = result.signature,
                             )
-                        AuthenticationSigningInputMode.PREHASHED ->
+                        }
+
+                        AuthenticationSigningInputMode.PREHASHED -> {
                             AuthenticationSignatureVerifier.verifyPrehashed(
                                 certificate = certificate,
                                 digest = input,
                                 signature = result.signature,
                             )
+                        }
                     }
                 AppTrace.authenticationSignatureVerificationCompleted(
                     inputMode = inputMode,
@@ -209,8 +216,10 @@ internal class CcidUsbSession(
                     )
                 }
             }
-            is NativeAuthenticationSignResult.Failure ->
+
+            is NativeAuthenticationSignResult.Failure -> {
                 AuthenticationSignResult.Failure(result.kind.toAuthenticationFailure())
+            }
         }
     }
 
@@ -224,13 +233,19 @@ internal class CcidUsbSession(
         }
         val algorithm =
             when (sessionMaterial.requireAuthenticationCertificate().keyProfile) {
-                NativeAuthenticationKeyProfile.RSA_3072 ->
+                NativeAuthenticationKeyProfile.RSA_3072 -> {
                     AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256
-                NativeAuthenticationKeyProfile.ECDSA_P384 ->
+                }
+
+                NativeAuthenticationKeyProfile.ECDSA_P384 -> {
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA256
+                }
+
                 NativeAuthenticationKeyProfile.RSA_2048,
                 NativeAuthenticationKeyProfile.ECDSA_P256,
-                -> null
+                -> {
+                    null
+                }
             }
         if (algorithm == null) {
             pin1.close()
@@ -277,19 +292,41 @@ internal class CcidUsbSession(
 
 private fun NativeAuthenticationSignFailure.toAuthenticationFailure(): AuthenticationSignFailure =
     when (this) {
-        NativeAuthenticationSignFailure.CARD_UNAVAILABLE ->
+        NativeAuthenticationSignFailure.CARD_UNAVAILABLE -> {
             AuthenticationSignFailure.CARD_UNAVAILABLE
-        NativeAuthenticationSignFailure.TRANSPORT_ERROR ->
+        }
+
+        NativeAuthenticationSignFailure.TRANSPORT_ERROR -> {
             AuthenticationSignFailure.TRANSPORT_ERROR
-        NativeAuthenticationSignFailure.INVALID_PIN -> AuthenticationSignFailure.INVALID_PIN
-        NativeAuthenticationSignFailure.SAFETY_REFUSED -> AuthenticationSignFailure.SAFETY_REFUSED
-        NativeAuthenticationSignFailure.PIN_LOCKED -> AuthenticationSignFailure.PIN_LOCKED
-        NativeAuthenticationSignFailure.WRONG_PIN -> AuthenticationSignFailure.WRONG_PIN
-        NativeAuthenticationSignFailure.VERIFICATION_REJECTED ->
+        }
+
+        NativeAuthenticationSignFailure.INVALID_PIN -> {
+            AuthenticationSignFailure.INVALID_PIN
+        }
+
+        NativeAuthenticationSignFailure.SAFETY_REFUSED -> {
+            AuthenticationSignFailure.SAFETY_REFUSED
+        }
+
+        NativeAuthenticationSignFailure.PIN_LOCKED -> {
+            AuthenticationSignFailure.PIN_LOCKED
+        }
+
+        NativeAuthenticationSignFailure.WRONG_PIN -> {
+            AuthenticationSignFailure.WRONG_PIN
+        }
+
+        NativeAuthenticationSignFailure.VERIFICATION_REJECTED -> {
             AuthenticationSignFailure.VERIFICATION_REJECTED
-        NativeAuthenticationSignFailure.SIGNING_REJECTED ->
+        }
+
+        NativeAuthenticationSignFailure.SIGNING_REJECTED -> {
             AuthenticationSignFailure.SIGNING_REJECTED
-        NativeAuthenticationSignFailure.BRIDGE_ERROR -> AuthenticationSignFailure.BRIDGE_ERROR
+        }
+
+        NativeAuthenticationSignFailure.BRIDGE_ERROR -> {
+            AuthenticationSignFailure.BRIDGE_ERROR
+        }
     }
 
 internal class CcidUsbSessionOpener(
@@ -313,9 +350,7 @@ internal class CcidUsbSessionOpener(
         return connection.openClaimed(endpoints)
     }
 
-    private fun UsbDeviceConnection.openClaimed(
-        endpoints: CcidUsbEndpoints,
-    ): CcidSessionOpenResult {
+    private fun UsbDeviceConnection.openClaimed(endpoints: CcidUsbEndpoints): CcidSessionOpenResult {
         var ownsConnection = true
         var isClaimed = false
         return try {
@@ -363,10 +398,18 @@ internal class CcidUsbSessionOpener(
                         isClaimed = false
                         prepareSession(session)
                     }
-                    CcidActivationResult.NO_CARD -> CcidSessionOpenResult.NoCard
-                    CcidActivationResult.CARD_ERROR -> CcidSessionOpenResult.CardError
-                    CcidActivationResult.TRANSPORT_ERROR ->
+
+                    CcidActivationResult.NO_CARD -> {
+                        CcidSessionOpenResult.NoCard
+                    }
+
+                    CcidActivationResult.CARD_ERROR -> {
+                        CcidSessionOpenResult.CardError
+                    }
+
+                    CcidActivationResult.TRANSPORT_ERROR -> {
                         CcidSessionOpenResult.TransportError
+                    }
                 }
             }
         } catch (error: CcidDescriptorException) {
@@ -395,39 +438,64 @@ internal class CcidUsbSessionOpener(
             when (session.selectPkcs15Application()) {
                 NativeCardOperationResult.SUCCEEDED -> {
                     when (val result = session.cacheAuthenticationCertificate()) {
-                        is NativeAuthenticationCertificateReadResult.Success ->
+                        is NativeAuthenticationCertificateReadResult.Success -> {
                             when (val preflight = session.cachePin1Preflight()) {
                                 is NativePin1PreflightResult.Success -> {
                                     retainSession = true
                                     CcidSessionOpenResult.Ready(session)
                                 }
-                                is NativePin1PreflightResult.Failure ->
+
+                                is NativePin1PreflightResult.Failure -> {
                                     when (preflight.kind) {
-                                        NativePin1PreflightFailure.CARD_UNAVAILABLE ->
+                                        NativePin1PreflightFailure.CARD_UNAVAILABLE -> {
                                             CcidSessionOpenResult.NoCard
+                                        }
+
                                         NativePin1PreflightFailure.TRANSPORT_ERROR,
                                         NativePin1PreflightFailure.BRIDGE_ERROR,
-                                        -> CcidSessionOpenResult.TransportError
+                                        -> {
+                                            CcidSessionOpenResult.TransportError
+                                        }
                                     }
+                                }
                             }
-                        is NativeAuthenticationCertificateReadResult.Failure ->
+                        }
+
+                        is NativeAuthenticationCertificateReadResult.Failure -> {
                             when (result.kind) {
-                                NativeAuthenticationCertificateReadFailure.CARD_UNAVAILABLE ->
+                                NativeAuthenticationCertificateReadFailure.CARD_UNAVAILABLE -> {
                                     CcidSessionOpenResult.NoCard
+                                }
+
                                 NativeAuthenticationCertificateReadFailure.REJECTED,
                                 NativeAuthenticationCertificateReadFailure.INVALID_CERTIFICATE,
-                                -> CcidSessionOpenResult.CardError
+                                -> {
+                                    CcidSessionOpenResult.CardError
+                                }
+
                                 NativeAuthenticationCertificateReadFailure.TRANSPORT_ERROR,
                                 NativeAuthenticationCertificateReadFailure.BRIDGE_ERROR,
-                                -> CcidSessionOpenResult.TransportError
+                                -> {
+                                    CcidSessionOpenResult.TransportError
+                                }
                             }
+                        }
                     }
                 }
-                NativeCardOperationResult.CARD_UNAVAILABLE -> CcidSessionOpenResult.NoCard
-                NativeCardOperationResult.REJECTED -> CcidSessionOpenResult.CardError
+
+                NativeCardOperationResult.CARD_UNAVAILABLE -> {
+                    CcidSessionOpenResult.NoCard
+                }
+
+                NativeCardOperationResult.REJECTED -> {
+                    CcidSessionOpenResult.CardError
+                }
+
                 NativeCardOperationResult.TRANSPORT_ERROR,
                 NativeCardOperationResult.BRIDGE_ERROR,
-                -> CcidSessionOpenResult.TransportError
+                -> {
+                    CcidSessionOpenResult.TransportError
+                }
             }
         } finally {
             if (!retainSession) {

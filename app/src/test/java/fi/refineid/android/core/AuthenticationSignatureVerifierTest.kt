@@ -1,5 +1,8 @@
 package fi.refineid.android.core
 
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
@@ -7,9 +10,6 @@ import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.MGF1ParameterSpec
 import java.security.spec.PSSParameterSpec
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
 
 class AuthenticationSignatureVerifierTest {
     @Test
@@ -151,6 +151,7 @@ class AuthenticationSignatureVerifierTest {
                     AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
                     -> "SHA-256"
+
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> "SHA-384"
                 },
             ).digest(message)
@@ -181,8 +182,7 @@ class AuthenticationSignatureVerifierTest {
         offset += length.encodedByteCount
         require(
             length.value in
-                DER_MINIMUM_INTEGER_LENGTH..
-                P384_COORDINATE_LENGTH + DER_OPTIONAL_SIGN_PREFIX_LENGTH,
+                DER_MINIMUM_INTEGER_LENGTH..P384_COORDINATE_LENGTH + DER_OPTIONAL_SIGN_PREFIX_LENGTH,
         )
         return DerInteger(
             bytes = der.copyOfRange(offset, offset + length.value),

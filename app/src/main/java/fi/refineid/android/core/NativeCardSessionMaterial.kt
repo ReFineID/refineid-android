@@ -24,8 +24,9 @@ internal class NativeCardSessionMaterial : AutoCloseable {
         }
     }
 
-    fun copyAuthenticationCertificate(): NativeAuthenticationCertificate =
-        requireAuthenticationCertificate().copyOwned()
+    fun copyAuthenticationCertificate(): NativeAuthenticationCertificate {
+        return requireAuthenticationCertificate().copyOwned()
+    }
 
     fun requirePin1Preflight(): NativePin1Preflight {
         checkOpen()

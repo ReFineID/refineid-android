@@ -85,17 +85,13 @@ internal object ReFineIdCardProviderRegistration {
     private const val FIRST_PROVIDER_POSITION = 1
 }
 
-internal class Sha256WithRsaCardSignature :
-    CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256)
+internal class Sha256WithRsaCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256)
 
-internal class Sha256WithRsaPssCardSignature :
-    CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PSS_SHA256)
+internal class Sha256WithRsaPssCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.RSA_PSS_SHA256)
 
-internal class Sha256WithEcdsaCardSignature :
-    CardBackedSignatureSpi(AuthenticationSigningAlgorithm.ECDSA_P384_SHA256)
+internal class Sha256WithEcdsaCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.ECDSA_P384_SHA256)
 
-internal class Sha384WithEcdsaCardSignature :
-    CardBackedSignatureSpi(AuthenticationSigningAlgorithm.ECDSA_P384_SHA384)
+internal class Sha384WithEcdsaCardSignature : CardBackedSignatureSpi(AuthenticationSigningAlgorithm.ECDSA_P384_SHA384)
 
 @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
 internal abstract class CardBackedSignatureSpi(
@@ -163,6 +159,7 @@ internal abstract class CardBackedSignatureSpi(
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
                     AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
                     -> signature.useBytes(P384EcdsaSignature::toDer)
+
                     AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
                     AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
                     -> signature.copyBytes()
@@ -182,17 +179,14 @@ internal abstract class CardBackedSignatureSpi(
     final override fun engineSetParameter(
         parameter: String,
         value: Any,
-    ) {
-        throw InvalidParameterException("signature parameters are fixed")
-    }
+    ): Unit = throw InvalidParameterException("signature parameters are fixed")
 
     final override fun engineGetParameter(parameter: String): Any? {
         throw InvalidParameterException("signature parameters are fixed")
     }
 
-    final override fun engineSetParameter(parameters: AlgorithmParameterSpec) {
+    final override fun engineSetParameter(parameters: AlgorithmParameterSpec): Unit =
         throw InvalidParameterException("signature parameters are fixed")
-    }
 
     private fun requireReady(): CardBackedPrivateKey {
         if (hasSigned) {
@@ -212,6 +206,7 @@ internal abstract class CardBackedSignatureSpi(
             AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
             AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
             -> JCA_KEY_ALGORITHM_RSA
+
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
             -> JCA_KEY_ALGORITHM_EC

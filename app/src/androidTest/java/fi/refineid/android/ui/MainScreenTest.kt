@@ -206,9 +206,7 @@ internal class MainScreenTest {
 
         val INERT_BROWSER_CARD_SERVICE =
             object : BrowserCardService {
-                override fun requestAuthenticationCertificate(
-                    onResult: (NativeAuthenticationCertificate?) -> Unit,
-                ) {
+                override fun requestAuthenticationCertificate(onResult: (NativeAuthenticationCertificate?) -> Unit) {
                     onResult(null)
                 }
 

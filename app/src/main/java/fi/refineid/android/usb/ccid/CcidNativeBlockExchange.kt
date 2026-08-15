@@ -19,15 +19,13 @@ internal enum class NativeExchangeReplyTag(
 internal class CcidNativeBlockExchange(
     private val transport: CcidBlockTransport,
 ) : NativeBlockExchange {
-    override fun exchangePublic(block: ByteArray): ByteArray =
-        encode(transport.transmitPublic(block))
+    override fun exchangePublic(block: ByteArray): ByteArray = encode(transport.transmitPublic(block))
 
-    override fun exchangeCredential(block: ByteArray): ByteArray =
-        encode(transport.transmitCredential(block))
+    override fun exchangeCredential(block: ByteArray): ByteArray = encode(transport.transmitCredential(block))
 
     private fun encode(result: CcidBlockResult): ByteArray =
         when (result) {
-            is CcidBlockResult.Response ->
+            is CcidBlockResult.Response -> {
                 result.use {
                     val payload = result.copyPayload()
                     try {
@@ -42,14 +40,19 @@ internal class CcidNativeBlockExchange(
                         payload.fill(0)
                     }
                 }
-            is CcidBlockResult.Failure ->
+            }
+
+            is CcidBlockResult.Failure -> {
                 byteArrayOf(mapFailure(result.kind).wireValue)
+            }
         }
 
     private fun mapFailure(kind: CcidBlockFailureKind): NativeExchangeReplyTag =
         when (kind) {
             CcidBlockFailureKind.CARD_UNAVAILABLE -> NativeExchangeReplyTag.NO_CARD
+
             CcidBlockFailureKind.PROTOCOL -> NativeExchangeReplyTag.PROTOCOL_DESYNC
+
             CcidBlockFailureKind.COMMAND_REJECTED,
             CcidBlockFailureKind.READER,
             CcidBlockFailureKind.TRANSPORT,

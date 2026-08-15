@@ -1,10 +1,10 @@
 package fi.refineid.android.browser
 
-import java.security.Principal
-import javax.security.auth.x500.X500Principal
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.security.Principal
+import javax.security.auth.x500.X500Principal
 
 class BrowserClientCertificateMatcherTest {
     @Test

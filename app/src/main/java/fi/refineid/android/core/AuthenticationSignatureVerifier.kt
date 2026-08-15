@@ -74,13 +74,19 @@ internal object AuthenticationSignatureVerifier {
             return false
         }
         return when (algorithm) {
-            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256 ->
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256 -> {
                 verifyPrehashedRsaPkcs1Sha256(publicKey, digest, signature)
-            AuthenticationSigningAlgorithm.RSA_PSS_SHA256 ->
+            }
+
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA256 -> {
                 RsaPssPrehashedVerifier.verify(publicKey, digest, signature)
+            }
+
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
             AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
-            -> verifyPrehashedEcdsa(publicKey, digest, signature)
+            -> {
+                verifyPrehashedEcdsa(publicKey, digest, signature)
+            }
         }
     }
 
@@ -107,21 +113,32 @@ internal object AuthenticationSignatureVerifier {
                     derSignature.fill(0)
                 }
             }
+
             AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
             AuthenticationSigningAlgorithm.RSA_PSS_SHA256,
-            -> verifier.verify(signature)
+            -> {
+                verifier.verify(signature)
+            }
         }
     }
 
     private fun AuthenticationSigningAlgorithm.newVerifier(): Signature =
         when (this) {
-            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256 ->
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256 -> {
                 Signature.getInstance(JCA_SHA256_WITH_RSA)
-            AuthenticationSigningAlgorithm.RSA_PSS_SHA256 -> newRsaPssSha256Verifier()
-            AuthenticationSigningAlgorithm.ECDSA_P384_SHA256 ->
+            }
+
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA256 -> {
+                newRsaPssSha256Verifier()
+            }
+
+            AuthenticationSigningAlgorithm.ECDSA_P384_SHA256 -> {
                 Signature.getInstance(JCA_SHA256_WITH_ECDSA)
-            AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 ->
+            }
+
+            AuthenticationSigningAlgorithm.ECDSA_P384_SHA384 -> {
                 Signature.getInstance(JCA_SHA384_WITH_ECDSA)
+            }
         }
 
     private fun newRsaPssSha256Verifier(): Signature =

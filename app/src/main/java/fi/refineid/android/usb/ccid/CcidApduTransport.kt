@@ -62,8 +62,11 @@ internal class CcidCommandExchange(
         var timeExtensionCount = 0
         while (true) {
             when (val result = readResponse(command)) {
-                is CcidExchangeResult.Failure -> return result
-                is CcidExchangeResult.Response ->
+                is CcidExchangeResult.Failure -> {
+                    return result
+                }
+
+                is CcidExchangeResult.Response -> {
                     if (result.value is CcidTimeExtension) {
                         timeExtensionCount += 1
                         AppTrace.ccidTimeExtension(
@@ -76,6 +79,7 @@ internal class CcidCommandExchange(
                     } else {
                         return result
                     }
+                }
             }
         }
     }
@@ -167,8 +171,7 @@ internal sealed interface CcidBlockResult {
             isClosed = true
         }
 
-        override fun toString(): String =
-            "CcidBlockResult.Response(payloadLength=" + payloadLength + ")"
+        override fun toString(): String = "CcidBlockResult.Response(payloadLength=" + payloadLength + ")"
 
         private companion object {
             const val ISO_7816_STATUS_LENGTH = 2
@@ -251,16 +254,19 @@ internal class CcidBlockTransport(
         AppTrace.cardSensitiveCommandStarted().let { startedAt ->
             transmitOnce(block).also { result ->
                 when (result) {
-                    is CcidBlockResult.Response ->
+                    is CcidBlockResult.Response -> {
                         AppTrace.cardSensitiveCommandResponded(
                             startedAt = startedAt,
                             statusWord = result.statusWord,
                         )
-                    is CcidBlockResult.Failure ->
+                    }
+
+                    is CcidBlockResult.Failure -> {
                         AppTrace.cardSensitiveCommandFailed(
                             startedAt = startedAt,
                             kind = result.kind,
                         )
+                    }
                 }
             }
         }
@@ -284,17 +290,20 @@ internal class CcidBlockTransport(
         result: CcidBlockResult,
     ) {
         when (result) {
-            is CcidBlockResult.Response ->
+            is CcidBlockResult.Response -> {
                 AppTrace.cardPublicCommandResponded(
                     startedAt = startedAt,
                     statusWord = result.statusWord,
                     responseBodyLength = result.responseBodyLength,
                 )
-            is CcidBlockResult.Failure ->
+            }
+
+            is CcidBlockResult.Failure -> {
                 AppTrace.cardPublicCommandFailed(
                     startedAt = startedAt,
                     kind = result.kind,
                 )
+            }
         }
     }
 
@@ -303,16 +312,19 @@ internal class CcidBlockTransport(
         result: CcidBlockResult,
     ) {
         when (result) {
-            is CcidBlockResult.Response ->
+            is CcidBlockResult.Response -> {
                 AppTrace.cardCredentialCommandResponded(
                     startedAt = startedAt,
                     statusWord = result.statusWord,
                 )
-            is CcidBlockResult.Failure ->
+            }
+
+            is CcidBlockResult.Failure -> {
                 AppTrace.cardCredentialCommandFailed(
                     startedAt = startedAt,
                     kind = result.kind,
                 )
+            }
         }
     }
 
@@ -342,27 +354,41 @@ internal class CcidBlockTransport(
     private fun mapExchangeFailure(kind: CcidExchangeFailureKind): CcidBlockResult =
         failure(
             when (kind) {
-                CcidExchangeFailureKind.COMMAND_TOO_LONG ->
+                CcidExchangeFailureKind.COMMAND_TOO_LONG -> {
                     CcidBlockFailureKind.COMMAND_REJECTED
-                CcidExchangeFailureKind.TRANSPORT -> CcidBlockFailureKind.TRANSPORT
+                }
+
+                CcidExchangeFailureKind.TRANSPORT -> {
+                    CcidBlockFailureKind.TRANSPORT
+                }
+
                 CcidExchangeFailureKind.MALFORMED_RESPONSE,
                 CcidExchangeFailureKind.TIME_EXTENSION_LIMIT,
-                -> CcidBlockFailureKind.PROTOCOL
+                -> {
+                    CcidBlockFailureKind.PROTOCOL
+                }
             },
         )
 
     private fun mapResponse(response: CcidResponse): CcidBlockResult =
         when (response) {
-            is CcidDataBlock -> mapDataBlock(response)
-            is CcidCommandFailure ->
+            is CcidDataBlock -> {
+                mapDataBlock(response)
+            }
+
+            is CcidCommandFailure -> {
                 if (response.cardStatus == CcidCardStatus.ACTIVE) {
                     failure(CcidBlockFailureKind.READER)
                 } else {
                     failure(CcidBlockFailureKind.CARD_UNAVAILABLE)
                 }
+            }
+
             is CcidSlotStatus,
             is CcidTimeExtension,
-            -> failure(CcidBlockFailureKind.PROTOCOL)
+            -> {
+                failure(CcidBlockFailureKind.PROTOCOL)
+            }
         }
 
     private fun mapDataBlock(response: CcidDataBlock): CcidBlockResult =
@@ -386,8 +412,7 @@ internal class CcidBlockTransport(
             }
         }
 
-    private fun failure(kind: CcidBlockFailureKind): CcidBlockResult.Failure =
-        CcidBlockResult.Failure(kind)
+    private fun failure(kind: CcidBlockFailureKind): CcidBlockResult.Failure = CcidBlockResult.Failure(kind)
 
     private companion object {
         const val FIRST_SLOT = 0

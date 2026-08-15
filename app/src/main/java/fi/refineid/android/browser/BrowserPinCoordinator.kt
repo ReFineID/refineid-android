@@ -40,8 +40,9 @@ internal class BrowserPinRequest {
         completion.cancel(false)
     }
 
-    internal fun await(timeoutMilliseconds: Long): Pin1Submission =
-        completion.get(timeoutMilliseconds, TimeUnit.MILLISECONDS)
+    internal fun await(timeoutMilliseconds: Long): Pin1Submission {
+        return completion.get(timeoutMilliseconds, TimeUnit.MILLISECONDS)
+    }
 
     override fun toString(): String = "BrowserPinRequest([redacted])"
 }
@@ -116,6 +117,7 @@ internal class BrowserPinCoordinator(
                     publishStatus(BrowserSignatureStatus.SUCCEEDED)
                     result.signature
                 }
+
                 is AuthenticationSignResult.Failure -> {
                     publishStatus(result.kind.toBrowserStatus())
                     throw SignatureException("card authentication signature failed")
@@ -173,8 +175,11 @@ internal class BrowserPinCoordinator(
     private fun AuthenticationSignFailure.toBrowserStatus(): BrowserSignatureStatus =
         when (this) {
             AuthenticationSignFailure.WRONG_PIN -> BrowserSignatureStatus.WRONG_PIN
+
             AuthenticationSignFailure.PIN_LOCKED -> BrowserSignatureStatus.PIN_LOCKED
+
             AuthenticationSignFailure.SAFETY_REFUSED -> BrowserSignatureStatus.REFUSED
+
             AuthenticationSignFailure.CARD_UNAVAILABLE,
             AuthenticationSignFailure.TRANSPORT_ERROR,
             AuthenticationSignFailure.INVALID_PIN,

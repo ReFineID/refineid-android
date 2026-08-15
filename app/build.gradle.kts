@@ -8,10 +8,29 @@ import java.util.zip.ZipFile
 val rustDebugJniLibs = layout.buildDirectory.dir("rustJniLibs/debug")
 val rustReleaseJniLibs = layout.buildDirectory.dir("rustJniLibs/release")
 val minimumAndroidApi = 33
+val currentAndroidApi = 37
+val calendarYearBase = 2000
+val maximumUtcHour = 23
+val buildNumberHourScale = 10
+val maximumTenMinuteBucket = 5
+val maximumBuildNumber =
+    maximumUtcHour * buildNumberHourScale + maximumTenMinuteBucket
+val versionCodeYearScale = 10_000_000
+val versionCodeMonthScale = 100_000
+val versionCodeDayScale = 1_000
+val minimumGooglePlayVersionCode = 1
+val maximumGooglePlayVersionCode = 2_100_000_000
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.detekt)
     alias(libs.plugins.kotlin.compose)
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.files("config/detekt/detekt.yml"))
+    basePath.set(rootProject.layout.projectDirectory)
 }
 
 val versionPropertiesFile = rootProject.layout.projectDirectory.file("version.properties")
@@ -36,36 +55,40 @@ val calendarVersionMatch =
 val versionYear = calendarVersionMatch.groupValues[1].toInt()
 val versionMonth = calendarVersionMatch.groupValues[2].toInt()
 val versionDay = calendarVersionMatch.groupValues[3].toInt()
-val calendarVersionDate = LocalDate.of(2000 + versionYear, versionMonth, versionDay)
+val calendarVersionDate =
+    LocalDate.of(calendarYearBase + versionYear, versionMonth, versionDay)
 val refineIdBuildNumber =
     requireNotNull(versionProperties.getProperty("buildNumber")) {
         "version.properties is missing buildNumber"
     }.trim().toIntOrNull()
         ?: error("buildNumber must be an integer")
 
-require(refineIdBuildNumber in 0..235 && refineIdBuildNumber % 10 in 0..5) {
+require(
+    refineIdBuildNumber in 0..maximumBuildNumber &&
+        refineIdBuildNumber % buildNumberHourScale in 0..maximumTenMinuteBucket,
+) {
     "buildNumber must be a UTC ten-minute bucket (H * 10 + M / 10)"
 }
 
 val refineIdVersionCode =
-    versionYear * 10_000_000 +
-        calendarVersionDate.monthValue * 100_000 +
-        calendarVersionDate.dayOfMonth * 1_000 +
+    versionYear * versionCodeYearScale +
+        calendarVersionDate.monthValue * versionCodeMonthScale +
+        calendarVersionDate.dayOfMonth * versionCodeDayScale +
         refineIdBuildNumber
 
-require(refineIdVersionCode in 1..2_100_000_000) {
+require(refineIdVersionCode in minimumGooglePlayVersionCode..maximumGooglePlayVersionCode) {
     "derived versionCode is outside the Google Play range"
 }
 
 android {
     namespace = "fi.refineid.android"
-    compileSdk = 37
+    compileSdk = currentAndroidApi
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "fi.refineid.android"
         minSdk = minimumAndroidApi
-        targetSdk = 37
+        targetSdk = currentAndroidApi
         versionCode = refineIdVersionCode
         versionName = refineIdVersionName
 
@@ -256,18 +279,16 @@ val verifyReleaseNoLogging =
                 }
                 return (0 until byteCount).fold(0) { decoded, byteIndex ->
                     decoded or
-                        (this[offset + byteIndex].toUByte().toInt() shl
-                            (byteIndex * Byte.SIZE_BITS))
+                        (
+                            this[offset + byteIndex].toUByte().toInt() shl
+                                (byteIndex * Byte.SIZE_BITS)
+                        )
                 }
             }
 
-            fun ByteArray.readDexUnsignedShort(offset: Int): Int {
-                return readDexLittleEndian(offset, Short.SIZE_BYTES)
-            }
+            fun ByteArray.readDexUnsignedShort(offset: Int): Int = readDexLittleEndian(offset, Short.SIZE_BYTES)
 
-            fun ByteArray.readDexInt(offset: Int): Int {
-                return readDexLittleEndian(offset, Int.SIZE_BYTES)
-            }
+            fun ByteArray.readDexInt(offset: Int): Int = readDexLittleEndian(offset, Int.SIZE_BYTES)
 
             fun ByteArray.skipDexUnsignedLeb128(offset: Int): Int {
                 var cursor = offset
@@ -406,7 +427,9 @@ val verifyReleaseNoLogging =
                 )
             ZipFile(inputs.files.singleFile).use { apk ->
                 val dexEntries =
-                    apk.entries().asSequence()
+                    apk
+                        .entries()
+                        .asSequence()
                         .filter { entry ->
                             entry.name.startsWith("classes") && entry.name.endsWith(".dex")
                         }.toList()

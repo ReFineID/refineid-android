@@ -45,6 +45,15 @@ internal object CcidWire {
     const val BYTE_MAX = 0xFF
 }
 
+internal fun ByteArray.readUnsignedIntLittleEndian(offset: Int): Long =
+    (0 until Int.SIZE_BYTES).fold(0L) { decoded, byteIndex ->
+        decoded or
+            (
+                this[offset + byteIndex].toUByte().toLong() shl
+                    (byteIndex * Byte.SIZE_BITS)
+            )
+    }
+
 internal enum class CcidResponseMessageType(
     val wireValue: Int,
 ) {
@@ -310,7 +319,7 @@ internal object CcidResponseParser {
             )
         }
 
-        val declaredLength = readUnsignedIntLittleEndian(frame, CcidWire.LENGTH_OFFSET)
+        val declaredLength = frame.readUnsignedIntLittleEndian(CcidWire.LENGTH_OFFSET)
         if (declaredLength > CcidWire.MAX_RESPONSE_PAYLOAD_SIZE.toLong()) {
             throw protocolError(
                 CcidProtocolErrorKind.LENGTH_OUT_OF_RANGE,
@@ -374,27 +383,34 @@ internal object CcidResponseParser {
         val error = frame.unsignedByte(CcidWire.ERROR_OFFSET)
 
         return when (commandStatus) {
-            CcidWire.COMMAND_STATUS_SUCCEEDED ->
+            CcidWire.COMMAND_STATUS_SUCCEEDED -> {
                 parseSuccessfulResponse(
                     frame = frame,
                     expectedResponse = command.expectedResponse,
                     cardStatus = cardStatus,
                 )
-            CcidWire.COMMAND_STATUS_FAILED ->
+            }
+
+            CcidWire.COMMAND_STATUS_FAILED -> {
                 CcidCommandFailure(
                     cardStatus = cardStatus,
                     errorCode = error.toSignedByteValue(),
                 )
-            CcidWire.COMMAND_STATUS_TIME_EXTENSION ->
+            }
+
+            CcidWire.COMMAND_STATUS_TIME_EXTENSION -> {
                 CcidTimeExtension(
                     cardStatus = cardStatus,
                     multiplier = error,
                 )
-            else ->
+            }
+
+            else -> {
                 throw protocolError(
                     CcidProtocolErrorKind.RESERVED_COMMAND_STATUS,
                     "CCID response uses a reserved command status",
                 )
+            }
         }
     }
 
@@ -404,7 +420,7 @@ internal object CcidResponseParser {
         cardStatus: CcidCardStatus,
     ): CcidResponse =
         when (expectedResponse) {
-            CcidResponseMessageType.SLOT_STATUS ->
+            CcidResponseMessageType.SLOT_STATUS -> {
                 CcidSlotStatus(
                     cardStatus = cardStatus,
                     clockStatus =
@@ -412,11 +428,14 @@ internal object CcidResponseParser {
                             frame.unsignedByte(CcidWire.RESPONSE_PARAMETER_OFFSET),
                         ),
                 )
-            CcidResponseMessageType.DATA_BLOCK ->
+            }
+
+            CcidResponseMessageType.DATA_BLOCK -> {
                 copyDataBlock(
                     frame = frame,
                     cardStatus = cardStatus,
                 )
+            }
         }
 
     private fun copyDataBlock(
@@ -440,55 +459,83 @@ internal object CcidResponseParser {
 
     private fun parseCardStatus(value: Int): CcidCardStatus =
         when (value) {
-            CcidWire.CARD_STATUS_ACTIVE -> CcidCardStatus.ACTIVE
-            CcidWire.CARD_STATUS_INACTIVE -> CcidCardStatus.INACTIVE
-            CcidWire.CARD_STATUS_NOT_PRESENT -> CcidCardStatus.NOT_PRESENT
-            else ->
+            CcidWire.CARD_STATUS_ACTIVE -> {
+                CcidCardStatus.ACTIVE
+            }
+
+            CcidWire.CARD_STATUS_INACTIVE -> {
+                CcidCardStatus.INACTIVE
+            }
+
+            CcidWire.CARD_STATUS_NOT_PRESENT -> {
+                CcidCardStatus.NOT_PRESENT
+            }
+
+            else -> {
                 throw protocolError(
                     CcidProtocolErrorKind.RESERVED_CARD_STATUS,
                     "CCID response uses a reserved card status",
                 )
+            }
         }
 
     private fun parseClockStatus(value: Int): CcidClockStatus =
         when (value) {
-            CcidWire.CLOCK_RUNNING -> CcidClockStatus.RUNNING
-            CcidWire.CLOCK_STOPPED_LOW -> CcidClockStatus.STOPPED_LOW
-            CcidWire.CLOCK_STOPPED_HIGH -> CcidClockStatus.STOPPED_HIGH
-            CcidWire.CLOCK_STOPPED_UNKNOWN -> CcidClockStatus.STOPPED_UNKNOWN
-            else ->
+            CcidWire.CLOCK_RUNNING -> {
+                CcidClockStatus.RUNNING
+            }
+
+            CcidWire.CLOCK_STOPPED_LOW -> {
+                CcidClockStatus.STOPPED_LOW
+            }
+
+            CcidWire.CLOCK_STOPPED_HIGH -> {
+                CcidClockStatus.STOPPED_HIGH
+            }
+
+            CcidWire.CLOCK_STOPPED_UNKNOWN -> {
+                CcidClockStatus.STOPPED_UNKNOWN
+            }
+
+            else -> {
                 throw protocolError(
                     CcidProtocolErrorKind.INVALID_CLOCK_STATUS,
                     "CCID response uses an undefined clock status",
                 )
+            }
         }
 
     private fun parseChainParameter(value: Int): CcidChainParameter =
         when (value) {
-            CcidWire.COMPLETE_CHAIN -> CcidChainParameter.COMPLETE
-            CcidWire.BEGIN_CHAIN -> CcidChainParameter.BEGIN
-            CcidWire.END_CHAIN -> CcidChainParameter.END
-            CcidWire.CONTINUE_CHAIN -> CcidChainParameter.CONTINUE
-            CcidWire.COMMAND_CONTINUATION_EXPECTED ->
+            CcidWire.COMPLETE_CHAIN -> {
+                CcidChainParameter.COMPLETE
+            }
+
+            CcidWire.BEGIN_CHAIN -> {
+                CcidChainParameter.BEGIN
+            }
+
+            CcidWire.END_CHAIN -> {
+                CcidChainParameter.END
+            }
+
+            CcidWire.CONTINUE_CHAIN -> {
+                CcidChainParameter.CONTINUE
+            }
+
+            CcidWire.COMMAND_CONTINUATION_EXPECTED -> {
                 CcidChainParameter.COMMAND_CONTINUATION_EXPECTED
-            else ->
+            }
+
+            else -> {
                 throw protocolError(
                     CcidProtocolErrorKind.INVALID_CHAIN_PARAMETER,
                     "CCID response uses an undefined chain parameter",
                 )
+            }
         }
 
-    private fun readUnsignedIntLittleEndian(
-        bytes: ByteArray,
-        offset: Int,
-    ): Long =
-        bytes.unsignedByte(offset).toLong() or
-            (bytes.unsignedByte(offset + 1).toLong() shl 8) or
-            (bytes.unsignedByte(offset + 2).toLong() shl 16) or
-            (bytes.unsignedByte(offset + 3).toLong() shl 24)
-
-    private fun ByteArray.unsignedByte(offset: Int): Int =
-        this[offset].toInt() and CcidWire.BYTE_MAX
+    private fun ByteArray.unsignedByte(offset: Int): Int = this[offset].toInt() and CcidWire.BYTE_MAX
 
     private fun Int.toSignedByteValue(): Int =
         if (this <= Byte.MAX_VALUE) {

@@ -16,8 +16,8 @@ import fi.refineid.android.usb.ReaderConnectionStatus
 import fi.refineid.android.usb.ccid.CcidBlockFailureKind
 import fi.refineid.android.usb.ccid.CcidCardStatus
 import fi.refineid.android.usb.ccid.CcidDescriptorErrorKind
-import fi.refineid.android.usb.ccid.CcidExchangeLevel
 import fi.refineid.android.usb.ccid.CcidExchangeFailureKind
+import fi.refineid.android.usb.ccid.CcidExchangeLevel
 import fi.refineid.android.usb.ccid.CcidProtocolErrorKind
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 

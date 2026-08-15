@@ -227,8 +227,7 @@ internal object RsaPssPrehashedVerifier {
         }
     }
 
-    private fun byteLength(bitLength: Int): Int =
-        (bitLength + BYTE_LENGTH_ROUNDING_BITS) / Byte.SIZE_BITS
+    private fun byteLength(bitLength: Int): Int = (bitLength + BYTE_LENGTH_ROUNDING_BITS) / Byte.SIZE_BITS
 
     private fun Byte.toUnsignedInt(): Int = toUByte().toInt()
 

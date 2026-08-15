@@ -3,8 +3,6 @@ package fi.refineid.android.browser
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.NativeAuthenticationSignature
-import java.security.Security
-import java.security.Signature
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -12,6 +10,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.security.Security
+import java.security.Signature
 
 @RunWith(AndroidJUnit4::class)
 internal class CardSignatureProviderInstrumentedTest {
@@ -130,9 +130,7 @@ internal class CardSignatureProviderInstrumentedTest {
         fun syntheticRsaSignature(algorithm: AuthenticationSigningAlgorithm): ByteArray =
             ByteArray(algorithm.signatureLength) { RSA_SIGNATURE_FILL }
 
-        fun syntheticRawEcdsaSignature(
-            algorithm: AuthenticationSigningAlgorithm,
-        ): ByteArray {
+        fun syntheticRawEcdsaSignature(algorithm: AuthenticationSigningAlgorithm): ByteArray {
             val coordinateLength = algorithm.signatureLength / ECDSA_COORDINATE_COUNT
             return ByteArray(algorithm.signatureLength).also { raw ->
                 raw[coordinateLength - LAST_ELEMENT_DISTANCE] = ECDSA_R_VALUE

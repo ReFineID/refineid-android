@@ -78,6 +78,7 @@ internal class UsbReaderController(
     private var isStarted = false
     private var selectedDevice: UsbDevice? = null
     private var latestSnapshot = UsbReaderSnapshot()
+
     @Volatile
     private var probeGeneration = 0
 
@@ -86,7 +87,10 @@ internal class UsbReaderController(
 
     private val permissionReceiver =
         object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
+            override fun onReceive(
+                context: Context?,
+                intent: Intent?,
+            ) {
                 if (intent?.action == permissionAction) {
                     AppTrace.usbPermissionResult(
                         isGranted =
@@ -102,12 +106,16 @@ internal class UsbReaderController(
 
     private val usbEventReceiver =
         object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
+            override fun onReceive(
+                context: Context?,
+                intent: Intent?,
+            ) {
                 when (intent?.action) {
                     UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
                         AppTrace.usbDeviceAttached()
                         refresh()
                     }
+
                     UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                         AppTrace.usbDeviceDetached()
                         refresh()
@@ -182,10 +190,12 @@ internal class UsbReaderController(
                     closeActiveSessionAsync()
                     UsbReaderSnapshot()
                 }
+
                 usbManager.hasPermission(device) -> {
                     beginSessionOpen(device, probeGeneration)
                     return
                 }
+
                 else -> {
                     closeActiveSessionAsync()
                     UsbReaderSnapshot(
@@ -282,9 +292,7 @@ internal class UsbReaderController(
     }
 
     /** Copies the public leaf while preserving session thread confinement. */
-    override fun requestAuthenticationCertificate(
-        onResult: (NativeAuthenticationCertificate?) -> Unit,
-    ) {
+    override fun requestAuthenticationCertificate(onResult: (NativeAuthenticationCertificate?) -> Unit) {
         if (
             !isStarted ||
             latestSnapshot.status != ReaderConnectionStatus.READY ||
@@ -369,18 +377,21 @@ internal class UsbReaderController(
                         if (isStarted && generation == probeGeneration) {
                             activeSession?.let { session ->
                                 when (inputMode) {
-                                    AuthenticationSigningInputMode.MESSAGE ->
+                                    AuthenticationSigningInputMode.MESSAGE -> {
                                         session.authenticateAndSign(
                                             algorithm = algorithm,
                                             pin1 = pin1,
                                             message = input,
                                         )
-                                    AuthenticationSigningInputMode.PREHASHED ->
+                                    }
+
+                                    AuthenticationSigningInputMode.PREHASHED -> {
                                         session.authenticateAndSignPrehashed(
                                             algorithm = algorithm,
                                             pin1 = pin1,
                                             digest = input,
                                         )
+                                    }
                                 }
                             } ?: run {
                                 pin1.close()
@@ -434,24 +445,31 @@ internal class UsbReaderController(
                     AppTrace.usbSessionOpenCompleted(result)
                     publish(
                         when (result) {
-                            is CcidSessionOpenResult.Ready ->
+                            is CcidSessionOpenResult.Ready -> {
                                 UsbReaderSnapshot(
                                     status = ReaderConnectionStatus.READY,
                                     cardPresence = CardPresence.PRESENT,
                                 )
-                            CcidSessionOpenResult.NoCard ->
+                            }
+
+                            CcidSessionOpenResult.NoCard -> {
                                 UsbReaderSnapshot(
                                     status = ReaderConnectionStatus.READY,
                                     cardPresence = CardPresence.NOT_PRESENT,
                                 )
-                            CcidSessionOpenResult.CardError ->
+                            }
+
+                            CcidSessionOpenResult.CardError -> {
                                 UsbReaderSnapshot(
                                     status = ReaderConnectionStatus.CARD_ERROR,
                                 )
-                            CcidSessionOpenResult.TransportError ->
+                            }
+
+                            CcidSessionOpenResult.TransportError -> {
                                 UsbReaderSnapshot(
                                     status = ReaderConnectionStatus.TRANSPORT_ERROR,
                                 )
+                            }
                         },
                     )
                 } else {
@@ -496,8 +514,7 @@ internal class UsbReaderController(
     }
 }
 
-private fun CompletableFuture<AuthenticationSignResult>.awaitPreservingInterrupt():
-    AuthenticationSignResult {
+private fun CompletableFuture<AuthenticationSignResult>.awaitPreservingInterrupt(): AuthenticationSignResult {
     var wasInterrupted = false
     while (true) {
         try {
@@ -514,12 +531,18 @@ private fun CompletableFuture<AuthenticationSignResult>.awaitPreservingInterrupt
 
 private fun AuthenticationSignResult.toAuthenticationStatus(): AuthenticationStatus =
     when (this) {
-        is AuthenticationSignResult.Success -> AuthenticationStatus.SUCCEEDED
-        is AuthenticationSignResult.Failure ->
+        is AuthenticationSignResult.Success -> {
+            AuthenticationStatus.SUCCEEDED
+        }
+
+        is AuthenticationSignResult.Failure -> {
             when (kind) {
                 AuthenticationSignFailure.WRONG_PIN -> AuthenticationStatus.WRONG_PIN
+
                 AuthenticationSignFailure.PIN_LOCKED -> AuthenticationStatus.PIN_LOCKED
+
                 AuthenticationSignFailure.SAFETY_REFUSED -> AuthenticationStatus.REFUSED
+
                 AuthenticationSignFailure.CARD_UNAVAILABLE,
                 AuthenticationSignFailure.TRANSPORT_ERROR,
                 AuthenticationSignFailure.INVALID_PIN,
@@ -530,4 +553,5 @@ private fun AuthenticationSignResult.toAuthenticationStatus(): AuthenticationSta
                 AuthenticationSignFailure.BRIDGE_ERROR,
                 -> AuthenticationStatus.ERROR
             }
+        }
     }

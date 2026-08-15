@@ -33,6 +33,7 @@ private val ReFineIdColors =
         error = REFINED_ID_ERROR,
     )
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun ReFineIdTheme(content: @Composable () -> Unit) {
     MaterialTheme(

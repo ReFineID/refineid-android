@@ -7,9 +7,7 @@ import fi.refineid.android.core.Pin1Submission
 
 /** Browser-neutral boundary over one retained card session. */
 internal interface BrowserCardService {
-    fun requestAuthenticationCertificate(
-        onResult: (NativeAuthenticationCertificate?) -> Unit,
-    )
+    fun requestAuthenticationCertificate(onResult: (NativeAuthenticationCertificate?) -> Unit)
 
     fun signAuthenticationMessage(
         algorithm: AuthenticationSigningAlgorithm,

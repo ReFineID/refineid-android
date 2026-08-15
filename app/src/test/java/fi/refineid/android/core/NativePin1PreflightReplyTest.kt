@@ -17,21 +17,27 @@ class NativePin1PreflightReplyTest {
                     permitted = true,
                 ),
                 Case(
-                    wire = success(PIN_REFERENCE_ORGANIZATIONAL, PIN1_STATE_REMAINING, 3, true),
+                    wire =
+                        success(
+                            PIN_REFERENCE_ORGANIZATIONAL,
+                            PIN1_STATE_REMAINING,
+                            TYPICAL_RETRY_COUNT,
+                            true,
+                        ),
                     scheme = NativePinReferenceScheme.ORGANIZATIONAL,
-                    state = NativePin1State.Remaining(3),
+                    state = NativePin1State.Remaining(TYPICAL_RETRY_COUNT),
                     permitted = true,
                 ),
                 Case(
-                    wire = success(PIN_REFERENCE_CITIZEN, PIN1_STATE_REMAINING, 2, false),
+                    wire = success(PIN_REFERENCE_CITIZEN, PIN1_STATE_REMAINING, LOW_RETRY_COUNT, false),
                     scheme = NativePinReferenceScheme.CITIZEN,
-                    state = NativePin1State.Remaining(2),
+                    state = NativePin1State.Remaining(LOW_RETRY_COUNT),
                     permitted = false,
                 ),
                 Case(
-                    wire = success(PIN_REFERENCE_CITIZEN, PIN1_STATE_REMAINING, 0, true),
+                    wire = success(PIN_REFERENCE_CITIZEN, PIN1_STATE_REMAINING, EXHAUSTED_RETRY_COUNT, true),
                     scheme = NativePinReferenceScheme.CITIZEN,
-                    state = NativePin1State.Remaining(0),
+                    state = NativePin1State.Remaining(EXHAUSTED_RETRY_COUNT),
                     permitted = true,
                 ),
                 Case(
@@ -105,10 +111,10 @@ class NativePin1PreflightReplyTest {
                 byteArrayOf(PREFLIGHT_SUCCEEDED.toByte()),
                 success(UNKNOWN_VALUE, PIN1_STATE_VERIFIED, NO_RETRY_COUNT, true),
                 success(PIN_REFERENCE_CITIZEN, UNKNOWN_VALUE, NO_RETRY_COUNT, false),
-                success(PIN_REFERENCE_CITIZEN, PIN1_STATE_VERIFIED, 3, true),
+                success(PIN_REFERENCE_CITIZEN, PIN1_STATE_VERIFIED, TYPICAL_RETRY_COUNT, true),
                 success(PIN_REFERENCE_CITIZEN, PIN1_STATE_REMAINING, NO_RETRY_COUNT, false),
-                success(PIN_REFERENCE_CITIZEN, PIN1_STATE_REMAINING, 1, true),
-                success(PIN_REFERENCE_CITIZEN, PIN1_STATE_REMAINING, 6, true),
+                success(PIN_REFERENCE_CITIZEN, PIN1_STATE_REMAINING, LAST_RETRY_COUNT, true),
+                success(PIN_REFERENCE_CITIZEN, PIN1_STATE_REMAINING, ABOVE_POLICY_RETRY_COUNT, true),
                 success(PIN_REFERENCE_CITIZEN, PIN1_STATE_LOCKED, NO_RETRY_COUNT, true),
                 byteArrayOf(PREFLIGHT_CARD_UNAVAILABLE.toByte(), UNKNOWN_VALUE.toByte()),
             )
@@ -125,7 +131,7 @@ class NativePin1PreflightReplyTest {
     @Test
     fun retryStateRejectsValuesOutsideTheWireNibble() {
         assertThrows(IllegalArgumentException::class.java) {
-            NativePin1State.Remaining(16)
+            NativePin1State.Remaining(FIRST_RETRY_COUNT_OUTSIDE_WIRE_NIBBLE)
         }
     }
 
@@ -166,5 +172,11 @@ class NativePin1PreflightReplyTest {
         const val POLICY_PERMITTED = 1
         const val NO_RETRY_COUNT = 0xFF
         const val UNKNOWN_VALUE = 0x7F
+        const val EXHAUSTED_RETRY_COUNT = 0
+        const val LAST_RETRY_COUNT = 1
+        const val LOW_RETRY_COUNT = 2
+        const val TYPICAL_RETRY_COUNT = 3
+        const val ABOVE_POLICY_RETRY_COUNT = 6
+        const val FIRST_RETRY_COUNT_OUTSIDE_WIRE_NIBBLE = 16
     }
 }

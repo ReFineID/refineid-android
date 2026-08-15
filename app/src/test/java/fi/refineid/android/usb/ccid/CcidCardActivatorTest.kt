@@ -187,8 +187,7 @@ class CcidCardActivatorTest {
         }
     }
 
-    private fun ByteArray.unsignedByte(offset: Int): Int =
-        this[offset].toInt() and CcidWire.BYTE_MAX
+    private fun ByteArray.unsignedByte(offset: Int): Int = this[offset].toInt() and CcidWire.BYTE_MAX
 
     private class ScriptedBulkIo(
         responses: List<ByteArray>,

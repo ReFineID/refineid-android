@@ -47,6 +47,7 @@ import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
 import fi.refineid.android.usb.UsbReaderSnapshot
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun MainScreen(
     snapshot: UsbReaderSnapshot,
@@ -101,6 +102,7 @@ internal fun MainScreen(
     }
 }
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 private fun AuthenticationCard(
     status: AuthenticationStatus,
@@ -173,6 +175,7 @@ private fun AuthenticationCard(
     }
 }
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 private fun AuthenticationStatusText(status: AuthenticationStatus) {
     val text =
@@ -207,6 +210,7 @@ internal val Pin1InputTransformation =
         }
     }
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 private fun ReaderCard(
     snapshot: UsbReaderSnapshot,
@@ -224,19 +228,33 @@ private fun ReaderCard(
         }
     val statusTitle =
         when (snapshot.status) {
-            ReaderConnectionStatus.READY -> stringResource(R.string.ready)
-            ReaderConnectionStatus.PERMISSION_REQUIRED ->
+            ReaderConnectionStatus.READY -> {
+                stringResource(R.string.ready)
+            }
+
+            ReaderConnectionStatus.PERMISSION_REQUIRED -> {
                 stringResource(R.string.permission_required)
-            ReaderConnectionStatus.PERMISSION_REQUEST_FAILED ->
+            }
+
+            ReaderConnectionStatus.PERMISSION_REQUEST_FAILED -> {
                 stringResource(R.string.access_failed)
-            ReaderConnectionStatus.CARD_ERROR ->
+            }
+
+            ReaderConnectionStatus.CARD_ERROR -> {
                 stringResource(R.string.error)
-            ReaderConnectionStatus.TRANSPORT_ERROR ->
+            }
+
+            ReaderConnectionStatus.TRANSPORT_ERROR -> {
                 stringResource(R.string.error)
-            ReaderConnectionStatus.CHECKING ->
+            }
+
+            ReaderConnectionStatus.CHECKING -> {
                 stringResource(R.string.checking)
-            ReaderConnectionStatus.NOT_CONNECTED ->
+            }
+
+            ReaderConnectionStatus.NOT_CONNECTED -> {
                 stringResource(R.string.not_connected)
+            }
         }
 
     Card(
@@ -292,9 +310,13 @@ private fun ReaderCard(
                     Text(
                         text =
                             when (snapshot.cardPresence) {
-                                CardPresence.PRESENT -> stringResource(R.string.present)
-                                CardPresence.NOT_PRESENT ->
+                                CardPresence.PRESENT -> {
+                                    stringResource(R.string.present)
+                                }
+
+                                CardPresence.NOT_PRESENT -> {
                                     stringResource(R.string.not_present)
+                                }
                             },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,

@@ -2,8 +2,8 @@ package fi.refineid.android
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.WindowManager
 import android.view.View
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
