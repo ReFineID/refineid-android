@@ -83,8 +83,7 @@ class CertificateRevocationListInteropTest {
                 goodPem,
                 revokedDer,
                 changedDer,
-            )
-                .forEach { bytes -> bytes.fill(ZERO_BYTE) }
+            ).forEach { bytes -> bytes.fill(ZERO_BYTE) }
         }
     }
 
@@ -399,7 +398,8 @@ class CertificateRevocationListInteropTest {
         """.trimIndent()
 
     private fun findExecutable(name: String): Path? =
-        System.getenv(PATH_ENVIRONMENT_VARIABLE)
+        System
+            .getenv(PATH_ENVIRONMENT_VARIABLE)
             ?.split(System.getProperty(PATH_SEPARATOR_PROPERTY))
             ?.asSequence()
             ?.map { directory -> Path.of(directory, name) }

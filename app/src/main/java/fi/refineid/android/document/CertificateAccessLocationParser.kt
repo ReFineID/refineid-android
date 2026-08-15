@@ -127,11 +127,12 @@ internal object CertificateAccessLocationParser {
                 return null
             }
             val address = content.toString(Charsets.US_ASCII)
-            val uri = try {
-                URI(address)
-            } catch (_: URISyntaxException) {
-                return null
-            }
+            val uri =
+                try {
+                    URI(address)
+                } catch (_: URISyntaxException) {
+                    return null
+                }
             if (isPermittedHttpUri(uri)) address else null
         } finally {
             content.fill(ZERO_BYTE)

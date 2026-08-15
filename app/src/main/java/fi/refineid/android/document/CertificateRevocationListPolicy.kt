@@ -19,16 +19,18 @@ internal object CertificateRevocationListPolicy {
 
     private fun validateIssuingDistributionPoint(wrapped: ByteArray) {
         val outer = DerReader(wrapped)
-        val octetString = outer.next()
-            ?: throw failure(RevocationListValidationFailure.MALFORMED)
+        val octetString =
+            outer.next()
+                ?: throw failure(RevocationListValidationFailure.MALFORMED)
         if (octetString.tag != DerValues.TAG_OCTET_STRING || !outer.isAtEnd) {
             throw failure(RevocationListValidationFailure.MALFORMED)
         }
         val encoded = outer.content(octetString)
         try {
             val value = DerReader(encoded)
-            val sequence = value.next()
-                ?: throw failure(RevocationListValidationFailure.MALFORMED)
+            val sequence =
+                value.next()
+                    ?: throw failure(RevocationListValidationFailure.MALFORMED)
             if (sequence.tag != DerValues.TAG_SEQUENCE || !value.isAtEnd) {
                 throw failure(RevocationListValidationFailure.MALFORMED)
             }

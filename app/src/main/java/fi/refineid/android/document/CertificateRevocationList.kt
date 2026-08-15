@@ -172,17 +172,20 @@ internal object CertificateRevocationList {
         encodedList: ByteArray,
         issuerCertificateDer: ByteArray,
     ) {
-        val encodedIssuer = exactIssuerName(encodedList)
-            ?: throw failure(RevocationListValidationFailure.MALFORMED)
-        val issuerFacts = CertificateFacts.parse(issuerCertificateDer)
-            ?: run {
-                encodedIssuer.fill(ZERO_BYTE)
-                throw failure(RevocationListValidationFailure.CERTIFICATE_UNPARSEABLE)
-            }
+        val encodedIssuer =
+            exactIssuerName(encodedList)
+                ?: throw failure(RevocationListValidationFailure.MALFORMED)
+        val issuerFacts =
+            CertificateFacts.parse(issuerCertificateDer)
+                ?: run {
+                    encodedIssuer.fill(ZERO_BYTE)
+                    throw failure(RevocationListValidationFailure.CERTIFICATE_UNPARSEABLE)
+                }
         try {
-            val matches = issuerFacts.useSubjectName { subjectName ->
-                java.security.MessageDigest.isEqual(encodedIssuer, subjectName)
-            }
+            val matches =
+                issuerFacts.useSubjectName { subjectName ->
+                    java.security.MessageDigest.isEqual(encodedIssuer, subjectName)
+                }
             if (!matches) {
                 throw failure(RevocationListValidationFailure.ISSUER_MISMATCH)
             }
@@ -290,8 +293,9 @@ internal object CertificateRevocationList {
         currentTime: Instant,
     ): Date {
         val thisUpdate = list.thisUpdate
-        val nextUpdate = list.nextUpdate
-            ?: throw failure(RevocationListValidationFailure.NEXT_UPDATE_MISSING)
+        val nextUpdate =
+            list.nextUpdate
+                ?: throw failure(RevocationListValidationFailure.NEXT_UPDATE_MISSING)
         if (thisUpdate.toInstant().isAfter(currentTime)) {
             throw failure(RevocationListValidationFailure.LIST_FROM_FUTURE)
         }

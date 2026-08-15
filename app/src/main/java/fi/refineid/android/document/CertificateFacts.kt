@@ -301,7 +301,9 @@ internal class CertificateFacts private constructor(
                         extensionsSeen = true
                     }
 
-                    else -> return null
+                    else -> {
+                        return null
+                    }
                 }
             }
             return extensionLocations
@@ -477,8 +479,7 @@ internal class CertificateFacts private constructor(
     private class EncodedValue(
         private val value: ByteArray,
     ) {
-        override fun equals(other: Any?): Boolean =
-            other is EncodedValue && value.contentEquals(other.value)
+        override fun equals(other: Any?): Boolean = other is EncodedValue && value.contentEquals(other.value)
 
         override fun hashCode(): Int = value.contentHashCode()
     }
@@ -492,7 +493,6 @@ internal class CertificateFacts private constructor(
             val EMPTY = ExtensionLocations(emptyList(), emptyList(), emptyList())
         }
     }
-
 }
 
 internal object CertificateOids {

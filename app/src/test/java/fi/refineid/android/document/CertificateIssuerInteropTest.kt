@@ -189,7 +189,8 @@ class CertificateIssuerInteropTest {
     }
 
     private fun findExecutable(name: String): Path? =
-        System.getenv(PATH_ENVIRONMENT_VARIABLE)
+        System
+            .getenv(PATH_ENVIRONMENT_VARIABLE)
             ?.split(System.getProperty(PATH_SEPARATOR_PROPERTY))
             ?.asSequence()
             ?.map { directory -> Path.of(directory, name) }

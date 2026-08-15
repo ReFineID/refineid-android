@@ -20,10 +20,11 @@ internal object CertificateIssuer {
         referenceTime: Instant,
     ): Boolean {
         val certificateFacts = CertificateFacts.parse(certificateDer) ?: return false
-        val issuerFacts = CertificateFacts.parse(issuerDer) ?: run {
-            certificateFacts.close()
-            return false
-        }
+        val issuerFacts =
+            CertificateFacts.parse(issuerDer) ?: run {
+                certificateFacts.close()
+                return false
+            }
         return try {
             val certificate = parseCertificate(certificateDer) ?: return false
             val issuer = parseCertificate(issuerDer) ?: return false
