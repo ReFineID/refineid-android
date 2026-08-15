@@ -146,7 +146,7 @@ class ExternalKeyPinActivity : ComponentActivity() {
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
-private fun ExternalKeyPinScreen(
+internal fun ExternalKeyPinScreen(
     callerLabel: String,
     onSubmit: (Pin1Submission) -> Unit,
     onCancel: () -> Unit,

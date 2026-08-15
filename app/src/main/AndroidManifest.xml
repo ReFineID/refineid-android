@@ -25,6 +25,15 @@
             android:finishOnTaskLaunch="true"
             android:launchMode="singleTop" />
 
+        <service
+            android:name=".keychain.ExternalKeyProviderService"
+            android:exported="true"
+            android:permission="com.android.keychain.permission.BIND_EXTERNAL_KEY_PROVIDER">
+            <intent-filter>
+                <action android:name="com.android.keychain.external.IExternalKeyProviderService" />
+            </intent-filter>
+        </service>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -1,6 +1,5 @@
 package fi.refineid.android.keychain
 
-import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.NativeAuthenticationSignature
@@ -66,7 +65,7 @@ internal sealed interface ExternalKeySignResult {
  * grants at most one exact replay of a locally verified digest signature.
  */
 internal class ExternalKeySigningCoordinator(
-    private val cardService: AuthenticationCardService,
+    private val cardSigner: ExternalKeyCardSigner,
     private val pinAuthorizer: ExternalKeyPinAuthorizer,
     private val replayLease: ExternalSignatureReplayLease,
     initialProviderGeneration: ExternalKeyProviderGeneration? = null,
@@ -215,7 +214,6 @@ internal class ExternalKeySigningCoordinator(
             }
 
             ExternalKeyPinAuthorization.Interrupted -> {
-                Thread.currentThread().interrupt()
                 failure(ExternalKeySignFailure.CALLER_INTERRUPTED)
             }
 
@@ -244,7 +242,8 @@ internal class ExternalKeySigningCoordinator(
             }
         val cardResult =
             try {
-                cardService.signAuthenticationDigest(
+                cardSigner.signAuthenticationDigest(
+                    providerGeneration = request.providerGeneration,
                     algorithm = request.algorithm,
                     pin1 = pin1,
                     digest = digest,

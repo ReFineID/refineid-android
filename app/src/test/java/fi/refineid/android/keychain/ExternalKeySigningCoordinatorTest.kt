@@ -1,14 +1,13 @@
 package fi.refineid.android.keychain
 
-import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
-import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignature
 import fi.refineid.android.core.Pin1Submission
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -102,7 +101,7 @@ class ExternalKeySigningCoordinatorTest {
             }
         coordinator =
             ExternalKeySigningCoordinator(
-                cardService = cardService,
+                cardSigner = cardService,
                 pinAuthorizer = authorizer,
                 replayLease = ExternalSignatureReplayLease(scheduler),
                 initialProviderGeneration = CURRENT_GENERATION,
@@ -136,7 +135,7 @@ class ExternalKeySigningCoordinatorTest {
             }
         val coordinator =
             ExternalKeySigningCoordinator(
-                cardService = cardService,
+                cardSigner = cardService,
                 pinAuthorizer = authorizer,
                 replayLease = ExternalSignatureReplayLease(scheduler),
                 initialProviderGeneration = CURRENT_GENERATION,
@@ -161,7 +160,7 @@ class ExternalKeySigningCoordinatorTest {
         val cardService = RecordingCardService(beforeResult = cancellation::cancel)
         val coordinator =
             ExternalKeySigningCoordinator(
-                cardService = cardService,
+                cardSigner = cardService,
                 pinAuthorizer =
                     RecordingPinAuthorizer {
                         ExternalKeyPinAuthorization.Approved(syntheticPin())
@@ -201,7 +200,7 @@ class ExternalKeySigningCoordinatorTest {
             }
         coordinator =
             ExternalKeySigningCoordinator(
-                cardService = cardService,
+                cardSigner = cardService,
                 pinAuthorizer = authorizer,
                 replayLease = ExternalSignatureReplayLease(scheduler),
                 initialProviderGeneration = CURRENT_GENERATION,
@@ -238,6 +237,22 @@ class ExternalKeySigningCoordinatorTest {
             request.close()
             fixture.close()
         }
+    }
+
+    @Test
+    fun cancellationSignalDoesNotInventAWorkerThreadInterrupt() {
+        assertFalse(Thread.currentThread().isInterrupted)
+        val fixture = Fixture(authorization = ExternalKeyPinAuthorization.Interrupted)
+        val request = request()
+
+        assertEquals(
+            ExternalKeySignFailure.CALLER_INTERRUPTED,
+            fixture.coordinator.sign(request).requireFailure(),
+        )
+        assertFalse(Thread.currentThread().isInterrupted)
+
+        request.close()
+        fixture.close()
     }
 
     @Test
@@ -325,7 +340,7 @@ class ExternalKeySigningCoordinatorTest {
         val cardService = RecordingCardService(cardResult)
         val coordinator =
             ExternalKeySigningCoordinator(
-                cardService = cardService,
+                cardSigner = cardService,
                 pinAuthorizer = authorizer,
                 replayLease = ExternalSignatureReplayLease(scheduler),
                 initialProviderGeneration = CURRENT_GENERATION,
@@ -356,30 +371,19 @@ class ExternalKeySigningCoordinatorTest {
     private class RecordingCardService(
         private val configuredResult: AuthenticationSignResult? = null,
         private val beforeResult: () -> Unit = {},
-    ) : AuthenticationCardService {
+    ) : ExternalKeyCardSigner {
         var signCount = 0
         var lastDigest = byteArrayOf()
         var lastPinBytes = byteArrayOf()
         var lastIssuedSignatureBytes: ByteArray? = null
 
-        override fun requestAuthenticationCertificate(onResult: (NativeAuthenticationCertificate?) -> Unit) {
-            onResult(null)
-        }
-
-        override fun signAuthenticationMessage(
-            algorithm: AuthenticationSigningAlgorithm,
-            pin1: Pin1Submission,
-            message: ByteArray,
-        ): AuthenticationSignResult {
-            pin1.close()
-            throw AssertionError("external-key coordinator must use exact-digest signing")
-        }
-
         override fun signAuthenticationDigest(
+            providerGeneration: ExternalKeyProviderGeneration,
             algorithm: AuthenticationSigningAlgorithm,
             pin1: Pin1Submission,
             digest: ByteArray,
         ): AuthenticationSignResult {
+            assertEquals(SYNTHETIC_PROVIDER_GENERATION, providerGeneration.value)
             signCount += SINGLE_OPERATION
             lastDigest = digest.copyOf()
             pin1.consume { bytes ->

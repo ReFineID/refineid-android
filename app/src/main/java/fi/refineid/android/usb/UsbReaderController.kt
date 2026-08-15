@@ -58,23 +58,6 @@ internal data class UsbReaderSnapshot(
     val authenticationStatus: AuthenticationStatus = AuthenticationStatus.IDLE,
 )
 
-/** One public card identity bound to the currently retained USB session. */
-internal class UsbAuthenticationIdentity(
-    val providerGeneration: Long,
-    val certificate: NativeAuthenticationCertificate,
-) : AutoCloseable {
-    override fun close() {
-        certificate.close()
-    }
-
-    override fun toString(): String =
-        "UsbAuthenticationIdentity(" +
-            "generationAvailable=" + (providerGeneration >= MINIMUM_PROVIDER_GENERATION) +
-            ", profile=" + certificate.keyProfile +
-            ", certificateLength=" + certificate.derLength +
-            ")"
-}
-
 internal class UsbReaderController(
     context: Context,
 ) : AuthenticationCardService {
@@ -106,6 +89,18 @@ internal class UsbReaderController(
     // Worker-thread confined. Main-thread state never owns a USB connection.
     private var activeSession: CcidUsbSession? = null
     private var activeProviderGeneration: Long? = null
+
+    internal val externalKeyCardSession =
+        UsbExternalKeyCardSession(
+            ioExecutor = ioExecutor,
+            isAvailable = {
+                isStarted &&
+                    latestSnapshot.status == ReaderConnectionStatus.READY &&
+                    latestSnapshot.cardPresence == CardPresence.PRESENT
+            },
+            activeSession = { activeSession },
+            activeProviderGeneration = { activeProviderGeneration },
+        )
 
     private val permissionReceiver =
         object : BroadcastReceiver() {
@@ -361,37 +356,6 @@ internal class UsbReaderController(
         }
     }
 
-    /** Blocks a provider Binder worker until earlier session setup has settled. */
-    fun copyActiveAuthenticationIdentity(): UsbAuthenticationIdentity? {
-        if (Looper.myLooper() == Looper.getMainLooper() || !isStarted) {
-            return null
-        }
-        val completion = CompletableFuture<UsbAuthenticationIdentity?>()
-        try {
-            ioExecutor.execute {
-                val session = activeSession
-                val providerGeneration = activeProviderGeneration
-                val identity =
-                    if (isStarted && session != null && providerGeneration != null) {
-                        try {
-                            UsbAuthenticationIdentity(
-                                providerGeneration = providerGeneration,
-                                certificate = session.copyAuthenticationCertificate(),
-                            )
-                        } catch (_: IllegalStateException) {
-                            null
-                        }
-                    } else {
-                        null
-                    }
-                completion.complete(identity)
-            }
-        } catch (_: RejectedExecutionException) {
-            return null
-        }
-        return completion.awaitPreservingInterrupt()
-    }
-
     /** Blocks a browser crypto worker while one card operation runs on the USB owner thread. */
     override fun signAuthenticationMessage(
         algorithm: AuthenticationSigningAlgorithm,
@@ -597,7 +561,7 @@ private fun SecureRandom.nextProviderGeneration(): Long {
 private const val MINIMUM_PROVIDER_GENERATION = 1L
 private const val PROVIDER_GENERATION_VALUE_MASK = Long.MAX_VALUE
 
-private fun <T> CompletableFuture<T>.awaitPreservingInterrupt(): T {
+internal fun <T> CompletableFuture<T>.awaitPreservingInterrupt(): T {
     var wasInterrupted = false
     while (true) {
         try {

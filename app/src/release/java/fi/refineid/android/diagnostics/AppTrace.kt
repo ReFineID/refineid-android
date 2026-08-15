@@ -10,6 +10,8 @@ import fi.refineid.android.core.NativeAuthenticationSignResult
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativePin1PreflightResult
+import fi.refineid.android.keychain.ExternalKeyPinAuthorization
+import fi.refineid.android.keychain.ExternalKeySignResult
 import fi.refineid.android.usb.AuthenticationStatus
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
@@ -28,6 +30,24 @@ internal object AppTrace {
     fun activityReceivedIntent() = Unit
 
     fun activityDestroyed() = Unit
+
+    fun externalKeyProviderServiceCreated() = Unit
+
+    fun externalKeyProviderServiceBound(isAccepted: Boolean) = Unit
+
+    fun externalKeyProviderServiceDestroyed() = Unit
+
+    fun externalKeyIdentityQueried(isAvailable: Boolean) = Unit
+
+    fun externalKeySignStarted(algorithm: AuthenticationSigningAlgorithm) = Unit
+
+    fun externalKeySignCompleted(result: ExternalKeySignResult) = Unit
+
+    fun externalKeyIdentityRemovalCompleted(isRemoved: Boolean) = Unit
+
+    fun externalKeyPinPromptDispatched() = Unit
+
+    fun externalKeyPinPromptCompleted(authorization: ExternalKeyPinAuthorization) = Unit
 
     fun nativeLibraryLoadCompleted(isSuccessful: Boolean) = Unit
 

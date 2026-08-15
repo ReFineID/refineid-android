@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import fi.refineid.android.core.Pin1Submission
+import fi.refineid.android.diagnostics.AppTrace
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -31,7 +32,9 @@ internal class AndroidExternalKeyCallerLabelResolver(
             try {
                 packageManager.getApplicationInfo(
                     primaryPackage,
-                    PackageManager.ApplicationInfoFlags.of(NO_PACKAGE_MANAGER_FLAGS),
+                    PackageManager.ApplicationInfoFlags.of(
+                        PackageManager.GET_META_DATA.toLong(),
+                    ),
                 )
             } catch (_: PackageManager.NameNotFoundException) {
                 return null
@@ -52,7 +55,6 @@ internal class AndroidExternalKeyCallerLabelResolver(
     }
 
     private companion object {
-        const val NO_PACKAGE_MANAGER_FLAGS = 0L
         const val SINGLE_PACKAGE_COUNT = 1
         const val MAXIMUM_APPLICATION_LABEL_LENGTH = 80
         const val PACKAGE_SEPARATOR = ", "
@@ -109,10 +111,13 @@ internal class ExternalKeyPinPromptBroker(
             prompt.completion.get(timeoutMilliseconds, TimeUnit.MILLISECONDS)
         } catch (_: TimeoutException) {
             complete(prompt.id, ExternalKeyPinAuthorization.TimedOut)
-            ExternalKeyPinAuthorization.TimedOut
+            prompt.completion.getNow(ExternalKeyPinAuthorization.TimedOut)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
             complete(prompt.id, ExternalKeyPinAuthorization.Interrupted)
+            prompt.completion
+                .getNow(ExternalKeyPinAuthorization.Interrupted)
+                .closeRejectedPin()
             ExternalKeyPinAuthorization.Interrupted
         } catch (_: ExecutionException) {
             complete(prompt.id, ExternalKeyPinAuthorization.Unavailable)
@@ -193,6 +198,7 @@ internal class ExternalKeyPinPromptBroker(
                 return@post
             }
             try {
+                AppTrace.externalKeyPinPromptDispatched()
                 applicationContext.startActivity(
                     ExternalKeyPinActivity.intent(applicationContext, prompt.id),
                 )
@@ -214,6 +220,7 @@ internal class ExternalKeyPinPromptBroker(
             authorization.closeRejectedPin()
             return
         }
+        AppTrace.externalKeyPinPromptCompleted(authorization)
         finishPrompt(prompt)
     }
 
