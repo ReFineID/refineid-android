@@ -38,6 +38,7 @@ val aospProviderContractPatch =
 val repositoryShellScripts =
     listOf(
         "Scripts/apply-aosp-patches.sh",
+        "Scripts/audit-aosp-patches.sh",
         "Scripts/build-aosp-flame.sh",
         "Scripts/stamp-version.sh",
         "Scripts/stage-aosp-prebuilt.sh",

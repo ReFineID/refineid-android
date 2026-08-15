@@ -18,8 +18,7 @@ readonly BACKGROUND_ACTIVITY_PERMISSION='android:name="android.permission.START_
 readonly INTERNET_PERMISSION="android.permission.INTERNET"
 readonly CLEARTEXT_DISABLED='android:usesCleartextTraffic="false"'
 
-Scripts/verify-aosp-provider-contract.sh
-./gradlew :app:verifyReleaseNoLogging :app:verifyReleaseNetworkIsolation
+./gradlew check
 
 [[ -f "$RELEASE_APK" ]] || {
   echo "release APK was not produced" >&2

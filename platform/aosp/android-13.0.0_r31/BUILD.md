@@ -15,6 +15,17 @@ The ReFineID Gradle build requires OpenJDK 26 through `JAVA_HOME`. After staging
 the app, the build script clears `JAVA_HOME` so AOSP can select its pinned Java
 toolchain.
 
+Patch applicability can be checked on any current Git host without a full AOSP
+checkout:
+
+    Scripts/audit-aosp-patches.sh
+
+The audit creates sparse temporary checkouts of only the exact upstream files
+touched by the series. `--replay` additionally runs the complete release gate,
+stages the unsigned APK, replays every `git am`, and compares the resulting
+trees with the expected patch trees. Replay requires the Android SDK and JDK 26
+but not the proprietary Pixel archives.
+
 ## Source
 
 Create and sync the exact AOSP tag:
@@ -79,8 +90,24 @@ With `JAVA_HOME` still selecting OpenJDK 26, run:
     packages/apps/ReFineID/Scripts/build-aosp-flame.sh
 
 The script verifies the exact final patch trees and vendor files, stages the
-unsigned release APK, builds the changed framework modules and full image, and
-checks that the installed ReFineID and KeyChain APKs share the platform signer.
+unsigned release APK, builds the changed framework modules plus `KeystoreTests`
+and `KeyChainTests`, builds the full image, and checks that the installed
+ReFineID and KeyChain APKs share the platform signer. It also refuses an AOSP
+tree whose manifest checkout is not the exact `android-13.0.0_r31` commit.
+
+After the patched image is running, build and execute the platform boundary
+tests from the same Linux checkout:
+
+    atest \
+      KeystoreTests:android.security.KeyChainPrivateKeyDescriptorTest \
+      KeystoreTests:android.security.KeyChainExternalSignatureParcelTest \
+      KeystoreTests:android.security.KeyChainExternalKeyProviderTest
+    atest \
+      KeyChainTests:com.android.keychain.BoundExternalKeyProviderTest \
+      KeyChainTests:com.android.keychain.ExternalKeyManagerTest \
+      KeyChainTests:com.android.keychain.external.ExternalKeyProviderParcelTest \
+      KeyChainTests:com.android.keychain.tests.BasicKeyChainServiceTest \
+      KeyChainTests:com.android.keychain.tests.KeyChainActivityTest
 
 ## Flash gate
 

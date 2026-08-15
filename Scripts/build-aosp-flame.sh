@@ -14,6 +14,8 @@ readonly KIB_PER_GIB=1048576
 readonly REQUIRED_BUILD_FREE_SPACE_KIB=$((REQUIRED_BUILD_FREE_SPACE_GIB * KIB_PER_GIB))
 readonly REQUIRED_GRADLE_JAVA_FEATURE=26
 readonly LUNCH_TARGET="aosp_flame-userdebug"
+readonly MANIFEST_RELATIVE_PATH=".repo/manifests"
+readonly EXPECTED_MANIFEST_COMMIT="012e197f31592b82d79ed2d4e03c5fb3ada38b62"
 readonly REFINEID_RELATIVE_PATH="packages/apps/ReFineID"
 readonly SHARED_VENDOR_MAKEFILE="vendor/google_devices/coral/proprietary/device-vendor.mk"
 readonly GOOGLE_VENDOR_MAKEFILE="vendor/google_devices/flame/device-partial.mk"
@@ -21,6 +23,14 @@ readonly QUALCOMM_VENDOR_MAKEFILE="vendor/qcom/flame/device-partial.mk"
 readonly BUILT_REFINEID_APK="product/priv-app/ReFineID/ReFineID.apk"
 readonly BUILT_KEYCHAIN_APK="system/app/KeyChain/KeyChain.apk"
 readonly CERTIFICATE_DIGEST_LABEL="Signer #1 certificate SHA-256 digest"
+readonly -a CHANGED_BUILD_MODULES=(
+  "ReFineID"
+  "KeyChain"
+  "framework-minus-apex"
+  "KeystoreTests"
+  "KeyChainTests"
+  "apksigner"
+)
 
 SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly SCRIPT_DIRECTORY
@@ -51,6 +61,13 @@ fi
 [[ "$(uname -m)" == "$EXPECTED_HOST_ARCHITECTURE" ]] ||
   fail "the Android 13 platform build requires x86_64"
 [[ -f "${AOSP_ROOT}/build/envsetup.sh" ]] || fail "AOSP build/envsetup.sh is missing"
+readonly MANIFEST_PROJECT="${AOSP_ROOT}/${MANIFEST_RELATIVE_PATH}"
+git -C "$MANIFEST_PROJECT" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
+  fail "AOSP manifest checkout is missing"
+[[ "$(git -C "$MANIFEST_PROJECT" rev-parse HEAD)" == "$EXPECTED_MANIFEST_COMMIT" ]] ||
+  fail "AOSP manifest is not android-13.0.0_r31"
+[[ -z "$(git -C "$MANIFEST_PROJECT" status --porcelain --untracked-files=normal)" ]] ||
+  fail "AOSP manifest checkout has local changes"
 [[ -d "$EXPECTED_REPOSITORY_ROOT" ]] ||
   fail "ReFineID must be checked out at ${REFINEID_RELATIVE_PATH}"
 RESOLVED_EXPECTED_REPOSITORY_ROOT="$(cd "$EXPECTED_REPOSITORY_ROOT" && pwd -P)"
@@ -89,7 +106,7 @@ cd "$AOSP_ROOT"
 # shellcheck source=/dev/null
 source build/envsetup.sh
 lunch "$LUNCH_TARGET"
-m ReFineID KeyChain framework-minus-apex apksigner
+m "${CHANGED_BUILD_MODULES[@]}"
 m
 
 [[ -n "${ANDROID_PRODUCT_OUT:-}" ]] || fail "Android product output is unset"

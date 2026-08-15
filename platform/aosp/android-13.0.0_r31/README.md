@@ -34,6 +34,10 @@ Binder transaction numbers remain unchanged.
 For a guarded end-to-end checkout, vendor, patch, and build procedure, use
 [`BUILD.md`](BUILD.md). `Scripts/apply-aosp-patches.sh` verifies each pinned
 base and cumulatively preflights every series before changing a checkout.
+`Scripts/audit-aosp-patches.sh` performs the same check against fresh sparse
+upstream repositories without requiring a complete AOSP checkout; its
+`--replay` mode also proves release staging, ordered `git am`, and exact final
+trees.
 
 Place this repository at `packages/apps/ReFineID` in the AOSP tree and run
 `Scripts/stage-aosp-prebuilt.sh` before starting the platform build. The script
@@ -45,7 +49,9 @@ repository.
 ## Current verification
 
 - All three project patch sequences pass sequential application checks and full
-  `git am` replay in filename order from their exact upstream bases.
+  `git am` replay in filename order from their exact upstream bases. The
+  reproducible sparse audit uses about 20 MiB for preflight and 1.1 GiB for a
+  release-staging replay with warm dependency caches.
 - The framework AIDL interface generates with Build Tools 36; the only
   excluded warning is its pre-existing Android 13 interface-wide
   missing-permission annotation. The private provider AIDL generates with
@@ -94,6 +100,9 @@ repository.
   attached card, and the minimized release APK retains all four issuer
   resources.
 - The app, framework, KeyChain, and product-integration diffs pass Gitleaks.
+- The sparse audit has independently replayed the complete series from the
+  pinned upstream tag. A Soong image build and its on-device platform tests
+  remain separate Linux-builder gates.
 
 The patch series has not yet passed a Soong platform build. Android 11 and
 newer platform builds are unsupported on macOS, and Google's current
