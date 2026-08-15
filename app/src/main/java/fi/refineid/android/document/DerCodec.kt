@@ -356,11 +356,13 @@ internal object DerValues {
     const val TAG_SET = 0x31
     const val TAG_CONTEXT_0_PRIMITIVE = 0x80
     const val TAG_CONTEXT_1_PRIMITIVE = 0x81
+    const val TAG_CONTEXT_2_PRIMITIVE = 0x82
     const val TAG_CONTEXT_0_CONSTRUCTED = 0xA0
     const val TAG_CONTEXT_1_CONSTRUCTED = 0xA1
     const val TAG_CONTEXT_2_CONSTRUCTED = 0xA2
     const val TAG_CONTEXT_3_CONSTRUCTED = 0xA3
     const val TAG_CONTEXT_4_CONSTRUCTED = 0xA4
+    const val TAG_CONTEXT_6_PRIMITIVE = 0x86
     const val SIGN_BIT_MASK = 0x80
     const val DER_TRUE_BYTE: Byte = -1
     const val DER_FALSE_BYTE: Byte = 0
