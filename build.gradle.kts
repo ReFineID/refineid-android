@@ -33,6 +33,8 @@ spotless {
 val rustCrateDirectory = layout.projectDirectory.dir("native/refineid-android-core")
 val repositoryShellScripts =
     listOf(
+        "Scripts/apply-aosp-patches.sh",
+        "Scripts/build-aosp-flame.sh",
         "Scripts/stamp-version.sh",
         "Scripts/stage-aosp-prebuilt.sh",
     )

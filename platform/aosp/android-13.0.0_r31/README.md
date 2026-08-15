@@ -29,6 +29,10 @@ Apply each directory's patches to its corresponding project with `git am`, in
 filename order. New AIDL methods are appended to the interface so all existing
 Binder transaction numbers remain unchanged.
 
+For a guarded end-to-end checkout, vendor, patch, and build procedure, use
+[`BUILD.md`](BUILD.md). `Scripts/apply-aosp-patches.sh` verifies each pinned
+base and cumulatively preflights every series before changing a checkout.
+
 Place this repository at `packages/apps/ReFineID` in the AOSP tree and run
 `Scripts/stage-aosp-prebuilt.sh` before starting the platform build. The script
 stages the minimized unsigned release APK at the path consumed by `Android.bp`.

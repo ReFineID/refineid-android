@@ -81,7 +81,9 @@ with:
 Machine-specific SDK paths belong in the ignored local.properties file.
 
 For an AOSP checkout containing this repository at `packages/apps/ReFineID`,
-stage the minimized unsigned release artifact with:
+follow the pinned Pixel 4
+[`BUILD.md`](platform/aosp/android-13.0.0_r31/BUILD.md) runbook. To stage only
+the minimized unsigned release artifact, use:
 
     Scripts/stage-aosp-prebuilt.sh
 
