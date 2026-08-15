@@ -176,7 +176,7 @@ PIN shape, and retry-counter values do not cross into the browser process.
 | Chromium `SHA256withECDSA` | Complete message | SHA-256 digest, P-384 ECDSA | Supported |
 | Chromium `SHA384withECDSA` | Complete message | SHA-384 digest, P-384 ECDSA | Supported |
 | Gecko `NoneWithECDSA` | Precomputed digest | P-384 ECDSA selected by exact digest length | Supported for SHA-256 and SHA-384 |
-| Gecko `NoneWithRSA` | PKCS#1 input prepared by NSS | Strictly extract a supported SHA-256 digest, then native RSA PKCS#1 v1.5 | Implementable; the exact NSS DigestInfo shape requires an independent Firefox test |
+| Gecko `NoneWithRSA` | DER SHA-256 DigestInfo prepared by NSS | Strictly extract the SHA-256 digest, then native RSA PKCS#1 v1.5 | Supported at the provider boundary; an on-device Firefox handshake remains pending |
 | Gecko `raw` for RSA-PSS | Modulus-wide EMSA-PSS encoded block | No matching card operation | Unsupported in unmodified Firefox for RSA-PSS |
 
 Gecko currently implements its RSA-PSS path by performing EMSA-PSS encoding
@@ -186,6 +186,32 @@ Gecko change that passes the digest and PSS parameters, or a different card
 interface; weakening the card boundary to emulate raw RSA is not an option.
 
 The primary ECDSA card path does not have this limitation.
+
+### Pinned browser source audit
+
+The browser contract was checked on 2026-08-15 against immutable upstream
+revisions, independently of the provider implementation:
+
+- Chromium revision
+  [`d8a3ba218dabe95a746bd44f4d5747b2f3d72725`](https://chromium.googlesource.com/chromium/src/+/d8a3ba218dabe95a746bd44f4d5747b2f3d72725/net/ssl/ssl_platform_key_android.cc)
+  probes each named JCA `Signature` with the selected private key and signs the
+  complete TLS input with that same algorithm. Its raw-RSA PSS fallback is used
+  only when the named PSS signature is unavailable. The corresponding
+  [`AndroidKeyStore.java`](https://chromium.googlesource.com/chromium/src/+/d8a3ba218dabe95a746bd44f4d5747b2f3d72725/net/android/java/src/org/chromium/net/AndroidKeyStore.java)
+  performs `getInstance`, `initSign`, `update`, and `sign` directly.
+- Firefox revision
+  [`98f1235b79c19a808e3101160efb7810b71a75d7`](https://github.com/mozilla-firefox/firefox/blob/98f1235b79c19a808e3101160efb7810b71a75d7/mobile/android/geckoview/src/main/java/org/mozilla/gecko/ClientAuthCertificateManager.java)
+  uses `NoneWithRSA` and `NoneWithECDSA` through JCA, but uses
+  `RSA/None/NoPadding` for its `raw` RSA-PSS route. Its
+  [`backend_android.rs`](https://github.com/mozilla-firefox/firefox/blob/98f1235b79c19a808e3101160efb7810b71a75d7/security/manager/ssl/osclientcerts/src/backend_android.rs)
+  performs one real signature to obtain the length and another to return the
+  result. NSS
+  [`SGN_Digest`](https://github.com/mozilla-firefox/firefox/blob/98f1235b79c19a808e3101160efb7810b71a75d7/security/nss/lib/cryptohi/secsign.c)
+  constructs and DER-encodes `DigestInfo` before its RSA PKCS#1 signing call.
+
+These source checks prove the JCA input shapes and the need for replay. They do
+not replace the independent Chrome and Firefox handshakes on the final patched
+system image.
 
 ## One-result replay lease
 
