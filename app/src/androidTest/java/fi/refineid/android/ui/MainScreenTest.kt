@@ -12,6 +12,11 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import fi.refineid.android.R
+import fi.refineid.android.browser.BrowserCardService
+import fi.refineid.android.core.AuthenticationSignFailure
+import fi.refineid.android.core.AuthenticationSignResult
+import fi.refineid.android.core.AuthenticationSigningAlgorithm
+import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.PIN1_MAXIMUM_LENGTH
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.usb.AuthenticationStatus
@@ -50,6 +55,7 @@ internal class MainScreenTest {
         composeRule
             .onNodeWithTag(UiAutomationIds.AUTHENTICATION_ACTION)
             .assertIsNotEnabled()
+        composeRule.onNodeWithTag(UiAutomationIds.BROWSER_ACTION).assertDoesNotExist()
 
         pinField.performTextInput(SYNTHETIC_PIN1)
         composeRule
@@ -147,10 +153,24 @@ internal class MainScreenTest {
             .assertDoesNotExist()
     }
 
+    @Test
+    fun readyCardServiceExposesTheTerseBrowserAction() {
+        show(
+            snapshot = READY_WITH_CARD,
+            browserCardService = INERT_BROWSER_CARD_SERVICE,
+        )
+
+        composeRule
+            .onNodeWithTag(UiAutomationIds.BROWSER_ACTION)
+            .assertIsDisplayed()
+            .assertIsEnabled()
+    }
+
     private fun show(
         snapshot: UsbReaderSnapshot,
         onRequestPermission: () -> Unit = {},
         onAuthenticate: (Pin1Submission) -> Unit = Pin1Submission::close,
+        browserCardService: BrowserCardService? = null,
     ) {
         composeRule.setContent {
             ReFineIdTheme {
@@ -158,6 +178,7 @@ internal class MainScreenTest {
                     snapshot = snapshot,
                     onRequestPermission = onRequestPermission,
                     onAuthenticate = onAuthenticate,
+                    browserCardService = browserCardService,
                 )
             }
         }
@@ -182,5 +203,25 @@ internal class MainScreenTest {
                 status = ReaderConnectionStatus.READY,
                 cardPresence = CardPresence.PRESENT,
             )
+
+        val INERT_BROWSER_CARD_SERVICE =
+            object : BrowserCardService {
+                override fun requestAuthenticationCertificate(
+                    onResult: (NativeAuthenticationCertificate?) -> Unit,
+                ) {
+                    onResult(null)
+                }
+
+                override fun signAuthenticationMessage(
+                    algorithm: AuthenticationSigningAlgorithm,
+                    pin1: Pin1Submission,
+                    message: ByteArray,
+                ): AuthenticationSignResult {
+                    pin1.close()
+                    return AuthenticationSignResult.Failure(
+                        AuthenticationSignFailure.CARD_UNAVAILABLE,
+                    )
+                }
+            }
     }
 }

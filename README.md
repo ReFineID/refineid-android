@@ -3,10 +3,10 @@
 Native Android support for Finnish identity cards and standards-based browser
 authentication.
 
-This repository is at the hardware-foundation stage. The first vertical slice
-uses an Android USB Host connection to a CCID reader. It will discover a card,
-perform a PIN-authorized RSA signature, and verify that signature locally
-before browser integration is added.
+This repository is at the browser-diagnostic stage. Its first vertical slice
+uses Android USB Host with a CCID reader, performs one PIN-authorized card
+signature, verifies it locally, and exposes the same non-exportable key to a
+debug-only WebView client-certificate handshake.
 
 The long-term target is authentication from normal Android browsers, including
 reference services such as Suomi.fi. An in-app browser is useful as an
@@ -26,7 +26,17 @@ instrumented development harness, but it is not the product boundary.
 - One-shot PIN1 VERIFY and RSA/P-384 authentication signing
 - Mandatory local verification against the retained authentication certificate
 - Secure, debug-only on-device signing harness; no manual harness in release
+- Debug-only, origin-pinned WebView client-certificate harness backed by the
+  retained smart-card session
+- Card-backed JCA provider for Chromium's RSA and P-384 authentication schemes
+- Fingerprint-pinned FINEID intermediate set, present only in debug builds
+- Live diagnostic handshake verified through Chromium's holder-PIN request
+- No embedded browser, Internet permission, or logging in the release build
 - Compose UI Test v2 and UI Automator 2.4 instrumentation on a physical device
+
+An ordinary APK cannot publish its process-local external key to every other
+browser process. System-browser support therefore remains privileged platform
+work; see `docs/architecture/0011-browser-authentication-boundary.md`.
 
 Product UI is deliberately terse. Explanations and diagnostics belong in
 documentation or developer tooling.
@@ -53,6 +63,7 @@ Then set JAVA_HOME and ANDROID_SDK_ROOT. Build and run checks with:
 
     ./gradlew check
     ./gradlew assembleDebug
+    ./gradlew connectedDebugAndroidTest
 
 Machine-specific SDK paths belong in the ignored local.properties file.
 

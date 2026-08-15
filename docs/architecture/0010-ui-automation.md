@@ -32,12 +32,14 @@ Product controls carry stable, locale-independent test tags. The root enables
 semantics and the accessibility tree used by UI Automator. Tests do not select
 product controls by translated labels.
 
-The initial suite verifies the secure field semantics, input bounds, one-shot
-synthetic submission, field clearing, disabled signing state, permission
-action, card-absence behavior, real application launch, and accessibility-tree
-visibility. The UI Automator launcher uses a normal explicit Android intent;
-the app is not granted network access merely to support a test-only shell
-launcher.
+The suite verifies the secure field semantics, input bounds, one-shot synthetic
+submission, field clearing, disabled signing state, permission action,
+card-absence behavior, terse browser-action visibility, real application
+launch, and accessibility-tree visibility. Device-side tests also exercise the
+four browser JCA algorithms and the fingerprint-pinned issuer set through the
+Android runtime. The UI Automator launcher uses a normal explicit Android
+intent; the app is not granted network access merely to support a test-only
+shell launcher.
 
 ## Credential and evidence policy
 
