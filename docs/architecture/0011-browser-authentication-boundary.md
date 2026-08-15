@@ -74,7 +74,8 @@ alias.
   fingerprint-pinned intermediate certificates as currently valid CAs.
 - A live USB-card run reached the diagnostic server's client-certificate
   request, supplied the matching identity, and reached the holder PIN prompt.
-  Automated testing intentionally stopped before credential entry.
+  The opt-in UI Automator hardware journey repeats this boundary and dismisses
+  the prompt without credential entry.
 
 Completion of a holder-driven WebView signature proves the app-owned seam; it
 does not prove system-browser integration. Completion of the ultimate goal

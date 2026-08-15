@@ -35,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -172,7 +174,10 @@ private fun BrowserDialog(
             ),
     ) {
         Surface(
-            modifier = Modifier.fillMaxSize(),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .semantics { testTagsAsResourceId = true },
             color = MaterialTheme.colorScheme.background,
         ) {
             Column(
@@ -259,6 +264,7 @@ private fun BrowserPinDialog(request: BrowserPinRequest) {
         properties = DialogProperties(dismissOnClickOutside = false),
     ) {
         Surface(
+            modifier = Modifier.semantics { testTagsAsResourceId = true },
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surface,
         ) {

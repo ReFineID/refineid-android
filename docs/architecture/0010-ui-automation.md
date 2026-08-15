@@ -37,9 +37,12 @@ submission, field clearing, disabled signing state, permission action,
 card-absence behavior, terse browser-action visibility, real application
 launch, and accessibility-tree visibility. Device-side tests also exercise the
 four browser JCA algorithms and the fingerprint-pinned issuer set through the
-Android runtime. The UI Automator launcher uses a normal explicit Android
-intent; the app is not granted network access merely to support a test-only
-shell launcher.
+Android runtime. An opt-in hardware journey takes a live card through public
+certificate discovery and the diagnostic TLS client-certificate request. It
+handles Android's USB permission window when a fresh test installation needs
+it, then cancels at the PIN prompt without submitting a credential. The UI
+Automator launcher uses a normal explicit Android intent; the app is not
+granted network access merely to support a test-only shell launcher.
 
 ## Credential and evidence policy
 
@@ -64,3 +67,13 @@ Run local and instrumented UI checks with:
 `connectedDebugAndroidTest` is a physical-device or emulator gate. Browser
 integration will extend the UI Automator layer rather than introducing a
 third-party driver.
+
+With a supported card and reader already present, run the non-credential live
+browser handshake separately:
+
+    ./gradlew connectedDebugAndroidTest \
+      -Pandroid.testInstrumentationRunnerArguments.class=fi.refineid.android.ui.LiveBrowserHandshakeUiAutomatorTest \
+      -Pandroid.testInstrumentationRunnerArguments.refineidLiveBrowserHandshake=true
+
+The test stops at the secure PIN1 field and dismisses it. It never enters or
+submits a credential and therefore must not consume a retry.
