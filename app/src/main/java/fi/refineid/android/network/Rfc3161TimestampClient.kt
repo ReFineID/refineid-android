@@ -72,7 +72,7 @@ internal class SigningTimestampAuthority private constructor(
             password: CharArray? = null,
         ): SigningTimestampAuthority {
             if (
-                addressIsInvalid(address) ||
+                addressIsInvalid(address, carriesCredentials = username != null) ||
                 trustedCertificatesAreInvalid(trustedCertificates) ||
                 credentialsAreIncomplete(username, password)
             ) {
@@ -92,7 +92,10 @@ internal class SigningTimestampAuthority private constructor(
             username: String? = null,
             password: CharArray? = null,
         ): SigningTimestampAuthority {
-            if (addressIsInvalid(address) || credentialsAreIncomplete(username, password)) {
+            if (
+                addressIsInvalid(address, carriesCredentials = username != null) ||
+                credentialsAreIncomplete(username, password)
+            ) {
                 throw IllegalArgumentException("invalid timestamp-authority configuration")
             }
             return SigningTimestampAuthority(
@@ -113,10 +116,13 @@ internal class SigningTimestampAuthority private constructor(
                 SigningNetworkBasicCredentials.copyOf(username, password)
             }
 
-        private fun addressIsInvalid(address: String): Boolean =
+        private fun addressIsInvalid(
+            address: String,
+            carriesCredentials: Boolean,
+        ): Boolean =
             try {
-                SigningNetworkPolicy.httpUri(address, SigningNetworkEndpoint.AUTHORITY)
-                false
+                val uri = SigningNetworkPolicy.httpUri(address, SigningNetworkEndpoint.AUTHORITY)
+                carriesCredentials && uri.scheme.lowercase() != HTTPS_SCHEME
             } catch (_: SigningNetworkException) {
                 true
             }
@@ -135,6 +141,7 @@ internal class SigningTimestampAuthority private constructor(
         ): Boolean = (username == null) != (password == null)
 
         private const val CLEARED_BYTE: Byte = 0
+        private const val HTTPS_SCHEME = "https"
     }
 }
 

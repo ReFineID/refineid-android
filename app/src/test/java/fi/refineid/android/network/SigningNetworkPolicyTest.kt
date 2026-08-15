@@ -110,6 +110,15 @@ class SigningNetworkPolicyTest {
     }
 
     @Test
+    fun basicCredentialsPermitAnEmptyPasswordWithoutLosingTheSeparator() {
+        SigningNetworkBasicCredentials
+            .copyOf(SYNTHETIC_USERNAME, EMPTY_PASSWORD)
+            .use { credentials ->
+                assertEquals(EMPTY_PASSWORD_AUTHORIZATION_HEADER, credentials.authorizationHeader())
+            }
+    }
+
+    @Test
     fun pinsPublicHttpDnsExactlyAndPreservesRawPathQueryAndLogicalHost() {
         val request =
             SigningNetworkPolicy.getRequest(
@@ -226,6 +235,7 @@ class SigningNetworkPolicyTest {
         const val TIMESTAMP_CONTENT_TYPE = "application/timestamp-query"
         const val SYNTHETIC_USERNAME = "synthetic-account"
         const val SYNTHETIC_AUTHORIZATION_HEADER = "Basic c3ludGhldGljLWFjY291bnQ6c3ludGhldGljLXNlY3JldA=="
+        const val EMPTY_PASSWORD_AUTHORIZATION_HEADER = "Basic c3ludGhldGljLWFjY291bnQ6"
         const val PLAIN_AUTHORITY_ADDRESS = "http://timestamp.example/request"
         const val PROTECTED_AUTHORITY_ADDRESS = "https://timestamp.example/request"
         const val CERTIFICATE_HTTP_ADDRESS = "http://ocsp.example:8080/a%2Fb?name=a%2Fb"
@@ -239,6 +249,7 @@ class SigningNetworkPolicyTest {
         const val SINGLE_OVERLIMIT_ELEMENT = 1
         val SYNTHETIC_REQUEST = "synthetic-request".encodeToByteArray()
         val SYNTHETIC_PASSWORD = "synthetic-secret".toCharArray()
+        val EMPTY_PASSWORD = CharArray(0)
         val OVERLENGTH_AUTHORITY_ADDRESS =
             PROTECTED_AUTHORITY_ADDRESS +
                 "a".repeat(SigningNetworkLimits.MAXIMUM_ADDRESS_CHARACTERS)

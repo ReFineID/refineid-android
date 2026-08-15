@@ -137,6 +137,13 @@ class Rfc3161TimestampClientTest {
                 )
             }
         }
+        assertThrows(IllegalArgumentException::class.java) {
+            SigningTimestampAuthority.configured(
+                address = PLAIN_TIMESTAMP_ADDRESS,
+                username = SYNTHETIC_USERNAME,
+                password = SYNTHETIC_PASSWORD,
+            )
+        }
     }
 
     private class RecordingRandom(
@@ -184,6 +191,7 @@ class Rfc3161TimestampClientTest {
 
     private companion object {
         const val TIMESTAMP_ADDRESS = "https://tsa.example/timestamp"
+        const val PLAIN_TIMESTAMP_ADDRESS = "http://tsa.example/timestamp"
         const val TIMESTAMP_REQUEST_CONTENT_TYPE = "application/timestamp-query"
         const val SYNTHETIC_USERNAME = "synthetic-user"
         const val SYNTHETIC_AUTHORIZATION_HEADER = "Basic c3ludGhldGljLXVzZXI6c3ludGhldGljLXBhc3N3b3Jk"

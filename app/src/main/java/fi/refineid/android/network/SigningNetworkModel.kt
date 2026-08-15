@@ -105,8 +105,7 @@ internal class SigningNetworkBasicCredentials private constructor(
                 username.any(::isForbiddenHeaderCharacter)
 
         private fun passwordIsInvalid(password: CharArray): Boolean =
-            password.isEmpty() ||
-                password.size > SigningNetworkLimits.MAXIMUM_PASSWORD_CHARACTERS ||
+            password.size > SigningNetworkLimits.MAXIMUM_PASSWORD_CHARACTERS ||
                 password.any(::isForbiddenHeaderCharacter)
 
         private fun isForbiddenHeaderCharacter(character: Char): Boolean =
