@@ -104,16 +104,19 @@ repository.
   A credential-free physical Pixel test verified that complete chain on the
   attached card, and the minimized release APK retains all four issuer
   resources.
+- On the Linux builder, the patched ReFineID, KeyChain, framework, test, and
+  host signer modules build. The staged ReFineID and KeyChain APKs validate
+  with AOSP's installed host signer and have the same platform certificate.
 - The app, framework, KeyChain, and product-integration diffs pass Gitleaks.
 - The sparse audit has independently replayed the complete series from the
-  pinned upstream tag. A Soong image build and its on-device platform tests
-  remain separate Linux-builder gates.
+  pinned upstream tag.
 
-The patch series has not yet passed a Soong platform build. Android 11 and
-newer platform builds are unsupported on macOS, and Google's current
-[AOSP workstation guidance](https://source.android.com/docs/setup/start/requirements)
-budgets at least 400 GB of free space. Use a 64-bit Linux builder for the full
-image and device-test stages.
+The first complete Soong image build was intentionally stopped at 27%, with
+all caches and outputs preserved. It had not reported a compile failure, but a
+complete image and the on-device platform tests remain unverified. The exact
+resume state and next command are recorded in [`BUILD.md`](BUILD.md). Android
+11 and newer platform builds are unsupported on macOS; use the preserved
+64-bit Linux builder for the remaining image and device-test stages.
 
 Never add platform signing keys, device identifiers, network addresses, real
 card material, credentials, or card traces to this directory.

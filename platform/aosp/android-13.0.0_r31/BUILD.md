@@ -107,6 +107,69 @@ and `KeyChainTests`, builds the full image, and checks that the installed
 ReFineID and KeyChain APKs share the platform signer. It also refuses an AOSP
 tree whose manifest checkout is not the exact `android-13.0.0_r31` commit.
 
+## Current Linux-builder handoff
+
+The continuation checklist for another AI agent is
+[`AGENT-HANDOFF.md`](AGENT-HANDOFF.md). The operational summary follows.
+
+The 2026-08-16 builder state is preserved under `/srv/refineid-aosp`:
+
+- the manifest is the exact pinned commit, and all framework, KeyChain, and
+  Pixel device patches pass `--check-applied`;
+- the matching Google and Qualcomm Pixel 4 packages were accepted by the
+  project owner and extracted, all three required vendor makefiles are
+  present, and no vendor file is in this repository;
+- the application release gate, provider-contract comparison, changed runtime
+  modules, `KeystoreTests`, and `KeyChainTests` built successfully;
+- the product ReFineID APK, system KeyChain APK, and system framework JAR are
+  present; AOSP's installed host `apksigner` validates both APKs and their
+  platform signer digests match without recording the digest; and
+- the public application checkout passed its 98-task `check` gate, including
+  Android lint, Detekt, ShellCheck, release network and no-logging checks, and
+  49 Rust tests.
+
+The complete image build was intentionally stopped, not failed, at
+36,656 of 132,481 Ninja actions (27%). It had run for 1 hour 42 minutes with a
+23.7 GiB memory peak and a 5.8 GiB swap peak. The builder retains the Soong,
+Ninja, Gradle, Rust, and ccache outputs and has approximately 593 GiB free.
+No complete flashable image has been claimed or verified.
+
+Two host compatibility problems have already been resolved. Android 13's
+`envsetup.sh` and `lunch` are not safe under `set -u`, so the build and device
+verification scripts suspend nounset only while evaluating the AOSP
+environment and restore it immediately afterward. Ubuntu 26.04 also lacks the
+legacy ncurses 5 ABI used by RenderScript Clang; the guarded compatibility
+installer copies AOSP's exact libraries as root-owned system files and verifies
+that compiler before a build starts.
+
+Before resuming, fast-forward `packages/apps/ReFineID`, run the compatibility
+installer once to verify the host, then reuse the preserved output tree with
+eight direct Ninja jobs. Do not set `CCACHE_EXEC`; forcing the cold compiler
+cache into the command graph was slower than the direct build.
+
+    cd /srv/refineid-aosp
+    git -C packages/apps/ReFineID pull --ff-only
+    sudo packages/apps/ReFineID/Scripts/configure-aosp-host-compat.sh
+
+    export JAVA_HOME=/usr/lib/jvm/java-26-openjdk-amd64
+    export ANDROID_HOME=/srv/refineid-tools/android-sdk
+    export ANDROID_SDK_ROOT="$ANDROID_HOME"
+    export CARGO_HOME=/srv/refineid-tools/cargo
+    export RUSTUP_HOME=/srv/refineid-tools/rustup
+    export GRADLE_USER_HOME=/srv/refineid-cache/gradle
+    export CCACHE_DIR=/srv/refineid-cache/ccache
+    export USE_CCACHE=1
+    export NINJA_ARGS=-j8
+    export PATH="$CARGO_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
+    packages/apps/ReFineID/Scripts/build-aosp-flame.sh
+
+The next concrete milestone is `aosp_flame_image=ready`, followed by explicit
+inspection of every required Pixel image, `verify-aosp-flame-device.sh`, and
+only then a separate owner decision about bootloader unlock, wipe, and flash.
+After boot, pair the Linux builder with the device, run the platform tests, and
+continue to independent Chrome and Firefox acceptance. No bootloader unlock,
+wipe, flash, or production relying-party login has been performed.
+
 After the patched image is running, verify it from the same clean Linux
 checkout:
 
