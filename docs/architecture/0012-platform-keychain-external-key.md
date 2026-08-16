@@ -221,6 +221,16 @@ These source checks prove the JCA input shapes and the need for replay. They do
 not replace the independent Chrome and Firefox handshakes on the final patched
 system image.
 
+The source result was also checked against the exact independently installed
+[official Firefox 151.0.4 arm64 APK](https://ftp.mozilla.org/pub/fenix/releases/151.0.4/android/fenix-151.0.4-android-arm64-v8a/fenix-151.0.4.multi.android-arm64-v8a.apk)
+on 2026-08-16. The artifact has SHA-256
+`bc75c0496b04eff55121ff08f974ad2f7f9c603ec7d3f376f4e2f3d3e158d11b`.
+Its shipped `ClientAuthCertificateManager` accepts `NoneWithRSA` and
+`NoneWithECDSA` through `Signature.getInstance`, and retains
+`RSA/None/NoPadding` for the raw route. Installation and launch on the stock
+Pixel passed. This artifact audit still does not count as a client-certificate
+handshake on the patched system.
+
 ## One-result replay lease
 
 Gecko's PKCS #11 adapter currently calls its signing function once to learn
