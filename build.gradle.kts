@@ -43,6 +43,7 @@ val repositoryShellScripts =
         "Scripts/stamp-version.sh",
         "Scripts/stage-aosp-prebuilt.sh",
         aospProviderContractVerifier,
+        "Scripts/verify-aosp-flame-device.sh",
     )
 
 val rustFormatCheck =

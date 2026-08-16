@@ -95,19 +95,21 @@ and `KeyChainTests`, builds the full image, and checks that the installed
 ReFineID and KeyChain APKs share the platform signer. It also refuses an AOSP
 tree whose manifest checkout is not the exact `android-13.0.0_r31` commit.
 
-After the patched image is running, build and execute the platform boundary
-tests from the same Linux checkout:
+After the patched image is running, verify it from the same clean Linux
+checkout:
 
-    atest \
-      KeystoreTests:android.security.KeyChainPrivateKeyDescriptorTest \
-      KeystoreTests:android.security.KeyChainExternalSignatureParcelTest \
-      KeystoreTests:android.security.KeyChainExternalKeyProviderTest
-    atest \
-      KeyChainTests:com.android.keychain.BoundExternalKeyProviderTest \
-      KeyChainTests:com.android.keychain.ExternalKeyManagerTest \
-      KeyChainTests:com.android.keychain.external.ExternalKeyProviderParcelTest \
-      KeyChainTests:com.android.keychain.tests.BasicKeyChainServiceTest \
-      KeyChainTests:com.android.keychain.tests.KeyChainActivityTest
+    packages/apps/ReFineID/Scripts/verify-aosp-flame-device.sh
+
+The verifier checks the exact source and manifest revisions, device build,
+installed product paths and bytes, platform signer relationship, privileged
+regular-UID package state, permissions, provider discovery, enforcing
+`refineid_app` SELinux domain, and every new `KeystoreTests` and
+`KeyChainTests` class. It suppresses raw `atest` output so a device identifier
+does not enter captured build output.
+
+This is the platform gate, not the browser result. Continue with
+[`BROWSER-ACCEPTANCE.md`](BROWSER-ACCEPTANCE.md) for the independent Chrome,
+Firefox, and valid-card service checks.
 
 ## Flash gate
 

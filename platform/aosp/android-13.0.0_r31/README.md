@@ -39,6 +39,11 @@ upstream repositories without requiring a complete AOSP checkout; its
 `--replay` mode also proves release staging, ordered `git am`, and exact final
 trees.
 
+After boot, `Scripts/verify-aosp-flame-device.sh` proves the installed-image
+and platform-test boundary without printing raw device test output. Independent
+browser acceptance remains a separate physical gate described in
+[`BROWSER-ACCEPTANCE.md`](BROWSER-ACCEPTANCE.md).
+
 Place this repository at `packages/apps/ReFineID` in the AOSP tree and run
 `Scripts/stage-aosp-prebuilt.sh` before starting the platform build. The script
 stages the minimized unsigned release APK at the path consumed by `Android.bp`.
