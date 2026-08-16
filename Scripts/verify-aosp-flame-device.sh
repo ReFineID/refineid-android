@@ -15,6 +15,9 @@ readonly EXPECTED_BUILD_ID="TP1A.221005.002.B2"
 readonly EXPECTED_BUILD_TYPE="userdebug"
 readonly EXPECTED_BOOT_COMPLETION="1"
 readonly EXPECTED_SELINUX_MODE="Enforcing"
+readonly ADB_AUTHORIZED_STATE="device"
+readonly ADB_TRANSPORT_ID_LABEL="transport_id"
+readonly DEVICE_SERIAL_PROPERTY="ro.serialno"
 readonly EXPECTED_APP_SELINUX_CONTEXT_PREFIX="u:r:refineid_app:s0"
 readonly LUNCH_TARGET="aosp_flame-userdebug"
 readonly MANIFEST_RELATIVE_PATH=".repo/manifests"
@@ -182,7 +185,7 @@ collect_atest_results() {
 }
 
 device_shell() {
-  "$ADB" shell "$@" 2>/dev/null | tr -d '\r'
+  "${ADB_DEVICE[@]}" shell "$@" 2>/dev/null | tr -d '\r'
 }
 
 require_device_value() {
@@ -235,7 +238,8 @@ run_atest_suite() {
 
   prepare_atest_results
   set +e
-  atest "$@" >"${device_audit_directory}/${label}.log" 2>&1
+  ANDROID_SERIAL="$selected_adb_serial" \
+    atest "$@" >"${device_audit_directory}/${label}.log" 2>&1
   test_status=$?
   set -e
   collect_atest_results || fail "Atest result cleanup failed"
@@ -286,6 +290,52 @@ command -v adb >/dev/null 2>&1 || fail "adb is unavailable"
 command -v atest >/dev/null 2>&1 || fail "atest is unavailable"
 ADB="$(command -v adb)"
 readonly ADB
+adb_device_listing="$("$ADB" devices -l 2>/dev/null)" ||
+  fail "ADB device discovery failed"
+readonly adb_device_listing
+selected_adb_serial=""
+selected_adb_transport_id=""
+selected_physical_serial=""
+while IFS=$'\t' read -r candidate_adb_serial candidate_adb_transport_id; do
+  [[ -n "$candidate_adb_serial" && "$candidate_adb_transport_id" =~ ^[0-9]+$ ]] ||
+    continue
+  candidate_codename="$(
+    "$ADB" -t "$candidate_adb_transport_id" shell getprop ro.product.device \
+      2>/dev/null | tr -d '\r'
+  )"
+  [[ "$candidate_codename" == "$EXPECTED_DEVICE_CODENAME" ]] || continue
+  candidate_physical_serial="$(
+    "$ADB" -t "$candidate_adb_transport_id" shell getprop "$DEVICE_SERIAL_PROPERTY" \
+      2>/dev/null | tr -d '\r'
+  )"
+  [[ -n "$candidate_physical_serial" ]] || fail "Pixel 4 identity is unavailable"
+  if [[ -n "$selected_physical_serial" &&
+    "$candidate_physical_serial" != "$selected_physical_serial" ]]; then
+    fail "multiple Pixel 4 devices are connected"
+  fi
+  selected_physical_serial="$candidate_physical_serial"
+  if [[ -z "$selected_adb_transport_id" ]]; then
+    selected_adb_serial="$candidate_adb_serial"
+    selected_adb_transport_id="$candidate_adb_transport_id"
+  fi
+done < <(
+  printf '%s\n' "$adb_device_listing" |
+    awk \
+      -v state="$ADB_AUTHORIZED_STATE" \
+      -v label="${ADB_TRANSPORT_ID_LABEL}:" \
+      '$2 == state {
+        for (field = 3; field <= NF; field++) {
+          if (index($field, label) == 1) {
+            print $1 "\t" substr($field, length(label) + 1)
+          }
+        }
+      }'
+)
+[[ -n "$selected_adb_transport_id" ]] || fail "Pixel 4 ADB transport is unavailable"
+readonly selected_adb_serial
+readonly selected_adb_transport_id
+readonly selected_physical_serial
+readonly -a ADB_DEVICE=("$ADB" -t "$selected_adb_transport_id")
 [[ -n "${ANDROID_PRODUCT_OUT:-}" ]] || fail "Android product output is unset"
 readonly PRODUCT_REFINEID_APK="${ANDROID_PRODUCT_OUT}/${BUILT_REFINEID_APK}"
 readonly PRODUCT_KEYCHAIN_APK="${ANDROID_PRODUCT_OUT}/${BUILT_KEYCHAIN_APK}"
@@ -300,7 +350,8 @@ device_audit_directory="$(
 )"
 trap cleanup EXIT
 
-[[ "$("$ADB" get-state 2>/dev/null)" == "device" ]] || fail "ADB device is unavailable"
+[[ "$("${ADB_DEVICE[@]}" get-state 2>/dev/null)" == "$ADB_AUTHORIZED_STATE" ]] ||
+  fail "ADB device is unavailable"
 require_device_value "device codename" "$EXPECTED_DEVICE_CODENAME" getprop ro.product.device
 require_device_value "Android SDK" "$EXPECTED_ANDROID_SDK" getprop ro.build.version.sdk
 require_device_value "build ID" "$EXPECTED_BUILD_ID" getprop ro.build.id
@@ -351,10 +402,10 @@ require_device_value \
   cmd package query-services --brief --components --user "$current_user" \
   -a "$PROVIDER_INTERFACE_ACTION"
 
-"$ADB" pull "$installed_refineid_apk" \
+"${ADB_DEVICE[@]}" pull "$installed_refineid_apk" \
   "${device_audit_directory}/ReFineID.apk" >/dev/null 2>&1 ||
   fail "installed ReFineID APK cannot be read"
-"$ADB" pull "$installed_keychain_apk" \
+"${ADB_DEVICE[@]}" pull "$installed_keychain_apk" \
   "${device_audit_directory}/KeyChain.apk" >/dev/null 2>&1 ||
   fail "installed KeyChain APK cannot be read"
 cmp -s "${device_audit_directory}/ReFineID.apk" "$PRODUCT_REFINEID_APK" ||
@@ -372,7 +423,7 @@ readonly keychain_signer
 [[ -n "$refineid_signer" && "$refineid_signer" == "$keychain_signer" ]] ||
   fail "installed ReFineID and KeyChain signers differ"
 
-"$ADB" shell am start -W -n "$REFINEID_ACTIVITY" >/dev/null 2>&1 ||
+"${ADB_DEVICE[@]}" shell am start -W -n "$REFINEID_ACTIVITY" >/dev/null 2>&1 ||
   fail "ReFineID activity cannot start"
 process_context=""
 for ((attempt = 0; attempt < PROCESS_CONTEXT_ATTEMPTS; attempt++)); do
