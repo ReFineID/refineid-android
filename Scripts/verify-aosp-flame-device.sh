@@ -276,9 +276,12 @@ git -C "$MANIFEST_PROJECT" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
 
 unset JAVA_HOME
 cd "$AOSP_ROOT"
+# Android 13 environment setup is not nounset-safe.
+set +u
 # shellcheck source=/dev/null
 source build/envsetup.sh >/dev/null
 lunch "$LUNCH_TARGET" >/dev/null
+set -u
 command -v adb >/dev/null 2>&1 || fail "adb is unavailable"
 command -v atest >/dev/null 2>&1 || fail "atest is unavailable"
 ADB="$(command -v adb)"

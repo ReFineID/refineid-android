@@ -103,11 +103,14 @@ readonly JAVA_FEATURE
 
 unset JAVA_HOME
 cd "$AOSP_ROOT"
+# Android 13 build functions are not nounset-safe.
+set +u
 # shellcheck source=/dev/null
 source build/envsetup.sh
 lunch "$LUNCH_TARGET"
 m "${CHANGED_BUILD_MODULES[@]}"
 m
+set -u
 
 [[ -n "${ANDROID_PRODUCT_OUT:-}" ]] || fail "Android product output is unset"
 readonly PRODUCT_APK="${ANDROID_PRODUCT_OUT}/${BUILT_REFINEID_APK}"
