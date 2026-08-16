@@ -7,6 +7,11 @@ import java.util.zip.ZipFile
 
 val rustDebugJniLibs = layout.buildDirectory.dir("rustJniLibs/debug")
 val rustReleaseJniLibs = layout.buildDirectory.dir("rustJniLibs/release")
+val rappDebugJniLibs = layout.buildDirectory.dir("rapp/jniLibs/debug")
+val rappReleaseJniLibs = layout.buildDirectory.dir("rapp/jniLibs/release")
+val rappCrateDirectory =
+    rootProject.layout.projectDirectory.dir("native/refineid-rapp-android")
+val rappGeneratedKotlin = rappCrateDirectory.dir("generated")
 val minimumAndroidApi = 33
 val currentAndroidApi = 37
 val calendarYearBase = 2000
@@ -145,6 +150,16 @@ android {
         getByName("release").jniLibs.directories.add(
             rustReleaseJniLibs.get().asFile.absolutePath,
         )
+        // The RAPP shared object and its generated binding. The protocol
+        // itself lives in the shared Rust repository; nothing here
+        // reimplements it.
+        getByName("debug").jniLibs.directories.add(
+            rappDebugJniLibs.get().asFile.absolutePath,
+        )
+        getByName("release").jniLibs.directories.add(
+            rappReleaseJniLibs.get().asFile.absolutePath,
+        )
+        getByName("main").kotlin.srcDir(rappGeneratedKotlin)
     }
 }
 
@@ -172,12 +187,51 @@ dependencies {
     androidTestImplementation(libs.junit)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+    implementation(variantOf(libs.jna) { artifactType("aar") })
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
 val rustCrateDirectory =
     rootProject.layout.projectDirectory.dir("native/refineid-android-core")
 val androidNdkDirectory = androidComponents.sdkComponents.ndkDirectory
+
+// --- RAPP -----------------------------------------------------------------
+//
+// The Remote Authorization Proxy Protocol is implemented once, in Rust, in the
+// shared repository. Android consumes it exactly as Apple does: the crate is
+// compiled for the device ABIs and a binding is generated from the built
+// library, so a Kotlin peer and a Swift peer cannot drift apart in framing,
+// transitions, or failure policy. Nothing in Kotlin decides protocol.
+
+fun registerRappBuild(
+    taskName: String,
+    output: Provider<Directory>,
+    release: Boolean,
+) = tasks.register<Exec>(taskName) {
+    group = "build"
+    description = "Build the shared RAPP core for Android ABIs."
+    workingDir(rappCrateDirectory)
+    inputs.file(rappCrateDirectory.file("Cargo.toml"))
+    inputs.dir(rappCrateDirectory.dir("src"))
+    outputs.dir(output)
+    environment("ANDROID_NDK_HOME", androidNdkDirectory.get().asFile.absolutePath)
+    val arguments =
+        mutableListOf(
+            "cargo", "ndk",
+            "-t", "arm64-v8a",
+            "-t", "x86_64",
+            "-P", minimumAndroidApi,
+            "-o", output.get().asFile.absolutePath,
+            "build",
+        )
+    if (release) {
+        arguments.add("--release")
+    }
+    commandLine(arguments)
+}
+
+val buildRappDebug = registerRappBuild("buildRappDebug", rappDebugJniLibs, false)
+val buildRappRelease = registerRappBuild("buildRappRelease", rappReleaseJniLibs, true)
 
 val buildRustDebug =
     tasks.register<Exec>("buildRustDebug") {
