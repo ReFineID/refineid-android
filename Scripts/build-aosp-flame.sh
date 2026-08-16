@@ -21,6 +21,7 @@ readonly LEGACY_CLANG_RELATIVE_PATH="prebuilts/clang/host/linux-x86/clang-328984
 readonly SHARED_VENDOR_MAKEFILE="vendor/google_devices/coral/proprietary/device-vendor.mk"
 readonly GOOGLE_VENDOR_MAKEFILE="vendor/google_devices/flame/device-partial.mk"
 readonly QUALCOMM_VENDOR_MAKEFILE="vendor/qcom/flame/device-partial.mk"
+readonly HOST_APKSIGNER_RELATIVE_PATH="out/host/linux-x86/bin/apksigner"
 readonly BUILT_REFINEID_APK="product/priv-app/ReFineID/ReFineID.apk"
 readonly BUILT_KEYCHAIN_APK="system/app/KeyChain/KeyChain.apk"
 readonly CERTIFICATE_DIGEST_LABEL="Signer #1 certificate SHA-256 digest"
@@ -122,11 +123,13 @@ readonly PRODUCT_APK="${ANDROID_PRODUCT_OUT}/${BUILT_REFINEID_APK}"
 readonly KEYCHAIN_APK="${ANDROID_PRODUCT_OUT}/${BUILT_KEYCHAIN_APK}"
 [[ -f "$PRODUCT_APK" ]] || fail "the product image is missing ReFineID"
 [[ -f "$KEYCHAIN_APK" ]] || fail "the product image is missing KeyChain"
-APKSIGNER="$(find "${AOSP_ROOT}/out/host" -type f -name apksigner -perm -u+x -print -quit)"
+APKSIGNER="${AOSP_ROOT}/${HOST_APKSIGNER_RELATIVE_PATH}"
 readonly APKSIGNER
 [[ -x "$APKSIGNER" ]] || fail "the AOSP host apksigner is missing"
-"$APKSIGNER" verify "$PRODUCT_APK" >/dev/null || fail "the product ReFineID APK is not signed"
-"$APKSIGNER" verify "$KEYCHAIN_APK" >/dev/null || fail "the product KeyChain APK is not signed"
+"$APKSIGNER" verify "$PRODUCT_APK" >/dev/null 2>&1 ||
+  fail "the product ReFineID APK is not signed"
+"$APKSIGNER" verify "$KEYCHAIN_APK" >/dev/null 2>&1 ||
+  fail "the product KeyChain APK is not signed"
 REFINEID_SIGNER_DIGEST="$(signer_digest "$PRODUCT_APK")"
 readonly REFINEID_SIGNER_DIGEST
 KEYCHAIN_SIGNER_DIGEST="$(signer_digest "$KEYCHAIN_APK")"
