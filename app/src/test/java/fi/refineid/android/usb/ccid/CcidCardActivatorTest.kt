@@ -16,11 +16,11 @@ class CcidCardActivatorTest {
         assertEquals(2, io.writtenFrames.size)
         assertEquals(
             CcidWire.PC_TO_RDR_GET_SLOT_STATUS,
-            io.writtenFrames[0].unsignedByte(CcidWire.MESSAGE_TYPE_OFFSET),
+            io.writtenFrames[SLOT_STATUS_COMMAND_INDEX].unsignedByte(CcidWire.MESSAGE_TYPE_OFFSET),
         )
         assertEquals(
             CcidWire.PC_TO_RDR_ICC_POWER_ON,
-            io.writtenFrames[1].unsignedByte(CcidWire.MESSAGE_TYPE_OFFSET),
+            io.writtenFrames[POWER_ON_COMMAND_INDEX].unsignedByte(CcidWire.MESSAGE_TYPE_OFFSET),
         )
         io.close()
     }
@@ -222,6 +222,8 @@ class CcidCardActivatorTest {
 
     private companion object {
         const val FIRST_SLOT = 0
+        const val SLOT_STATUS_COMMAND_INDEX = 0
+        const val POWER_ON_COMMAND_INDEX = 1
         const val TEST_SEQUENCE = 41
         const val LENGTH_FIELD_SIZE = 4
         const val MAXIMUM_MESSAGE_LENGTH = 512

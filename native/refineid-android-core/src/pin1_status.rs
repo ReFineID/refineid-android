@@ -123,6 +123,8 @@ mod tests {
 
     const VERIFY_HEADER_LENGTH: usize = 4;
     const P2_OFFSET: usize = 3;
+    const CITIZEN_PROBE_COMMAND_INDEX: usize = 0;
+    const ORGANIZATIONAL_PROBE_COMMAND_START_INDEX: usize = 1;
     const SAFE_RETRIES: u8 = 3;
     const LOW_RETRIES: u8 = 2;
 
@@ -223,10 +225,12 @@ mod tests {
         assert_eq!(result.scheme, PinReferenceScheme::Organizational);
         assert_eq!(transport.public_commands.len(), 3);
         assert_eq!(
-            transport.public_commands[0].get(P2_OFFSET).copied(),
+            transport.public_commands[CITIZEN_PROBE_COMMAND_INDEX]
+                .get(P2_OFFSET)
+                .copied(),
             Some(PIN1_REFERENCE)
         );
-        for command in &transport.public_commands[1..] {
+        for command in &transport.public_commands[ORGANIZATIONAL_PROBE_COMMAND_START_INDEX..] {
             assert_eq!(command.len(), VERIFY_HEADER_LENGTH);
             assert_eq!(
                 command.get(P2_OFFSET).copied(),
