@@ -40,6 +40,7 @@ val repositoryShellScripts =
         "Scripts/apply-aosp-patches.sh",
         "Scripts/audit-aosp-patches.sh",
         "Scripts/build-aosp-flame.sh",
+        "Scripts/configure-aosp-host-compat.sh",
         "Scripts/stamp-version.sh",
         "Scripts/stage-aosp-prebuilt.sh",
         aospProviderContractVerifier,

@@ -17,6 +17,7 @@ readonly LUNCH_TARGET="aosp_flame-userdebug"
 readonly MANIFEST_RELATIVE_PATH=".repo/manifests"
 readonly EXPECTED_MANIFEST_COMMIT="012e197f31592b82d79ed2d4e03c5fb3ada38b62"
 readonly REFINEID_RELATIVE_PATH="packages/apps/ReFineID"
+readonly LEGACY_CLANG_RELATIVE_PATH="prebuilts/clang/host/linux-x86/clang-3289846/bin/clang.real"
 readonly SHARED_VENDOR_MAKEFILE="vendor/google_devices/coral/proprietary/device-vendor.mk"
 readonly GOOGLE_VENDOR_MAKEFILE="vendor/google_devices/flame/device-partial.mk"
 readonly QUALCOMM_VENDOR_MAKEFILE="vendor/qcom/flame/device-partial.mk"
@@ -61,6 +62,10 @@ fi
 [[ "$(uname -m)" == "$EXPECTED_HOST_ARCHITECTURE" ]] ||
   fail "the Android 13 platform build requires x86_64"
 [[ -f "${AOSP_ROOT}/build/envsetup.sh" ]] || fail "AOSP build/envsetup.sh is missing"
+readonly LEGACY_CLANG="${AOSP_ROOT}/${LEGACY_CLANG_RELATIVE_PATH}"
+[[ -x "$LEGACY_CLANG" ]] || fail "AOSP legacy Clang is missing"
+"$LEGACY_CLANG" --version >/dev/null 2>&1 ||
+  fail "AOSP legacy Clang host libraries are missing; run Scripts/configure-aosp-host-compat.sh with sudo"
 readonly MANIFEST_PROJECT="${AOSP_ROOT}/${MANIFEST_RELATIVE_PATH}"
 git -C "$MANIFEST_PROJECT" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
   fail "AOSP manifest checkout is missing"

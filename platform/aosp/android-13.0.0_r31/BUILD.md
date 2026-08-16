@@ -15,6 +15,18 @@ The ReFineID Gradle build requires OpenJDK 26 through `JAVA_HOME`. After staging
 the app, the build script clears `JAVA_HOME` so AOSP can select its pinned Java
 toolchain.
 
+Android 13's legacy RenderScript compiler requires the ncurses 5 host ABI.
+Current Linux distributions such as Ubuntu 26.04 may provide only ncurses 6.
+After syncing AOSP, install the matching compatibility libraries already
+contained in the pinned AOSP tree:
+
+    sudo packages/apps/ReFineID/Scripts/configure-aosp-host-compat.sh
+
+The script refuses conflicting library files, installs root-owned copies of
+only AOSP's matching 64-bit ncurses and tinfo libraries under `/usr/local/lib`,
+refreshes the dynamic linker cache, and verifies the legacy compiler. The image
+build also checks the compiler before starting the Gradle or platform builds.
+
 Patch applicability can be checked on any current Git host without a full AOSP
 checkout:
 
