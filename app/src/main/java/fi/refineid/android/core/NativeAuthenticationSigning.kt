@@ -2,6 +2,8 @@ package fi.refineid.android.core
 
 private const val PIN1_MINIMUM_LENGTH = 4
 internal const val PIN1_MAXIMUM_LENGTH = 12
+private val DIGIT_ZERO_BYTE = '0'.code.toByte()
+private val DIGIT_NINE_BYTE = '9'.code.toByte()
 internal const val MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH = 1_024 * 1_024
 internal const val RSA_3072_KEY_LENGTH_BITS = 3_072
 internal const val P384_COORDINATE_LENGTH_BITS = 384
@@ -211,6 +213,12 @@ internal class Pin1Submission private constructor(
         }
     }
 
+    /** Copy the digits without consuming the submission, or null if spent. */
+    fun copyBytes(): ByteArray? =
+        synchronized(this) {
+            ownedBytes?.copyOf()
+        }
+
     override fun close() {
         synchronized(this) {
             ownedBytes?.fill(0)
@@ -235,6 +243,18 @@ internal class Pin1Submission private constructor(
             for (index in input.indices) {
                 val character = input[index]
                 bytes[index] = character.code.toByte()
+            }
+            return Pin1Submission(bytes)
+        }
+
+        /** Wrap already-validated digit bytes, taking ownership of them. */
+        fun fromOwnedBytes(bytes: ByteArray): Pin1Submission {
+            val isValidShape =
+                bytes.size in PIN1_MINIMUM_LENGTH..PIN1_MAXIMUM_LENGTH &&
+                    bytes.all { it in DIGIT_ZERO_BYTE..DIGIT_NINE_BYTE }
+            if (!isValidShape) {
+                bytes.fill(0)
+                throw IllegalArgumentException("PIN1 has an invalid shape")
             }
             return Pin1Submission(bytes)
         }

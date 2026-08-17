@@ -1,6 +1,7 @@
 package fi.refineid.android.browser
 
 import fi.refineid.android.core.AuthenticationCardService
+import fi.refineid.android.core.AuthenticationPinCache
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
@@ -54,6 +55,7 @@ internal class BrowserPinCoordinator(
     private val dispatchToUi: (() -> Unit) -> Unit,
     private val onPromptChanged: (BrowserPinRequest?) -> Unit,
     private val onStatusChanged: (BrowserSignatureStatus) -> Unit,
+    private val pinCache: AuthenticationPinCache? = null,
     private val pinEntryTimeoutMilliseconds: Long = DEFAULT_PIN_ENTRY_TIMEOUT_MILLISECONDS,
 ) : CardSignatureOperation,
     AutoCloseable {
@@ -78,6 +80,10 @@ internal class BrowserPinCoordinator(
         try {
             if (isClosed) {
                 throw SignatureException("browser card signer is closed")
+            }
+            val cached = pinCache?.take()
+            if (cached != null) {
+                return signWith(algorithm, message, cached)
             }
             val request = BrowserPinRequest()
             synchronized(stateLock) {
@@ -105,27 +111,77 @@ internal class BrowserPinCoordinator(
                 } finally {
                     clearPrompt(request)
                 }
-            publishStatus(BrowserSignatureStatus.SIGNING)
-            return when (
-                val result =
-                    cardService.signAuthenticationMessage(
-                        algorithm = algorithm,
-                        pin1 = pin1,
-                        message = message,
-                    )
-            ) {
-                is AuthenticationSignResult.Success -> {
-                    publishStatus(BrowserSignatureStatus.SUCCEEDED)
-                    result.signature
-                }
-
-                is AuthenticationSignResult.Failure -> {
-                    publishStatus(result.kind.toBrowserStatus())
-                    throw SignatureException("card authentication signature failed")
-                }
+            // A value the card already rejected this process is refused
+            // locally rather than offered again to burn another retry.
+            val rejectedCheck = pin1.copyBytes()
+            if (rejectedCheck != null && pinCache?.isRejected(rejectedCheck) == true) {
+                rejectedCheck.fill(0)
+                pin1.close()
+                publishStatus(BrowserSignatureStatus.WRONG_PIN)
+                throw SignatureException("PIN1 was already rejected this session")
             }
+            rejectedCheck?.fill(0)
+            return signWith(algorithm, message, pin1)
         } finally {
             operationLock.unlock()
+        }
+    }
+
+    private fun signWith(
+        algorithm: AuthenticationSigningAlgorithm,
+        message: ByteArray,
+        pin1: Pin1Submission,
+    ): NativeAuthenticationSignature {
+        // Copy for the cache decision before the card call consumes the PIN.
+        val pinCopy = pin1.copyBytes()
+        publishStatus(BrowserSignatureStatus.SIGNING)
+        return when (
+            val result =
+                cardService.signAuthenticationMessage(
+                    algorithm = algorithm,
+                    pin1 = pin1,
+                    message = message,
+                )
+        ) {
+            is AuthenticationSignResult.Success -> {
+                retainOutcome(pinCopy, PinOutcome.VERIFIED)
+                publishStatus(BrowserSignatureStatus.SUCCEEDED)
+                result.signature
+            }
+
+            is AuthenticationSignResult.Failure -> {
+                retainOutcome(
+                    pinCopy,
+                    if (result.kind == AuthenticationSignFailure.WRONG_PIN) {
+                        PinOutcome.REJECTED
+                    } else {
+                        PinOutcome.DISCARD
+                    },
+                )
+                publishStatus(result.kind.toBrowserStatus())
+                throw SignatureException("card authentication signature failed")
+            }
+        }
+    }
+
+    private enum class PinOutcome { VERIFIED, REJECTED, DISCARD }
+
+    private fun retainOutcome(
+        pinCopy: ByteArray?,
+        outcome: PinOutcome,
+    ) {
+        if (pinCopy == null) {
+            return
+        }
+        val cache = pinCache
+        if (cache == null) {
+            pinCopy.fill(0)
+            return
+        }
+        when (outcome) {
+            PinOutcome.VERIFIED -> cache.recordVerified(pinCopy)
+            PinOutcome.REJECTED -> cache.recordRejected(pinCopy)
+            PinOutcome.DISCARD -> pinCopy.fill(0)
         }
     }
 

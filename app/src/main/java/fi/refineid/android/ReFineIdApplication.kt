@@ -3,6 +3,7 @@ package fi.refineid.android
 import android.app.Application
 import fi.refineid.android.browser.BundledIssuerCertificates
 import fi.refineid.android.core.AuthenticationIssuerCertificateStore
+import fi.refineid.android.core.AuthenticationPinCache
 import fi.refineid.android.keychain.AndroidExternalKeyCallerLabelResolver
 import fi.refineid.android.keychain.ExternalKeyPinPromptBroker
 import fi.refineid.android.keychain.ExternalKeyProviderRuntime
@@ -17,6 +18,7 @@ class ReFineIdApplication : Application() {
         private set
     internal lateinit var nfcReaderController: NfcReaderController
         private set
+    internal val authenticationPinCache = AuthenticationPinCache()
     internal lateinit var pinPromptBroker: ExternalKeyPinPromptBroker
         private set
     internal lateinit var externalKeyProviderRuntime: ExternalKeyProviderRuntime
@@ -31,6 +33,7 @@ class ReFineIdApplication : Application() {
             NfcReaderController(
                 context = this,
                 primedCanStore = PrimedCanStore(this),
+                pinCache = authenticationPinCache,
             )
         timestampAuthorityStore = TimestampAuthorityStore(this)
         pinPromptBroker =

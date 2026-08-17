@@ -10,12 +10,14 @@ import android.nfc.Tag
 import android.nfc.tech.IsoDep
 import android.os.Handler
 import android.os.Looper
+import fi.refineid.android.core.AuthenticationPinCache
 import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardSessionMaterial
 import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeContactlessCore
 import fi.refineid.android.core.NativeContactlessOpenResult
+import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.keychain.nextProviderGeneration
 import fi.refineid.android.prime.PrimedCanStore
@@ -35,6 +37,7 @@ import java.util.concurrent.RejectedExecutionException
 internal class NfcReaderController(
     context: Context,
     private val primedCanStore: PrimedCanStore,
+    private val pinCache: AuthenticationPinCache,
 ) {
     private val applicationContext = context.applicationContext
     private val adapter: NfcAdapter? = NfcAdapter.getDefaultAdapter(applicationContext)
@@ -155,15 +158,23 @@ internal class NfcReaderController(
         stateListeners -= listener
     }
 
-    /** Open a contactless session with the holder-entered CAN. */
-    fun connect(can: CanSubmission) {
+    /**
+     * Open a contactless session and hold PIN1 for the session. A
+     * supplied access number is minted for tap-to-open; a null one
+     * reuses the minted access number for a PIN-only unlock.
+     */
+    fun connect(
+        can: CanSubmission?,
+        pin1: Pin1Submission,
+    ) {
         checkMainThread()
         if (
             latestSnapshot.status != NfcReaderStatus.CARD_RECOGNIZED &&
             latestSnapshot.status != NfcReaderStatus.WRONG_CAN &&
             latestSnapshot.status != NfcReaderStatus.TRANSPORT_ERROR
         ) {
-            can.close()
+            can?.close()
+            pin1.close()
             AppTrace.nfcConnectIgnored()
             return
         }
@@ -172,10 +183,18 @@ internal class NfcReaderController(
         AppTrace.nfcConnectStarted()
         try {
             probeExecutor.execute {
-                openSessionBytes(can.transfer(), generation, mintOnSuccess = true)
+                val mint = can != null
+                val canBytes = can?.transfer() ?: primedCanStore.read()
+                if (canBytes == null) {
+                    pin1.close()
+                    publishAsync(generation, NfcReaderStatus.CARD_RECOGNIZED)
+                    return@execute
+                }
+                openSessionBytes(canBytes, generation, mintOnSuccess = mint, pin1 = pin1)
             }
         } catch (_: RejectedExecutionException) {
-            can.close()
+            can?.close()
+            pin1.close()
         }
     }
 
@@ -289,17 +308,9 @@ internal class NfcReaderController(
             // The tag may already be gone; the probe result stands.
         }
         AppTrace.nfcSessionClosed()
-        val status = result.toReaderStatus()
-        if (status == NfcReaderStatus.CARD_RECOGNIZED) {
-            val primedCan = primedCanStore.read()
-            if (primedCan != null) {
-                AppTrace.nfcPrimedOpenStarted()
-                publishAsync(generation, NfcReaderStatus.CONNECTING, isPrimedOpening = true)
-                openSessionBytes(primedCan, generation, mintOnSuccess = false)
-                return
-            }
-        }
-        publishAsync(generation, status)
+        // A primed card still needs PIN1 to unlock; the UI shows a
+        // PIN-only prompt on this recognized state.
+        publishAsync(generation, result.toReaderStatus())
     }
 
     /**
@@ -310,11 +321,13 @@ internal class NfcReaderController(
         canBytes: ByteArray,
         generation: Int,
         mintOnSuccess: Boolean,
+        pin1: Pin1Submission,
     ) {
         closeActiveSession()
         val isoDep = latestIsoDep
         if (isoDep == null || generation != probeGeneration) {
             canBytes.fill(0)
+            pin1.close()
             publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
             return
         }
@@ -325,6 +338,7 @@ internal class NfcReaderController(
             }
         } catch (_: IOException) {
             canBytes.fill(0)
+            pin1.close()
             AppTrace.nfcSessionOpenFailed()
             publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
             return
@@ -355,6 +369,10 @@ internal class NfcReaderController(
                 primedCardStored = true
                 AppTrace.nfcPrimedMinted()
             }
+            // Hold PIN1 for the session so browser signing needs no
+            // prompt; the negative cache guards a genuinely wrong value.
+            pin1.copyBytes()?.let(pinCache::recordVerified)
+            pin1.close()
             activeSession =
                 ContactlessSession(
                     isoDep = isoDep,
@@ -363,8 +381,9 @@ internal class NfcReaderController(
                 )
             activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
         } else {
-            if (!mintOnSuccess && status == NfcReaderStatus.WRONG_CAN) {
-                // The primed digits no longer open this card.
+            pin1.close()
+            if (status == NfcReaderStatus.WRONG_CAN) {
+                // The access number no longer opens this card.
                 primedCanStore.clear()
                 primedCardStored = false
             }
@@ -388,6 +407,7 @@ internal class NfcReaderController(
             probeExecutor.execute {
                 primedCanStore.clear()
                 primedCardStored = false
+                pinCache.clear()
                 closeActiveSession()
                 probeGeneration += 1
                 mainHandler.post { publish(NfcReaderSnapshot(status = NfcReaderStatus.WAITING_FOR_CARD)) }

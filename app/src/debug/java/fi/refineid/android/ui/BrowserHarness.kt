@@ -65,7 +65,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
-internal fun BrowserHarness(cardService: AuthenticationCardService?) {
+internal fun BrowserHarness(
+    cardService: AuthenticationCardService?,
+    pinCache: fi.refineid.android.core.AuthenticationPinCache? = null,
+) {
     if (cardService == null) {
         return
     }
@@ -85,6 +88,7 @@ internal fun BrowserHarness(cardService: AuthenticationCardService?) {
     if (isOpen) {
         BrowserDialog(
             cardService = cardService,
+            pinCache = pinCache,
             onClose = {
                 AppTrace.browserClosed()
                 isOpen = false
@@ -100,6 +104,7 @@ internal fun BrowserHarness(cardService: AuthenticationCardService?) {
 @SuppressLint("SetJavaScriptEnabled")
 private fun BrowserDialog(
     cardService: AuthenticationCardService,
+    pinCache: fi.refineid.android.core.AuthenticationPinCache?,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -111,6 +116,7 @@ private fun BrowserDialog(
         remember(cardService) {
             BrowserPinCoordinator(
                 cardService = cardService,
+                pinCache = pinCache,
                 dispatchToUi = { action ->
                     if (Looper.myLooper() == Looper.getMainLooper()) {
                         action()

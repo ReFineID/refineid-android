@@ -17,7 +17,8 @@
     <string name="card_recognized">Card recognized</string>
     <string name="card_not_supported">Card not supported</string>
     <string name="can" tools:ignore="Typos">CAN</string>
-    <string name="connect">Connect</string>
+    <string name="sign_in">Sign in</string>
+    <string name="unlock">Unlock</string>
     <string name="wrong_can" tools:ignore="Typos">Wrong CAN</string>
     <string name="card_primed">Card saved for tap</string>
     <string name="forget">Forget</string>

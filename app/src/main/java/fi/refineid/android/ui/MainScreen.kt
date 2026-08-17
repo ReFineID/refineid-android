@@ -65,9 +65,10 @@ internal fun MainScreen(
     timestampAuthorityRepository: TimestampAuthorityRepository? = null,
     nfcSnapshot: NfcReaderSnapshot = NfcReaderSnapshot(),
     onOpenNfcSettings: () -> Unit = {},
-    onNfcConnect: (CanSubmission) -> Unit = {},
+    onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit = { _, _ -> },
     onForgetPrimedCard: () -> Unit = {},
     nfcCardService: AuthenticationCardService? = null,
+    pinCache: fi.refineid.android.core.AuthenticationPinCache? = null,
 ) {
     Scaffold(
         modifier =
@@ -138,6 +139,7 @@ internal fun MainScreen(
                     } else {
                         nfcCardService ?: browserCardService
                     },
+                pinCache = pinCache,
             )
         }
     }
@@ -256,7 +258,7 @@ internal val Pin1InputTransformation =
 private fun NfcCard(
     snapshot: NfcReaderSnapshot,
     onOpenNfcSettings: () -> Unit,
-    onConnect: (CanSubmission) -> Unit,
+    onConnect: (CanSubmission?, Pin1Submission) -> Unit,
     onForgetPrimedCard: () -> Unit,
 ) {
     val statusColor =
@@ -357,21 +359,18 @@ private fun NfcCard(
                 }
             }
 
-            // A primed card opens on tap; only prompt for the access
-            // number when nothing is saved to open with.
-            if (
-                !snapshot.isPrimed &&
-                (
-                    snapshot.status == NfcReaderStatus.CARD_RECOGNIZED ||
-                        snapshot.status == NfcReaderStatus.WRONG_CAN ||
-                        snapshot.status == NfcReaderStatus.TRANSPORT_ERROR
-                )
-            ) {
-                NfcCanEntry(onConnect = onConnect)
-            }
-
             if (snapshot.isPrimed) {
                 NfcPrimedRow(onForgetPrimedCard = onForgetPrimedCard)
+            }
+
+            // Collect the credentials needed to unlock: the access
+            // number and PIN1 together, or PIN1 alone once minted.
+            if (
+                snapshot.status == NfcReaderStatus.CARD_RECOGNIZED ||
+                snapshot.status == NfcReaderStatus.WRONG_CAN ||
+                snapshot.status == NfcReaderStatus.TRANSPORT_ERROR
+            ) {
+                NfcCredentialEntry(isPrimed = snapshot.isPrimed, onConnect = onConnect)
             }
 
             if (snapshot.status == NfcReaderStatus.CARD_READY) {
@@ -432,31 +431,57 @@ private fun NfcPrimedRow(onForgetPrimedCard: () -> Unit) {
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
-private fun NfcCanEntry(onConnect: (CanSubmission) -> Unit) {
+private fun NfcCredentialEntry(
+    isPrimed: Boolean,
+    onConnect: (CanSubmission?, Pin1Submission) -> Unit,
+) {
     val canState = remember { TextFieldState() }
-    DisposableEffect(canState) {
-        onDispose(canState::clearText)
+    val pinState = remember { TextFieldState() }
+    DisposableEffect(canState, pinState) {
+        onDispose {
+            canState.clearText()
+            pinState.clearText()
+        }
     }
+    val canReady = isPrimed || CanSubmission.isComplete(canState.text)
+    val pinReady = Pin1Submission.isComplete(pinState.text)
     val submit = {
-        val submission =
-            if (CanSubmission.isComplete(canState.text)) {
-                CanSubmission.from(canState.text)
-            } else {
-                null
-            }
-        canState.clearText()
-        submission?.let(onConnect)
+        if (canReady && pinReady) {
+            val can = if (isPrimed) null else CanSubmission.from(canState.text)
+            val pin1 = Pin1Submission.from(pinState.text)
+            canState.clearText()
+            pinState.clearText()
+            onConnect(can, pin1)
+        }
         Unit
     }
 
+    if (!isPrimed) {
+        SecureTextField(
+            state = canState,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .testTag(UiAutomationIds.NFC_CAN_FIELD),
+            label = { Text(stringResource(R.string.can)) },
+            inputTransformation = CanInputTransformation,
+            textObfuscationMode = TextObfuscationMode.Hidden,
+            keyboardOptions =
+                KeyboardOptions(
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.NumberPassword,
+                    imeAction = ImeAction.Next,
+                ),
+        )
+    }
     SecureTextField(
-        state = canState,
+        state = pinState,
         modifier =
             Modifier
                 .fillMaxWidth()
-                .testTag(UiAutomationIds.NFC_CAN_FIELD),
-        label = { Text(stringResource(R.string.can)) },
-        inputTransformation = CanInputTransformation,
+                .testTag(UiAutomationIds.NFC_PIN1_FIELD),
+        label = { Text(stringResource(R.string.pin1)) },
+        inputTransformation = Pin1InputTransformation,
         textObfuscationMode = TextObfuscationMode.Hidden,
         keyboardOptions =
             KeyboardOptions(
@@ -464,6 +489,7 @@ private fun NfcCanEntry(onConnect: (CanSubmission) -> Unit) {
                 keyboardType = KeyboardType.NumberPassword,
                 imeAction = ImeAction.Done,
             ),
+        onKeyboardAction = { submit() },
     )
     Button(
         onClick = submit,
@@ -471,9 +497,17 @@ private fun NfcCanEntry(onConnect: (CanSubmission) -> Unit) {
             Modifier
                 .fillMaxWidth()
                 .testTag(UiAutomationIds.NFC_CONNECT_ACTION),
-        enabled = CanSubmission.isComplete(canState.text),
+        enabled = canReady && pinReady,
     ) {
-        Text(stringResource(R.string.connect))
+        Text(
+            stringResource(
+                if (isPrimed) {
+                    R.string.unlock
+                } else {
+                    R.string.sign_in
+                },
+            ),
+        )
     }
 }
 
