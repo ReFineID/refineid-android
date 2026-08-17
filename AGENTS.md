@@ -52,6 +52,10 @@ These rules apply to the entire repository. Less is more; terse is better.
 - Comments describe what the code does or the constraint it honors, never why
   it changed. A past bug, a deprecation, the reasoning for a fix belongs in
   the git commit message, not the source.
+- Record findings and durable knowledge as repository documentation under
+  `docs/`, written for public distribution, not in private or per-session
+  assistant memory. A committed document is the shared source of truth; redact
+  anything the Security section forbids before writing it down.
 - Kotlin follows standard Kotlin conventions; ASCII only in source and
   committed fixtures unless protocol fidelity requires exact bytes.
 - Keep the toolchain strict: warnings are errors everywhere (Kotlin extra
