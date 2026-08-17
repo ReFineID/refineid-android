@@ -2,5 +2,8 @@
 <resources>
     <string name="browser">Browser</string>
     <string name="close">Close</string>
-    <string name="go">Go</string>
+    <string name="browser_back">‹</string>
+    <string name="browser_forward">›</string>
+    <string name="browser_reload">↻</string>
+    <string name="browser_close_glyph">✕</string>
 </resources>

@@ -5,9 +5,12 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.webkit.ClientCertRequest
+import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +26,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.material3.Button
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SecureTextField
@@ -35,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -191,21 +196,6 @@ private fun BrowserDialog(
                         .padding(BROWSER_PADDING),
                 verticalArrangement = Arrangement.spacedBy(BROWSER_ITEM_SPACING),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = stringResource(R.string.browser),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    Button(
-                        onClick = onClose,
-                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_CLOSE_ACTION),
-                    ) {
-                        Text(stringResource(R.string.close))
-                    }
-                }
                 var urlText by remember { mutableStateOf(START_PAGE_URL) }
                 var liveWebView by remember { mutableStateOf<WebView?>(null) }
                 val navigate = {
@@ -220,8 +210,26 @@ private fun BrowserDialog(
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(BROWSER_ITEM_SPACING),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    IconButton(
+                        onClick = { liveWebView?.takeIf { it.canGoBack() }?.goBack() },
+                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_BACK_ACTION),
+                    ) {
+                        Text(stringResource(R.string.browser_back))
+                    }
+                    IconButton(
+                        onClick = { liveWebView?.takeIf { it.canGoForward() }?.goForward() },
+                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_FORWARD_ACTION),
+                    ) {
+                        Text(stringResource(R.string.browser_forward))
+                    }
+                    IconButton(
+                        onClick = { liveWebView?.reload() },
+                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_RELOAD_ACTION),
+                    ) {
+                        Text(stringResource(R.string.browser_reload))
+                    }
                     OutlinedTextField(
                         value = urlText,
                         onValueChange = { urlText = it },
@@ -238,11 +246,11 @@ private fun BrowserDialog(
                             ),
                         keyboardActions = KeyboardActions(onGo = { navigate() }),
                     )
-                    Button(
-                        onClick = navigate,
-                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_GO_ACTION),
+                    IconButton(
+                        onClick = onClose,
+                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_CLOSE_ACTION),
                     ) {
-                        Text(stringResource(R.string.go))
+                        Text(stringResource(R.string.browser_close_glyph))
                     }
                 }
                 BrowserStatus(signatureStatus)
@@ -254,11 +262,11 @@ private fun BrowserDialog(
                         factory = { viewContext ->
                             WebView.setWebContentsDebuggingEnabled(true)
                             WebView(viewContext).apply {
-                                settings.allowContentAccess = false
-                                settings.allowFileAccess = false
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
+                                configureFullFeaturedBrowser()
                                 this.webViewClient = client
+                                // The base chrome client restores default
+                                // JS dialogs, progress, and title handling.
+                                webChromeClient = WebChromeClient()
                                 liveWebView = this
                                 WebView.clearClientCertPreferences {
                                     if (isActive.get()) {
@@ -357,16 +365,16 @@ private fun BrowserPinDialog(request: BrowserPinRequest) {
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 private fun BrowserStatus(status: BrowserSignatureStatus) {
+    // The page is its own success feedback; only surface a failure that
+    // explains why a login did not happen.
     val text =
         when (status) {
             BrowserSignatureStatus.IDLE,
             BrowserSignatureStatus.PIN_REQUIRED,
             BrowserSignatureStatus.CANCELLED,
+            BrowserSignatureStatus.SIGNING,
+            BrowserSignatureStatus.SUCCEEDED,
             -> null
-
-            BrowserSignatureStatus.SIGNING -> stringResource(R.string.signing)
-
-            BrowserSignatureStatus.SUCCEEDED -> stringResource(R.string.signed)
 
             BrowserSignatureStatus.WRONG_PIN -> stringResource(R.string.wrong_pin)
 
@@ -380,7 +388,10 @@ private fun BrowserStatus(status: BrowserSignatureStatus) {
             -> stringResource(R.string.error)
         }
     if (text != null) {
-        Text(text)
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.error,
+        )
     }
 }
 
@@ -486,6 +497,30 @@ private class ReFineIdWebViewClient(
 
     override fun close() {
         isClosed.set(true)
+    }
+}
+
+// A login browser must behave like a real one: scripts, storage,
+// cross-site cookies for identity brokers, a usable viewport, and media.
+// Local file and content access stay off, and mixed content is refused.
+@SuppressLint("SetJavaScriptEnabled")
+private fun WebView.configureFullFeaturedBrowser() {
+    settings.apply {
+        javaScriptEnabled = true
+        domStorageEnabled = true
+        javaScriptCanOpenWindowsAutomatically = true
+        loadWithOverviewMode = true
+        useWideViewPort = true
+        builtInZoomControls = true
+        displayZoomControls = false
+        mediaPlaybackRequiresUserGesture = false
+        allowFileAccess = false
+        allowContentAccess = false
+        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+    }
+    CookieManager.getInstance().apply {
+        setAcceptCookie(true)
+        setAcceptThirdPartyCookies(this@configureFullFeaturedBrowser, true)
     }
 }
 
