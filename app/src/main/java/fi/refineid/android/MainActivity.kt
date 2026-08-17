@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
                     snapshot = readerSnapshot,
                     onRequestPermission = readerController::requestPermission,
                     onAuthenticate = readerController::authenticate,
+                    onReaderConnect = readerController::connect,
                     browserCardService = readerController,
                     qualifiedCardService = readerController.qualifiedCardService,
                     nfcQualifiedCardService = nfcReaderController.qualifiedCardService,

@@ -77,6 +77,7 @@ internal fun MainScreen(
     snapshot: UsbReaderSnapshot,
     onRequestPermission: () -> Unit,
     onAuthenticate: (Pin1Submission) -> Unit,
+    onReaderConnect: (CanSubmission) -> Unit = {},
     browserCardService: AuthenticationCardService? = null,
     qualifiedCardService: QualifiedCardService? = null,
     nfcQualifiedCardService: QualifiedCardService? = null,
@@ -118,6 +119,7 @@ internal fun MainScreen(
                 signingAvailable = signingAvailable,
                 onRequestPermission = onRequestPermission,
                 onAuthenticate = onAuthenticate,
+                onReaderConnect = onReaderConnect,
                 onOpenNfcSettings = onOpenNfcSettings,
                 onNfcConnect = onNfcConnect,
                 onForgetPrimedCard = onForgetPrimedCard,
@@ -190,6 +192,7 @@ private fun HomeScreen(
     signingAvailable: Boolean,
     onRequestPermission: () -> Unit,
     onAuthenticate: (Pin1Submission) -> Unit,
+    onReaderConnect: (CanSubmission) -> Unit,
     onOpenNfcSettings: () -> Unit,
     onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
     onForgetPrimedCard: () -> Unit,
@@ -246,6 +249,7 @@ private fun HomeScreen(
                 ReaderCard(
                     snapshot = snapshot,
                     onRequestPermission = onRequestPermission,
+                    onConnect = onReaderConnect,
                 )
             } else if (nfcSnapshot.status != NfcReaderStatus.NOT_AVAILABLE) {
                 NfcCard(
@@ -704,52 +708,69 @@ internal val CanInputTransformation =
         }
     }
 
+@Composable
+private fun readerStatusColor(status: ReaderConnectionStatus): Color =
+    when (status) {
+        ReaderConnectionStatus.READY -> SUCCESS_STATUS_COLOR
+        ReaderConnectionStatus.PERMISSION_REQUEST_FAILED -> MaterialTheme.colorScheme.error
+        ReaderConnectionStatus.CARD_ERROR -> MaterialTheme.colorScheme.error
+        ReaderConnectionStatus.TRANSPORT_ERROR -> MaterialTheme.colorScheme.error
+        ReaderConnectionStatus.PERMISSION_REQUIRED -> PERMISSION_STATUS_COLOR
+        ReaderConnectionStatus.CHECKING -> MaterialTheme.colorScheme.primary
+        ReaderConnectionStatus.NOT_CONNECTED -> MaterialTheme.colorScheme.onSurfaceVariant
+        ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED -> PERMISSION_STATUS_COLOR
+        ReaderConnectionStatus.WRONG_ACCESS_NUMBER -> MaterialTheme.colorScheme.error
+    }
+
+@Composable
+private fun readerStatusTitle(status: ReaderConnectionStatus): String =
+    when (status) {
+        ReaderConnectionStatus.READY -> {
+            stringResource(R.string.ready)
+        }
+
+        ReaderConnectionStatus.PERMISSION_REQUIRED -> {
+            stringResource(R.string.permission_required)
+        }
+
+        ReaderConnectionStatus.PERMISSION_REQUEST_FAILED -> {
+            stringResource(R.string.access_failed)
+        }
+
+        ReaderConnectionStatus.CARD_ERROR -> {
+            stringResource(R.string.error)
+        }
+
+        ReaderConnectionStatus.TRANSPORT_ERROR -> {
+            stringResource(R.string.error)
+        }
+
+        ReaderConnectionStatus.CHECKING -> {
+            stringResource(R.string.checking)
+        }
+
+        ReaderConnectionStatus.NOT_CONNECTED -> {
+            stringResource(R.string.not_connected)
+        }
+
+        ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED -> {
+            stringResource(R.string.access_number_required)
+        }
+
+        ReaderConnectionStatus.WRONG_ACCESS_NUMBER -> {
+            stringResource(R.string.wrong_can)
+        }
+    }
+
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 private fun ReaderCard(
     snapshot: UsbReaderSnapshot,
     onRequestPermission: () -> Unit,
+    onConnect: (CanSubmission) -> Unit,
 ) {
-    val statusColor =
-        when (snapshot.status) {
-            ReaderConnectionStatus.READY -> SUCCESS_STATUS_COLOR
-            ReaderConnectionStatus.PERMISSION_REQUEST_FAILED -> MaterialTheme.colorScheme.error
-            ReaderConnectionStatus.CARD_ERROR -> MaterialTheme.colorScheme.error
-            ReaderConnectionStatus.TRANSPORT_ERROR -> MaterialTheme.colorScheme.error
-            ReaderConnectionStatus.PERMISSION_REQUIRED -> PERMISSION_STATUS_COLOR
-            ReaderConnectionStatus.CHECKING -> MaterialTheme.colorScheme.primary
-            ReaderConnectionStatus.NOT_CONNECTED -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
-    val statusTitle =
-        when (snapshot.status) {
-            ReaderConnectionStatus.READY -> {
-                stringResource(R.string.ready)
-            }
-
-            ReaderConnectionStatus.PERMISSION_REQUIRED -> {
-                stringResource(R.string.permission_required)
-            }
-
-            ReaderConnectionStatus.PERMISSION_REQUEST_FAILED -> {
-                stringResource(R.string.access_failed)
-            }
-
-            ReaderConnectionStatus.CARD_ERROR -> {
-                stringResource(R.string.error)
-            }
-
-            ReaderConnectionStatus.TRANSPORT_ERROR -> {
-                stringResource(R.string.error)
-            }
-
-            ReaderConnectionStatus.CHECKING -> {
-                stringResource(R.string.checking)
-            }
-
-            ReaderConnectionStatus.NOT_CONNECTED -> {
-                stringResource(R.string.not_connected)
-            }
-        }
+    val statusColor = readerStatusColor(snapshot.status)
+    val statusTitle = readerStatusTitle(snapshot.status)
 
     Card(
         modifier =
@@ -840,7 +861,62 @@ private fun ReaderCard(
                     )
                 }
             }
+
+            if (
+                snapshot.status == ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED ||
+                snapshot.status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER
+            ) {
+                HorizontalDivider()
+                ReaderCanEntry(onConnect = onConnect)
+            }
         }
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun ReaderCanEntry(onConnect: (CanSubmission) -> Unit) {
+    val canState = remember { TextFieldState() }
+    DisposableEffect(canState) {
+        onDispose {
+            canState.clearText()
+        }
+    }
+    val canReady = CanSubmission.isComplete(canState.text)
+    val submit = {
+        if (canReady) {
+            val can = CanSubmission.from(canState.text)
+            canState.clearText()
+            onConnect(can)
+        }
+        Unit
+    }
+    SecureTextField(
+        state = canState,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(UiAutomationIds.READER_CAN_FIELD),
+        label = { Text(stringResource(R.string.can)) },
+        inputTransformation = CanInputTransformation,
+        textObfuscationMode = TextObfuscationMode.Hidden,
+        keyboardOptions =
+            KeyboardOptions(
+                autoCorrectEnabled = false,
+                keyboardType = KeyboardType.NumberPassword,
+                imeAction = ImeAction.Done,
+            ),
+        onKeyboardAction = { submit() },
+    )
+    Button(
+        onClick = submit,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(UiAutomationIds.READER_CONNECT_ACTION),
+        enabled = canReady,
+    ) {
+        Text(stringResource(R.string.unlock))
     }
 }
 

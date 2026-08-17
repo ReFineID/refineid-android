@@ -195,6 +195,12 @@ internal object AppTrace {
 
     fun authenticationRequestCompleted(status: AuthenticationStatus) = Unit
 
+    fun usbContactlessConnectIgnored() = Unit
+
+    fun usbContactlessConnectStarted() = Unit
+
+    fun usbContactlessConnectCompleted(opened: Boolean) = Unit
+
     fun browserOpened() = Unit
 
     fun browserClosed() = Unit

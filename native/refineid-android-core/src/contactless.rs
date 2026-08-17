@@ -9,8 +9,10 @@
 //! layer is itself a card transport, so the reviewed public operations
 //! run unchanged above it (FINEID S4-2; BSI TR-03110).
 
+use std::sync::Mutex;
+
 use refineid_apdu::{CardTransport, TransportOutcome};
-use refineid_pace::{Can, PaceError, SmTransport, UnvalidatedCan, run_pace_with_can};
+use refineid_pace::{Can, PaceError, PaceSession, SmTransport, UnvalidatedCan, run_pace_with_can};
 use refineid_pkcs15::{Pkcs15Error, Pkcs15Ops};
 
 use crate::authentication_signer::{
@@ -41,6 +43,41 @@ enum SecureChannelFailure {
     Transport,
     /// A local shape or facility failure that never touched the card.
     Bridge,
+}
+
+/// The host half of one live contactless secure-messaging session: the
+/// PACE keys and the send-sequence counter, held between JNI calls for as
+/// long as the reader keeps the RF field up. The card keeps its matching
+/// half alive across that same field; rebuilding [`SmTransport`] from this
+/// stored session on each call keeps host and card in step, so every
+/// operation after the connect skips the PACE handshake and pays only a
+/// cheap PKCS#15 re-select. Dropping the field (close, card removed) clears
+/// the slot and the keys with it. One slot: the reader drives one card at a
+/// time, and a fresh connect supersedes whatever it held.
+static HELD_SESSION: Mutex<Option<PaceSession>> = Mutex::new(None);
+
+/// Adopt the live session for reuse by the next operation under the same
+/// field. A poisoned lock silently drops the session: the next operation
+/// finds no session and the holder reconnects, which is the safe outcome.
+fn store_held_session(session: PaceSession) {
+    if let Ok(mut slot) = HELD_SESSION.lock() {
+        *slot = Some(session);
+    }
+}
+
+/// Take the live session, leaving the slot empty. The caller either rebuilds
+/// the channel and stores the advanced session back, or lets it drop and the
+/// keys with it.
+fn take_held_session() -> Option<PaceSession> {
+    HELD_SESSION.lock().ok().and_then(|mut slot| slot.take())
+}
+
+/// Drop any held session and the keys with it. Idempotent: closing an
+/// already-closed session is a no-op.
+pub(crate) fn contactless_close() {
+    if let Ok(mut slot) = HELD_SESSION.lock() {
+        *slot = None;
+    }
 }
 
 /// One PACE handshake, then the PKCS#15 selection, authentication
@@ -101,6 +138,83 @@ pub(crate) fn contactless_authenticate_and_sign<Exchange: SingleBlockExchange>(
     }
     let result = authenticate_and_sign(&mut secure, algorithm, pin_bytes, input);
     (result, secure.into_inner().into_exchange())
+}
+
+/// The persistent-session opener. One PACE handshake, then the PKCS#15
+/// selection, authentication-certificate read, and counter-safe PIN1
+/// preflight -- byte for byte the one-shot [`contactless_open`] sequence.
+/// The one difference is the ending: on full success the live
+/// secure-messaging session (keys and send-sequence counter) is retained,
+/// so the sign that follows reuses this channel instead of running PACE a
+/// second time. A failed open retains nothing and the holder reconnects.
+pub(crate) fn contactless_connect<Exchange: SingleBlockExchange>(
+    transport: AndroidCardTransport<Exchange>,
+    can_bytes: Vec<u8>,
+) -> (
+    Result<(CardCertificate, Pin1Preflight), CertificateReadFailure>,
+    Exchange,
+) {
+    // A fresh connect supersedes any session a prior card left behind.
+    contactless_close();
+    let mut secure = match open_secure_channel(transport, can_bytes) {
+        Ok(secure) => secure,
+        Err((exchange, failure)) => {
+            return (Err(certificate_channel_failure(failure)), exchange);
+        }
+    };
+    let result = secure
+        .select_pkcs15_application()
+        .map_err(map_pkcs15_error)
+        .and_then(|()| read_authentication_certificate(&mut secure))
+        .and_then(|certificate| {
+            probe_pin1_preflight(&mut secure)
+                .map(|preflight| (certificate, preflight))
+                .map_err(open_preflight_failure)
+        });
+    let (transport, session) = secure.into_parts();
+    if result.is_ok() {
+        store_held_session(session);
+    }
+    (result, transport.into_exchange())
+}
+
+/// The authentication signature on an already-open session: no PACE, only
+/// a cheap PKCS#15 re-select before VERIFY and signing on the retained
+/// channel. The PIN is zeroized on every path that stops before the
+/// reviewed signer consumes it. On completion the advanced session is
+/// retained for any further operation under the same field. A missing
+/// session -- never connected, or the field dropped between calls -- is a
+/// bridge fault: the holder connects again to prove a fresh CAN.
+pub(crate) fn contactless_authenticate_and_sign_on_session<Exchange: SingleBlockExchange>(
+    transport: AndroidCardTransport<Exchange>,
+    algorithm: AuthenticationSigningAlgorithm,
+    mut pin_bytes: Vec<u8>,
+    input: AuthenticationSigningInput<'_>,
+) -> (
+    Result<AuthenticationSignature, AuthenticationSignFailure>,
+    Exchange,
+) {
+    let Some(session) = take_held_session() else {
+        pin_bytes.fill(0);
+        return (
+            Err(AuthenticationSignFailure::Bridge),
+            transport.into_exchange(),
+        );
+    };
+    let mut secure = SmTransport::new(transport, session);
+    if let Err(error) = secure.select_pkcs15_application() {
+        pin_bytes.fill(0);
+        // The channel is troubled; drop the session and require a reconnect.
+        return (
+            Err(sign_selection_failure(error)),
+            secure.into_inner().into_exchange(),
+        );
+    }
+    let result = authenticate_and_sign(&mut secure, algorithm, pin_bytes, input);
+    // Keep the advanced session alive for any further operation this field.
+    let (transport, session) = secure.into_parts();
+    store_held_session(session);
+    (result, transport.into_exchange())
 }
 
 /// Serve the qualified-certificate read across the PACE secure channel.

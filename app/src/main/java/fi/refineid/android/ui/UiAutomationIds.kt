@@ -10,6 +10,8 @@ internal object UiAutomationIds {
     const val BACK_ACTION = "backAction"
     const val READER_CARD = "readerCard"
     const val READER_ACTION = "readerAction"
+    const val READER_CAN_FIELD = "readerCanField"
+    const val READER_CONNECT_ACTION = "readerConnectAction"
     const val NFC_CARD = "nfcCard"
     const val NFC_ACTION = "nfcAction"
     const val NFC_CAN_FIELD = "nfcCanField"

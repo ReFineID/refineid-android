@@ -14,7 +14,10 @@ import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
+import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.NativeAuthenticationCertificate
+import fi.refineid.android.core.NativeCertificateReadFailure
+import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.core.NativeCore
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
@@ -36,6 +39,12 @@ internal enum class ReaderConnectionStatus {
     PERMISSION_REQUEST_FAILED,
     CARD_ERROR,
     TRANSPORT_ERROR,
+
+    /** A contactless card sits on the reader; PACE needs the access number. */
+    ACCESS_NUMBER_REQUIRED,
+
+    /** The entered access number did not open the contactless card. */
+    WRONG_ACCESS_NUMBER,
 }
 
 internal enum class CardPresence {
@@ -336,6 +345,76 @@ internal class UsbReaderController(
         }
     }
 
+    /**
+     * Run PACE with the entered access number on the held contactless
+     * session, opening the card once. On success the session is retained
+     * under secure messaging so the browser and diagnostic signs reuse it
+     * without a second handshake; a wrong access number stays on the CAN
+     * prompt for retry.
+     */
+    fun connect(can: CanSubmission) {
+        if (
+            !isStarted ||
+            (
+                latestSnapshot.status != ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED &&
+                    latestSnapshot.status != ReaderConnectionStatus.WRONG_ACCESS_NUMBER
+            )
+        ) {
+            can.close()
+            AppTrace.usbContactlessConnectIgnored()
+            return
+        }
+        val generation = probeGeneration
+        publish(
+            UsbReaderSnapshot(
+                status = ReaderConnectionStatus.CHECKING,
+                cardPresence = CardPresence.PRESENT,
+            ),
+        )
+        AppTrace.usbContactlessConnectStarted()
+        ioExecutor.execute {
+            if (!isStarted || generation != probeGeneration) {
+                can.close()
+                return@execute
+            }
+            val canBytes = can.transfer()
+            val result =
+                activeSession?.openContactless(canBytes) ?: run {
+                    canBytes.fill(0)
+                    NativeContactlessOpenResult.Failure(
+                        NativeCertificateReadFailure.CARD_UNAVAILABLE,
+                    )
+                }
+            if (result is NativeContactlessOpenResult.Success) {
+                activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
+            }
+            val snapshot =
+                when (result) {
+                    is NativeContactlessOpenResult.Success -> {
+                        UsbReaderSnapshot(
+                            status = ReaderConnectionStatus.READY,
+                            cardPresence = CardPresence.PRESENT,
+                        )
+                    }
+
+                    is NativeContactlessOpenResult.Failure -> {
+                        UsbReaderSnapshot(
+                            status = result.kind.toContactlessConnectStatus(),
+                            cardPresence = CardPresence.PRESENT,
+                        )
+                    }
+                }
+            AppTrace.usbContactlessConnectCompleted(
+                result is NativeContactlessOpenResult.Success,
+            )
+            mainHandler.post {
+                if (isStarted && generation == probeGeneration) {
+                    publish(snapshot)
+                }
+            }
+        }
+    }
+
     /** Copies the public leaf while preserving session thread confinement. */
     override fun requestAuthenticationCertificate(onResult: (NativeAuthenticationCertificate?) -> Unit) {
         if (
@@ -481,6 +560,10 @@ internal class UsbReaderController(
             if (result is CcidSessionOpenResult.Ready) {
                 activeSession = result.session
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
+            } else if (result is CcidSessionOpenResult.AccessNumberRequired) {
+                // Hold the contactless session so a CAN entry can run PACE on it.
+                // No provider generation until connect() actually opens the card.
+                activeSession = result.session
             }
             mainHandler.post {
                 if (
@@ -494,6 +577,13 @@ internal class UsbReaderController(
                             is CcidSessionOpenResult.Ready -> {
                                 UsbReaderSnapshot(
                                     status = ReaderConnectionStatus.READY,
+                                    cardPresence = CardPresence.PRESENT,
+                                )
+                            }
+
+                            is CcidSessionOpenResult.AccessNumberRequired -> {
+                                UsbReaderSnapshot(
+                                    status = ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED,
                                     cardPresence = CardPresence.PRESENT,
                                 )
                             }
@@ -606,5 +696,26 @@ private fun AuthenticationSignResult.toAuthenticationStatus(): AuthenticationSta
                 AuthenticationSignFailure.BRIDGE_ERROR,
                 -> AuthenticationStatus.ERROR
             }
+        }
+    }
+
+/** Coarse holder-facing status for one contactless connect attempt. */
+private fun NativeCertificateReadFailure.toContactlessConnectStatus(): ReaderConnectionStatus =
+    when (this) {
+        NativeCertificateReadFailure.PACE_REJECTED -> {
+            ReaderConnectionStatus.WRONG_ACCESS_NUMBER
+        }
+
+        NativeCertificateReadFailure.CARD_UNAVAILABLE,
+        NativeCertificateReadFailure.REJECTED,
+        NativeCertificateReadFailure.INVALID_CERTIFICATE,
+        -> {
+            ReaderConnectionStatus.CARD_ERROR
+        }
+
+        NativeCertificateReadFailure.TRANSPORT_ERROR,
+        NativeCertificateReadFailure.BRIDGE_ERROR,
+        -> {
+            ReaderConnectionStatus.TRANSPORT_ERROR
         }
     }

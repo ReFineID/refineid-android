@@ -11,15 +11,15 @@ crate-type = ["cdylib"]
 
 [dependencies]
 jni = "=0.22.4"
-refineid-apdu = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
-refineid-auth = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
-refineid-ber = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
-refineid-atr = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
-refineid-digest = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
-refineid-pace = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
-refineid-pkcs15 = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
-refineid-sign = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
-refineid-x509 = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
+refineid-apdu = { git = "https://github.com/ReFineID/refineid-core.git", rev = "27d43de2f19a3807ee949aa4b36650bfdd22e5d6" }
+refineid-auth = { git = "https://github.com/ReFineID/refineid-core.git", rev = "27d43de2f19a3807ee949aa4b36650bfdd22e5d6" }
+refineid-ber = { git = "https://github.com/ReFineID/refineid-core.git", rev = "27d43de2f19a3807ee949aa4b36650bfdd22e5d6" }
+refineid-atr = { git = "https://github.com/ReFineID/refineid-core.git", rev = "27d43de2f19a3807ee949aa4b36650bfdd22e5d6" }
+refineid-digest = { git = "https://github.com/ReFineID/refineid-core.git", rev = "27d43de2f19a3807ee949aa4b36650bfdd22e5d6" }
+refineid-pace = { git = "https://github.com/ReFineID/refineid-core.git", rev = "27d43de2f19a3807ee949aa4b36650bfdd22e5d6" }
+refineid-pkcs15 = { git = "https://github.com/ReFineID/refineid-core.git", rev = "27d43de2f19a3807ee949aa4b36650bfdd22e5d6" }
+refineid-sign = { git = "https://github.com/ReFineID/refineid-core.git", rev = "27d43de2f19a3807ee949aa4b36650bfdd22e5d6" }
+refineid-x509 = { git = "https://github.com/ReFineID/refineid-core.git", rev = "27d43de2f19a3807ee949aa4b36650bfdd22e5d6" }
 
 # The contactless crypto - PACE, ECDSA, RSA - lives entirely in the refineid-core
 # dependencies. Optimising every dependency at opt-level 3 even under the dev

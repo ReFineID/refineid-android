@@ -19,6 +19,8 @@ import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativeCardSessionMaterial
 import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeCertificateReadResult
+import fi.refineid.android.core.NativeContactlessOpenResult
+import fi.refineid.android.core.NativeContactlessSession
 import fi.refineid.android.core.NativeCore
 import fi.refineid.android.core.NativePin1PreflightFailure
 import fi.refineid.android.core.NativePin1PreflightResult
@@ -40,6 +42,16 @@ internal sealed interface CcidSessionOpenResult {
         val session: CcidUsbSession,
     ) : CcidSessionOpenResult {
         override fun toString(): String = "Ready"
+    }
+
+    /**
+     * A contactless card was activated but rejects plain access; it holds the
+     * open session so PACE can run once the access number arrives.
+     */
+    class AccessNumberRequired(
+        val session: CcidUsbSession,
+    ) : CcidSessionOpenResult {
+        override fun toString(): String = "AccessNumberRequired"
     }
 
     data object NoCard : CcidSessionOpenResult
@@ -75,6 +87,11 @@ internal class CcidUsbSession(
             ),
         )
     private var isClosed = false
+
+    // True once openContactless has run PACE and a live secure-messaging
+    // session is held natively. It routes signing over the retained channel
+    // (no second PACE) and asks the native side to drop the session at close.
+    private var contactlessSessionActive = false
     private val sessionMaterial = NativeCardSessionMaterial()
 
     fun selectPkcs15Application(): NativeCardOperationResult {
@@ -86,6 +103,30 @@ internal class CcidUsbSession(
             exchangeLevel = exchangeLevel,
             exchange = nativeExchange,
         )
+    }
+
+    /**
+     * PACE with the access number over the CCID channel, then the PKCS#15
+     * select, certificate read, and PIN1 preflight inside secure messaging -
+     * the contactless open a card on the reader's PICC antenna requires, run
+     * over USB exactly as the NFC path runs it over ISO-DEP.
+     *
+     * The reader holds the RF field for the session's whole lifetime, so on
+     * success the live secure-messaging session is retained natively: signing
+     * reuses this channel and never runs PACE a second time.
+     */
+    fun openContactless(canBytes: ByteArray): NativeContactlessOpenResult {
+        checkOwnerThread()
+        check(!isClosed) {
+            "CCID session is closed"
+        }
+        val result = NativeContactlessSession.connect(canBytes, nativeExchange)
+        if (result is NativeContactlessOpenResult.Success) {
+            contactlessSessionActive = true
+            sessionMaterial.cacheAuthenticationCertificate(result.certificate)
+            sessionMaterial.cachePin1Preflight(result.preflight)
+        }
+        return result
     }
 
     fun cacheAuthenticationCertificate(): NativeCertificateReadResult<NativeAuthenticationCertificate> {
@@ -228,25 +269,38 @@ internal class CcidUsbSession(
 
         return when (
             val result =
-                when (inputMode) {
-                    AuthenticationSigningInputMode.MESSAGE -> {
-                        NativeCore.authenticateAndSign(
-                            exchangeLevel = exchangeLevel,
-                            algorithm = algorithm,
-                            pin1 = pin1,
-                            message = input,
-                            exchange = nativeExchange,
-                        )
-                    }
+                if (contactlessSessionActive) {
+                    // The PICC card requires secure messaging; the session was
+                    // already proven under PACE at connect, so signing rebuilds
+                    // that channel and skips the handshake.
+                    NativeContactlessSession.authenticateAndSignOnSession(
+                        algorithm = algorithm,
+                        inputMode = inputMode,
+                        pin1 = pin1,
+                        input = input,
+                        exchange = nativeExchange,
+                    )
+                } else {
+                    when (inputMode) {
+                        AuthenticationSigningInputMode.MESSAGE -> {
+                            NativeCore.authenticateAndSign(
+                                exchangeLevel = exchangeLevel,
+                                algorithm = algorithm,
+                                pin1 = pin1,
+                                message = input,
+                                exchange = nativeExchange,
+                            )
+                        }
 
-                    AuthenticationSigningInputMode.PREHASHED -> {
-                        NativeCore.authenticateAndSignPrehashed(
-                            exchangeLevel = exchangeLevel,
-                            algorithm = algorithm,
-                            pin1 = pin1,
-                            digest = input,
-                            exchange = nativeExchange,
-                        )
+                        AuthenticationSigningInputMode.PREHASHED -> {
+                            NativeCore.authenticateAndSignPrehashed(
+                                exchangeLevel = exchangeLevel,
+                                algorithm = algorithm,
+                                pin1 = pin1,
+                                digest = input,
+                                exchange = nativeExchange,
+                            )
+                        }
                     }
                 }
         ) {
@@ -407,6 +461,11 @@ internal class CcidUsbSession(
             return
         }
         isClosed = true
+        if (contactlessSessionActive) {
+            // The card's half dies with the field; drop the host's keys too.
+            NativeContactlessSession.close()
+            contactlessSessionActive = false
+        }
         sessionMaterial.close()
 
         val interfaceReleased =
@@ -741,7 +800,11 @@ internal class CcidUsbSessionOpener(
                 }
 
                 NativeCardOperationResult.REJECTED -> {
-                    CcidSessionOpenResult.CardError
+                    // A contactless card rejects the plain PKCS#15 select: it
+                    // requires PACE first. Keep the activated session so the
+                    // access number can open it over secure messaging.
+                    retainSession = true
+                    CcidSessionOpenResult.AccessNumberRequired(session)
                 }
 
                 NativeCardOperationResult.TRANSPORT_ERROR,

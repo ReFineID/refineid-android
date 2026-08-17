@@ -26,7 +26,8 @@ use card_certificate::{
 };
 use card_transport::{AndroidCardTransport, CardExchangeLevel};
 use contactless::{
-    contactless_authenticate_and_sign, contactless_open, contactless_probe_pin2,
+    contactless_authenticate_and_sign, contactless_authenticate_and_sign_on_session,
+    contactless_close, contactless_connect, contactless_open, contactless_probe_pin2,
     contactless_qualified_sign, contactless_read_qualified_certificate,
 };
 use jni::objects::{JByteArray, JClass, JObject};
@@ -58,6 +59,10 @@ const CARD_OPERATION_SUCCEEDED: jint = 1;
 const CARD_OPERATION_CARD_UNAVAILABLE: jint = 2;
 const CARD_OPERATION_REJECTED: jint = 3;
 const CARD_OPERATION_TRANSPORT_ERROR: jint = 4;
+
+/// The held contactless session was dropped. Closing is best-effort and
+/// touches no card, so the only outcome is success.
+const CONTACTLESS_SESSION_CLOSED: jint = 0;
 
 const CERTIFICATE_BRIDGE_ERROR: u8 = 0;
 const CERTIFICATE_SUCCEEDED: u8 = 1;
@@ -293,6 +298,29 @@ const _: NativeMethod = jni::native_method! {
     ) -> [jbyte],
 };
 
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeContactlessSession",
+    static extern fn contactless_connect_native(
+        can: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeContactlessSession",
+    static extern fn contactless_authenticate_and_sign_on_session_native(
+        request: jint,
+        pin: [jbyte],
+        message: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeContactlessSession",
+    static extern fn contactless_close_native() -> jint,
+};
+
 fn validate_atr_native<'local>(
     env: &mut Env<'local>,
     _class: JClass<'local>,
@@ -444,6 +472,110 @@ fn contactless_open_native<'local>(
     let java_reply = env.byte_array_from_slice(&reply);
     reply.fill(0);
     java_reply
+}
+
+/// The persistent-session opener. Identical to `contactless_open_native`
+/// except it runs `contactless_connect`, which retains the live
+/// secure-messaging session on full success so the sign that follows can
+/// skip PACE.
+fn contactless_connect_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    can: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let can_bytes = take_secret_bytes(env, &can)?;
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let (result, exchange) = contactless_connect(transport, can_bytes);
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![CERTIFICATE_BRIDGE_ERROR]
+    } else {
+        encode_contactless_open_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+/// The authentication signature on the session a prior `contactless_connect`
+/// left open. It carries no CAN: the channel is rebuilt from the held
+/// session and PACE is skipped. Otherwise it mirrors
+/// `contactless_authenticate_and_sign_native` byte for byte.
+fn contactless_authenticate_and_sign_on_session_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    request: jint,
+    pin: JByteArray<'local>,
+    message: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let mut pin_bytes = take_secret_bytes(env, &pin)?;
+
+    let Some((algorithm, input_mode)) = authentication_request_from_jint(request) else {
+        pin_bytes.fill(0);
+        return one_byte_reply(env, AUTHENTICATION_SIGNATURE_BRIDGE_ERROR);
+    };
+    let message_length = match message.len(env) {
+        Ok(length) => length,
+        Err(error) => {
+            pin_bytes.fill(0);
+            return Err(error);
+        }
+    };
+    if message_length > MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH {
+        pin_bytes.fill(0);
+        return one_byte_reply(env, AUTHENTICATION_SIGNATURE_BRIDGE_ERROR);
+    }
+    let mut message_bytes = match env.convert_byte_array(&message) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            pin_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let input = match input_mode {
+            AuthenticationSigningInputMode::Message => {
+                AuthenticationSigningInput::Message(&message_bytes)
+            }
+            AuthenticationSigningInputMode::Prehashed => {
+                AuthenticationSigningInput::Prehashed(&message_bytes)
+            }
+        };
+        let (result, exchange) =
+            contactless_authenticate_and_sign_on_session(transport, algorithm, pin_bytes, input);
+        (result, exchange.bridge_failed())
+    };
+    message_bytes.fill(0);
+
+    let mut reply = if bridge_failed {
+        vec![AUTHENTICATION_SIGNATURE_BRIDGE_ERROR]
+    } else {
+        encode_authentication_signature_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+/// Drop the held contactless session and its keys. No card interaction: the
+/// card's half dies with the field, so closing is a local clear that always
+/// reports success.
+fn contactless_close_native<'local>(
+    _env: &mut Env<'local>,
+    _class: JClass<'local>,
+) -> Result<jint, jni::errors::Error> {
+    contactless_close();
+    Ok(CONTACTLESS_SESSION_CLOSED)
 }
 
 fn contactless_authenticate_and_sign_native<'local>(

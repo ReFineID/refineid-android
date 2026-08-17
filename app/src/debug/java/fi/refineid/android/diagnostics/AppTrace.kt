@@ -500,6 +500,18 @@ internal object AppTrace {
         debug("authentication:request-completed status=" + status)
     }
 
+    fun usbContactlessConnectIgnored() {
+        debug("usb:contactless-connect ignored=not-awaiting-can")
+    }
+
+    fun usbContactlessConnectStarted() {
+        debug("usb:contactless-connect-started")
+    }
+
+    fun usbContactlessConnectCompleted(opened: Boolean) {
+        debug("usb:contactless-connect-completed opened=" + opened)
+    }
+
     fun browserOpened() {
         debug("browser:opened")
     }

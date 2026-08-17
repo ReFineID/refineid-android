@@ -23,6 +23,7 @@
     <string name="sign_in">Sign in</string>
     <string name="unlock">Unlock</string>
     <string name="wrong_can" tools:ignore="Typos">Wrong CAN</string>
+    <string name="access_number_required" tools:ignore="Typos">CAN required</string>
     <string name="card_primed">Card saved for tap</string>
     <string name="forget">Forget</string>
     <string name="present">Present</string>
