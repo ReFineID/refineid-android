@@ -282,6 +282,12 @@ internal object AppTrace {
 
     fun nfcTransceiveFailed() = Unit
 
+    fun nfcTransceive(
+        commandLength: Int,
+        responseLength: Int,
+        durationMicros: Long,
+    ) = Unit
+
     fun nfcProbeResultDiscarded() = Unit
 
     fun nfcSnapshotPublished(status: NfcReaderStatus) = Unit

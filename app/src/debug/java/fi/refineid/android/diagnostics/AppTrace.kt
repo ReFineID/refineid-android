@@ -674,6 +674,18 @@ internal object AppTrace {
         debug("nfc:transceive-failed")
     }
 
+    fun nfcTransceive(
+        commandLength: Int,
+        responseLength: Int,
+        durationMicros: Long,
+    ) {
+        debug(
+            "nfc:transceive cmd=" + commandLength +
+                " rsp=" + responseLength +
+                " us=" + durationMicros,
+        )
+    }
+
     fun nfcProbeResultDiscarded() {
         debug("nfc:probe-result-discarded")
     }

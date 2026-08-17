@@ -2,6 +2,7 @@ package fi.refineid.android.nfc
 
 import fi.refineid.android.core.NativeBlockExchange
 import fi.refineid.android.core.NativeExchangeReplyTag
+import fi.refineid.android.diagnostics.AppTrace
 
 /**
  * Adapts one connected ISO-DEP card to the synchronous native callback
@@ -19,8 +20,12 @@ internal class NfcNativeBlockExchange(
         if (block.isEmpty() || block.size > channel.maximumTransceiveLength) {
             return byteArrayOf(NativeExchangeReplyTag.BACKEND_FAILURE.wireValue)
         }
-        return when (val result = channel.transceive(block)) {
+        val startedAtNanos = System.nanoTime()
+        val result = channel.transceive(block)
+        val elapsedMicros = (System.nanoTime() - startedAtNanos) / NANOSECONDS_PER_MICROSECOND
+        return when (result) {
             is NfcTransceiveResult.Response -> {
+                AppTrace.nfcTransceive(block.size, result.bytes.size, elapsedMicros)
                 encodeResponse(result.bytes)
             }
 
@@ -55,6 +60,8 @@ internal class NfcNativeBlockExchange(
         }
 
     private companion object {
+        const val NANOSECONDS_PER_MICROSECOND = 1_000
+
         const val TAG_OFFSET = 0
         const val TAG_LENGTH = 1
 
