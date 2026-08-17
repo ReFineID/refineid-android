@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import fi.refineid.android.diagnostics.AppTrace
+import fi.refineid.android.diagnostics.BuildDiagnostics
 import fi.refineid.android.nfc.NfcReaderController
 import fi.refineid.android.nfc.NfcReaderSnapshot
 import fi.refineid.android.ui.MainScreen
@@ -34,10 +35,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppTrace.activityCreated()
-        window.addFlags(
-            WindowManager.LayoutParams.FLAG_SECURE or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
-        )
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (!BuildDiagnostics.SCREEN_CAPTURE_ALLOWED) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
         window.setHideOverlayWindows(true)
         window.decorView.importantForAutofill =
             View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS

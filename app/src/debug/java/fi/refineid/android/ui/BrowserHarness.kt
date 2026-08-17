@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
@@ -180,6 +181,7 @@ private fun BrowserDialog(
                 modifier =
                     Modifier
                         .fillMaxSize()
+                        .safeDrawingPadding()
                         .padding(BROWSER_PADDING),
                 verticalArrangement = Arrangement.spacedBy(BROWSER_ITEM_SPACING),
             ) {
