@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="format_pdf">PDF</string>
+    <string name="format_container">Container</string>
     <string name="choose_pdf">Choose PDF</string>
+    <string name="choose_files">Choose files</string>
     <string name="pdf_selected">PDF selected</string>
+    <string name="files_selected">Files selected</string>
     <string name="signature_pin2">Signature PIN 2</string>
     <string name="sign_document">Sign document</string>
     <string name="saving">Saving</string>

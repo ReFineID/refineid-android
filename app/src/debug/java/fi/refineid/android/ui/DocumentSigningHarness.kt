@@ -16,6 +16,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import fi.refineid.android.R
+import fi.refineid.android.asic.AsicContainer
+import fi.refineid.android.asic.AsicDataObject
+import fi.refineid.android.asic.AsicSigningCoordinator
+import fi.refineid.android.asic.AsicSigningFailure
+import fi.refineid.android.asic.AsicSigningResult
 import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.Pin2Submission
 import fi.refineid.android.core.QualifiedCardService
@@ -104,9 +109,21 @@ internal fun DocumentSigningHarness(
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { source ->
             source?.let(session::select)
         }
-    val destinationPicker =
+    val filesPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { sources ->
+            if (sources.isNotEmpty()) {
+                session.selectMany(sources)
+            }
+        }
+    val pdfDestinationPicker =
         rememberLauncherForActivityResult(
             ActivityResultContracts.CreateDocument(PDF_MEDIA_TYPE),
+        ) { destination ->
+            session.saveTo(destination)
+        }
+    val containerDestinationPicker =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument(AsicContainer.MIME_TYPE),
         ) { destination ->
             session.saveTo(destination)
         }
@@ -114,7 +131,11 @@ internal fun DocumentSigningHarness(
     // save, so the save panel opens with the suggested name after the tap.
     LaunchedEffect(session.saveRequest) {
         session.saveRequest?.let { request ->
-            destinationPicker.launch(request.suggestedName)
+            if (request.isContainer) {
+                containerDestinationPicker.launch(request.suggestedName)
+            } else {
+                pdfDestinationPicker.launch(request.suggestedName)
+            }
         }
     }
 
@@ -122,7 +143,14 @@ internal fun DocumentSigningHarness(
         hasDocument = session.hasDocument,
         canRequired = tap?.canRequired == true,
         status = session.status,
-        onChooseDocument = { sourcePicker.launch(arrayOf(PDF_MEDIA_TYPE)) },
+        format = session.format,
+        onSelectFormat = session::selectFormat,
+        onChooseDocument = {
+            when (session.format) {
+                SignatureFormat.PDF -> sourcePicker.launch(arrayOf(PDF_MEDIA_TYPE))
+                SignatureFormat.CONTAINER -> filesPicker.launch(arrayOf(ANY_MEDIA_TYPE))
+            }
+        },
         onSign = session::sign,
     )
 }
@@ -130,6 +158,7 @@ internal fun DocumentSigningHarness(
 /** A signed file waiting for the holder to choose where it lands. */
 internal data class DocumentSaveRequest(
     val suggestedName: String,
+    val isContainer: Boolean = false,
 )
 
 private class DocumentSigningHarnessSession(
@@ -141,21 +170,27 @@ private class DocumentSigningHarnessSession(
     private val tap: () -> DocumentSignTap?,
 ) : AutoCloseable {
     private val coordinator = QualifiedPdfSigningCoordinator(cardService)
+    private val asicCoordinator = AsicSigningCoordinator(cardService)
     private var selected by mutableStateOf<SelectedPdfDocument?>(null)
+    private var selectedFiles by mutableStateOf<List<AsicDataObject>?>(null)
     private var isClosed = false
     private var signingSetupJob: Job? = null
     private var pendingArchivalSources: DebugDocumentSigningSources? = null
     private var archivalJob: Job? = null
     private var signedDocument: SignedPdfDocument? = null
+    private var signedContainer: ByteArray? = null
 
     var status by mutableStateOf(DocumentSigningStatus.IDLE)
+        private set
+
+    var format by mutableStateOf(SignatureFormat.PDF)
         private set
 
     var saveRequest by mutableStateOf<DocumentSaveRequest?>(null)
         private set
 
     val hasDocument: Boolean
-        get() = selected != null
+        get() = if (format == SignatureFormat.PDF) selected != null else selectedFiles != null
 
     fun select(source: Uri) {
         if (isClosed || isWorking()) {
@@ -195,6 +230,67 @@ private class DocumentSigningHarnessSession(
         }
     }
 
+    /** Switch the target format; a PDF and a file set are not interchangeable. */
+    fun selectFormat(next: SignatureFormat) {
+        if (isClosed || isWorking() || next == format) {
+            return
+        }
+        selected?.close()
+        selected = null
+        selectedFiles = null
+        discardSigned()
+        format = next
+        if (status != DocumentSigningStatus.IDLE) {
+            status = DocumentSigningStatus.IDLE
+        }
+    }
+
+    /** Choose the set of files a single ASiC-E signature will cover. */
+    fun selectMany(sources: List<Uri>) {
+        if (isClosed || isWorking()) {
+            return
+        }
+        AppTrace.documentInputStarted()
+        status = DocumentSigningStatus.READING
+        scope.launch {
+            try {
+                val objects =
+                    withContext(Dispatchers.IO) {
+                        sources.map { source ->
+                            AsicDataObject(
+                                name = displayName(source),
+                                content = readBytes(source),
+                                mimeType = contentResolver.getType(source) ?: ANY_MEDIA_TYPE,
+                            )
+                        }
+                    }
+                if (!isClosed) {
+                    selected?.close()
+                    selected = null
+                    selectedFiles = objects
+                    discardSigned()
+                    status = DocumentSigningStatus.IDLE
+                    AppTrace.documentInputCompleted(
+                        isAccepted = true,
+                        documentLength = objects.sumOf { it.content.size },
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: IOException) {
+                failInput()
+            } catch (_: SecurityException) {
+                failInput()
+            } catch (_: RuntimeException) {
+                failInput()
+            }
+        }
+    }
+
+    private fun readBytes(source: Uri): ByteArray =
+        contentResolver.openInputStream(source)?.use { it.readBytes() }
+            ?: throw IOException("file cannot be opened")
+
     /**
      * Commit the chosen document. A wired session signs at once; a
      * contactless card first waits for the tap behind a hold prompt.
@@ -203,15 +299,28 @@ private class DocumentSigningHarnessSession(
         pin2: Pin2Submission,
         can: CanSubmission?,
     ) {
-        if (isClosed || isWorking() || selected == null) {
+        if (isClosed || isWorking() || !hasDocument) {
             pin2.close()
             can?.close()
             return
         }
+        withOpenCard(pin2, can) { granted ->
+            when (format) {
+                SignatureFormat.PDF -> prepare(granted)
+                SignatureFormat.CONTAINER -> prepareContainer(granted)
+            }
+        }
+    }
+
+    private fun withOpenCard(
+        pin2: Pin2Submission,
+        can: CanSubmission?,
+        run: (Pin2Submission) -> Unit,
+    ) {
         val activeTap = tap()
         if (activeTap == null) {
             can?.close()
-            prepare(pin2)
+            run(pin2)
             return
         }
         val canBytes = can?.transfer()
@@ -220,7 +329,7 @@ private class DocumentSigningHarnessSession(
             canBytes,
             {
                 if (!isClosed) {
-                    prepare(pin2)
+                    run(pin2)
                 } else {
                     pin2.close()
                 }
@@ -231,6 +340,52 @@ private class DocumentSigningHarnessSession(
                     status = DocumentSigningStatus.NO_CARD
                 }
             },
+        )
+    }
+
+    private fun prepareContainer(pin2: Pin2Submission) {
+        val files = selectedFiles
+        if (isClosed || files == null) {
+            pin2.close()
+            tap()?.end?.invoke()
+            return
+        }
+        status = DocumentSigningStatus.SIGNING
+        asicCoordinator.sign(files, pin2) { result ->
+            tap()?.end?.invoke()
+            containerSigningCompleted(result)
+        }
+    }
+
+    private fun containerSigningCompleted(result: AsicSigningResult) {
+        if (isClosed) {
+            return
+        }
+        when (result) {
+            is AsicSigningResult.Failure -> {
+                status = result.reason.status()
+            }
+
+            is AsicSigningResult.Success -> {
+                discardSigned()
+                signedContainer = result.container
+                saveRequest = DocumentSaveRequest(suggestedName = containerName(), isContainer = true)
+            }
+        }
+    }
+
+    private fun containerName(): String {
+        val files = selectedFiles
+        val original = if (files != null && files.size == 1) files[0].name else DEFAULT_CONTAINER_NAME
+        val phrase =
+            context.getString(
+                R.string.signed_at,
+                SignedDocumentName.instantStamp(Instant.now()),
+            )
+        return SignedDocumentName.suggested(
+            originalName = original,
+            signedAtPhrase = phrase,
+            extensionOverride = AsicContainer.FILE_EXTENSION,
         )
     }
 
@@ -309,27 +464,35 @@ private class DocumentSigningHarnessSession(
 
     fun saveTo(destination: Uri?) {
         saveRequest = null
+        val container = signedContainer
         val document = signedDocument
-        if (destination == null || document == null) {
+        if (destination == null || (container == null && document == null)) {
             discardSigned()
             if (!isClosed && status != DocumentSigningStatus.IDLE) {
                 status = DocumentSigningStatus.IDLE
             }
             return
         }
+        signedContainer = null
         signedDocument = null
         status = DocumentSigningStatus.SAVING
         scope.launch {
-            val documentLength = document.length
-            val saved = save(document, destination)
-            AppTrace.documentOutputCompleted(
-                isSuccessful = saved,
-                documentLength = documentLength,
-            )
+            val saved =
+                if (container != null) {
+                    val ok = saveBytes(container, destination)
+                    AppTrace.documentOutputCompleted(isSuccessful = ok, documentLength = container.size)
+                    ok
+                } else {
+                    checkNotNull(document)
+                    val ok = save(document, destination)
+                    AppTrace.documentOutputCompleted(isSuccessful = ok, documentLength = document.length)
+                    ok
+                }
             if (!isClosed) {
                 if (saved) {
                     selected?.close()
                     selected = null
+                    selectedFiles = null
                     status = DocumentSigningStatus.SIGNED
                 } else {
                     status = DocumentSigningStatus.ERROR
@@ -338,6 +501,28 @@ private class DocumentSigningHarnessSession(
         }
     }
 
+    private suspend fun saveBytes(
+        bytes: ByteArray,
+        output: Uri,
+    ): Boolean =
+        try {
+            withContext(Dispatchers.IO) {
+                contentResolver.openOutputStream(output, WRITE_MODE)?.use { stream ->
+                    stream.write(bytes)
+                    stream.flush()
+                } ?: throw IOException("container destination cannot be opened")
+            }
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: IOException) {
+            false
+        } catch (_: SecurityException) {
+            false
+        } catch (_: RuntimeException) {
+            false
+        }
+
     override fun close() {
         if (isClosed) {
             return
@@ -345,6 +530,7 @@ private class DocumentSigningHarnessSession(
         isClosed = true
         selected?.close()
         selected = null
+        selectedFiles = null
         signingSetupJob?.cancel()
         pendingArchivalSources?.close()
         pendingArchivalSources = null
@@ -494,6 +680,7 @@ private class DocumentSigningHarnessSession(
         saveRequest = null
         signedDocument?.close()
         signedDocument = null
+        signedContainer = null
     }
 
     private fun isWorking(): Boolean =
@@ -590,10 +777,48 @@ private class DocumentSigningHarnessSession(
             }
         }
 
+    private fun AsicSigningFailure.status(): DocumentSigningStatus =
+        when (this) {
+            AsicSigningFailure.KeyProfileUnsupported,
+            is AsicSigningFailure.Certificate,
+            -> DocumentSigningStatus.UNAVAILABLE
+
+            AsicSigningFailure.UnusableNames,
+            AsicSigningFailure.ContainerOverflow,
+            -> DocumentSigningStatus.ERROR
+
+            is AsicSigningFailure.Card -> kind.status()
+        }
+
+    private fun fi.refineid.android.core.QualifiedSignFailure.status(): DocumentSigningStatus =
+        when (this) {
+            fi.refineid.android.core.QualifiedSignFailure.WRONG_PIN -> DocumentSigningStatus.WRONG_PIN
+
+            fi.refineid.android.core.QualifiedSignFailure.PIN_LOCKED -> DocumentSigningStatus.PIN_LOCKED
+
+            fi.refineid.android.core.QualifiedSignFailure.CARD_UNAVAILABLE,
+            fi.refineid.android.core.QualifiedSignFailure.TRANSPORT_ERROR,
+            fi.refineid.android.core.QualifiedSignFailure.SAFETY_REFUSED,
+            -> DocumentSigningStatus.UNAVAILABLE
+
+            fi.refineid.android.core.QualifiedSignFailure.INVALID_PIN,
+            fi.refineid.android.core.QualifiedSignFailure.VERIFICATION_REJECTED,
+            fi.refineid.android.core.QualifiedSignFailure.CERTIFICATE_REJECTED,
+            fi.refineid.android.core.QualifiedSignFailure.INVALID_CERTIFICATE,
+            fi.refineid.android.core.QualifiedSignFailure.CERTIFICATE_MISMATCH,
+            fi.refineid.android.core.QualifiedSignFailure.KEY_PROFILE_MISMATCH,
+            fi.refineid.android.core.QualifiedSignFailure.SIGNING_REJECTED,
+            fi.refineid.android.core.QualifiedSignFailure.LOCAL_VERIFICATION_FAILED,
+            fi.refineid.android.core.QualifiedSignFailure.BRIDGE_ERROR,
+            -> DocumentSigningStatus.ERROR
+        }
+
     private companion object {
         const val WRITE_MODE = "w"
         const val DEFAULT_DOCUMENT_NAME = "document.pdf"
+        const val DEFAULT_CONTAINER_NAME = "container"
     }
 }
 
 private const val PDF_MEDIA_TYPE = "application/pdf"
+private const val ANY_MEDIA_TYPE = "*/*"

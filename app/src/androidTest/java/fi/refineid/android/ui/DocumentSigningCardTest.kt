@@ -177,6 +177,8 @@ internal class DocumentSigningCardTest {
                     hasDocument = hasDocument,
                     canRequired = canRequired,
                     status = status,
+                    format = SignatureFormat.PDF,
+                    onSelectFormat = {},
                     onChooseDocument = onChooseDocument,
                     onSign = onSign,
                 )

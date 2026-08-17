@@ -2,6 +2,7 @@ package fi.refineid.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,7 +14,9 @@ import androidx.compose.foundation.text.input.clearText
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SecureTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +50,16 @@ internal enum class DocumentSigningStatus {
 }
 
 /**
+ * What the signature produces, mirroring the reference PDF/Container choice.
+ * A single PDF is signed in place as PAdES; a set of files is signed together
+ * into one ASiC-E container.
+ */
+internal enum class SignatureFormat {
+    PDF,
+    CONTAINER,
+}
+
+/**
  * The signing card mirrors the reference flow: choose a document, enter
  * the signature PIN inline, then commit. The card is not assumed to be
  * present — committing shows a hold prompt and waits for the tap — and
@@ -60,6 +73,8 @@ internal fun DocumentSigningCard(
     hasDocument: Boolean,
     canRequired: Boolean,
     status: DocumentSigningStatus,
+    format: SignatureFormat,
+    onSelectFormat: (SignatureFormat) -> Unit,
     onChooseDocument: () -> Unit,
     onSign: (Pin2Submission, CanSubmission?) -> Unit,
 ) {
@@ -107,6 +122,27 @@ internal fun DocumentSigningCard(
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.titleLarge,
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(DOCUMENT_ITEM_SPACING),
+            ) {
+                FormatToggle(
+                    label = stringResource(R.string.format_pdf),
+                    selected = format == SignatureFormat.PDF,
+                    enabled = !isWorking,
+                    tag = UiAutomationIds.DOCUMENT_FORMAT_PDF,
+                    onClick = { onSelectFormat(SignatureFormat.PDF) },
+                    modifier = Modifier.weight(1f),
+                )
+                FormatToggle(
+                    label = stringResource(R.string.format_container),
+                    selected = format == SignatureFormat.CONTAINER,
+                    enabled = !isWorking,
+                    tag = UiAutomationIds.DOCUMENT_FORMAT_CONTAINER,
+                    onClick = { onSelectFormat(SignatureFormat.CONTAINER) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
             Button(
                 onClick = onChooseDocument,
                 modifier =
@@ -115,11 +151,22 @@ internal fun DocumentSigningCard(
                         .testTag(UiAutomationIds.DOCUMENT_CHOOSE_ACTION),
                 enabled = !isWorking,
             ) {
-                Text(stringResource(R.string.choose_pdf))
+                Text(
+                    stringResource(
+                        if (format == SignatureFormat.PDF) R.string.choose_pdf else R.string.choose_files,
+                    ),
+                )
             }
             if (hasDocument) {
                 Text(
-                    text = stringResource(R.string.pdf_selected),
+                    text =
+                        stringResource(
+                            if (format == SignatureFormat.PDF) {
+                                R.string.pdf_selected
+                            } else {
+                                R.string.files_selected
+                            },
+                        ),
                     modifier = Modifier.testTag(UiAutomationIds.DOCUMENT_SELECTED_STATUS),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -171,6 +218,27 @@ internal fun DocumentSigningCard(
                 }
             }
             DocumentSigningStatusText(status)
+        }
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun FormatToggle(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    tag: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (selected) {
+        FilledTonalButton(onClick = onClick, enabled = enabled, modifier = modifier.testTag(tag)) {
+            Text(label)
+        }
+    } else {
+        OutlinedButton(onClick = onClick, enabled = enabled, modifier = modifier.testTag(tag)) {
+            Text(label)
         }
     }
 }

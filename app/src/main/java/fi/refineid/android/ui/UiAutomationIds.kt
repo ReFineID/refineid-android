@@ -24,6 +24,8 @@ internal object UiAutomationIds {
     const val DOCUMENT_VERIFY_ACTION = "documentVerifyAction"
     const val DOCUMENT_VALIDATION_STATUS = "documentValidationStatus"
     const val DOCUMENT_SIGNING_CARD = "documentSigningCard"
+    const val DOCUMENT_FORMAT_PDF = "documentFormatPdf"
+    const val DOCUMENT_FORMAT_CONTAINER = "documentFormatContainer"
     const val DOCUMENT_CHOOSE_ACTION = "documentChooseAction"
     const val DOCUMENT_SELECTED_STATUS = "documentSelectedStatus"
     const val DOCUMENT_DESTINATION_ACTION = "documentDestinationAction"
