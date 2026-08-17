@@ -10,8 +10,20 @@ import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignFailure
 import fi.refineid.android.core.NativeAuthenticationSignResult
 import fi.refineid.android.core.NativeCardSessionMaterial
+import fi.refineid.android.core.NativeCertificateReadFailure
+import fi.refineid.android.core.NativeCertificateReadResult
 import fi.refineid.android.core.NativeContactlessCore
+import fi.refineid.android.core.NativePin2PreflightFailure
+import fi.refineid.android.core.NativePin2PreflightResult
+import fi.refineid.android.core.NativeQualifiedCertificate
+import fi.refineid.android.core.NativeQualifiedSignFailure
+import fi.refineid.android.core.NativeQualifiedSignResult
 import fi.refineid.android.core.Pin1Submission
+import fi.refineid.android.core.Pin2Submission
+import fi.refineid.android.core.QualifiedSignFailure
+import fi.refineid.android.core.QualifiedSignResult
+import fi.refineid.android.core.QualifiedSignatureVerifier
+import fi.refineid.android.core.QualifiedSigningAlgorithm
 import fi.refineid.android.diagnostics.AppTrace
 import java.io.IOException
 
@@ -136,6 +148,121 @@ internal class ContactlessSession(
         }
     }
 
+    /**
+     * Read EF.4332 under a fresh PACE handshake. The one-shot channel
+     * needs no auth-context restore: the next operation opens its own.
+     */
+    fun readQualifiedCertificate(): NativeCertificateReadResult<NativeQualifiedCertificate> {
+        checkOwnerThread()
+        check(!isClosed) {
+            "contactless session is closed"
+        }
+        if (!reconnect()) {
+            return NativeCertificateReadResult.Failure(
+                NativeCertificateReadFailure.CARD_UNAVAILABLE,
+            )
+        }
+        val result =
+            NativeContactlessCore.readQualifiedCertificate(
+                canCopy = can.copyOf(),
+                exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        closeIsoDep()
+        return result
+    }
+
+    fun probePin2Status(): NativePin2PreflightResult {
+        checkOwnerThread()
+        check(!isClosed) {
+            "contactless session is closed"
+        }
+        if (!reconnect()) {
+            return NativePin2PreflightResult.Failure(
+                NativePin2PreflightFailure.CARD_UNAVAILABLE,
+            )
+        }
+        val result =
+            NativeContactlessCore.probePin2(
+                canCopy = can.copyOf(),
+                exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        closeIsoDep()
+        return result
+    }
+
+    fun qualifiedSign(
+        algorithm: QualifiedSigningAlgorithm,
+        pin2: Pin2Submission,
+        content: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+    ): QualifiedSignResult {
+        checkOwnerThread()
+        check(!isClosed) {
+            "contactless session is closed"
+        }
+        if (expectedCertificate.keyProfile != algorithm.keyProfile) {
+            pin2.close()
+            return QualifiedSignResult.Failure(QualifiedSignFailure.KEY_PROFILE_MISMATCH)
+        }
+        if (!reconnect()) {
+            pin2.close()
+            return QualifiedSignResult.Failure(QualifiedSignFailure.CARD_UNAVAILABLE)
+        }
+        val nativeResult =
+            NativeContactlessCore.qualifiedSign(
+                canCopy = can.copyOf(),
+                algorithm = algorithm,
+                pin2 = pin2,
+                content = content,
+                expectedCertificate = expectedCertificate,
+                exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        closeIsoDep()
+        return when (nativeResult) {
+            is NativeQualifiedSignResult.Success -> {
+                val isVerified =
+                    QualifiedSignatureVerifier.verify(
+                        certificate = expectedCertificate,
+                        content = content,
+                        signature = nativeResult.signature,
+                    )
+                AppTrace.qualifiedSignatureVerificationCompleted(isVerified)
+                if (isVerified) {
+                    QualifiedSignResult.Success(nativeResult.signature)
+                } else {
+                    nativeResult.signature.close()
+                    QualifiedSignResult.Failure(QualifiedSignFailure.LOCAL_VERIFICATION_FAILED)
+                }
+            }
+
+            is NativeQualifiedSignResult.Failure -> {
+                QualifiedSignResult.Failure(nativeResult.kind.toContactlessQualifiedFailure())
+            }
+        }
+    }
+
+    /** Ensure the resting tag is connected before one card operation. */
+    private fun reconnect(): Boolean =
+        try {
+            if (!isoDep.isConnected) {
+                isoDep.connect()
+                isoDep.timeout = TRANSCEIVE_TIMEOUT_MILLISECONDS
+            }
+            true
+        } catch (_: IOException) {
+            AppTrace.nfcSessionOpenFailed()
+            false
+        }
+
+    private fun closeIsoDep() {
+        try {
+            isoDep.close()
+        } catch (_: IOException) {
+            // The tag may already be gone; the operation result stands.
+        }
+        AppTrace.nfcSessionClosed()
+    }
+
     override fun close() {
         checkOwnerThread()
         if (isClosed) {
@@ -208,4 +335,23 @@ private fun NativeAuthenticationSignFailure.toContactlessFailure(): Authenticati
         NativeAuthenticationSignFailure.BRIDGE_ERROR -> {
             AuthenticationSignFailure.BRIDGE_ERROR
         }
+    }
+
+// The contactless qualified path folds a channel refusal to a transport
+// anomaly natively, so its coarse vocabulary carries no CAN-facing code.
+private fun NativeQualifiedSignFailure.toContactlessQualifiedFailure(): QualifiedSignFailure =
+    when (this) {
+        NativeQualifiedSignFailure.CARD_UNAVAILABLE -> QualifiedSignFailure.CARD_UNAVAILABLE
+        NativeQualifiedSignFailure.TRANSPORT_ERROR -> QualifiedSignFailure.TRANSPORT_ERROR
+        NativeQualifiedSignFailure.INVALID_PIN -> QualifiedSignFailure.INVALID_PIN
+        NativeQualifiedSignFailure.SAFETY_REFUSED -> QualifiedSignFailure.SAFETY_REFUSED
+        NativeQualifiedSignFailure.PIN_LOCKED -> QualifiedSignFailure.PIN_LOCKED
+        NativeQualifiedSignFailure.WRONG_PIN -> QualifiedSignFailure.WRONG_PIN
+        NativeQualifiedSignFailure.VERIFICATION_REJECTED -> QualifiedSignFailure.VERIFICATION_REJECTED
+        NativeQualifiedSignFailure.CERTIFICATE_REJECTED -> QualifiedSignFailure.CERTIFICATE_REJECTED
+        NativeQualifiedSignFailure.INVALID_CERTIFICATE -> QualifiedSignFailure.INVALID_CERTIFICATE
+        NativeQualifiedSignFailure.CERTIFICATE_MISMATCH -> QualifiedSignFailure.CERTIFICATE_MISMATCH
+        NativeQualifiedSignFailure.KEY_PROFILE_MISMATCH -> QualifiedSignFailure.KEY_PROFILE_MISMATCH
+        NativeQualifiedSignFailure.SIGNING_REJECTED -> QualifiedSignFailure.SIGNING_REJECTED
+        NativeQualifiedSignFailure.BRIDGE_ERROR -> QualifiedSignFailure.BRIDGE_ERROR
     }

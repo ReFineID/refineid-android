@@ -158,6 +158,159 @@ internal object NativeContactlessCore {
         return result
     }
 
+    /**
+     * One PACE handshake with the transferred CAN, then the PKCS#15
+     * selection and one EF.4332 read inside secure messaging. The CAN
+     * copy is cleared by the native border.
+     */
+    fun readQualifiedCertificate(
+        canCopy: ByteArray,
+        exchange: NativeBlockExchange,
+    ): NativeCertificateReadResult<NativeQualifiedCertificate> {
+        val startedAt = AppTrace.nativeQualifiedCertificateReadStarted(NativeCardExchangeLevel.APDU)
+        val result =
+            if (!NativeCore.isLoaded) {
+                canCopy.fill(0)
+                NativeCertificateReadResult.Failure(NativeCertificateReadFailure.BRIDGE_ERROR)
+            } else {
+                try {
+                    NativeCertificateReply.decode(
+                        reply =
+                            contactlessReadQualifiedCertificateNative(
+                                can = canCopy,
+                                callback = exchange,
+                            ),
+                        certificate = { profile, der ->
+                            NativeQualifiedCertificate(
+                                keyProfile = profile,
+                                ownedDer = der,
+                            )
+                        },
+                    )
+                } catch (_: LinkageError) {
+                    NativeCertificateReadResult.Failure(NativeCertificateReadFailure.BRIDGE_ERROR)
+                } catch (_: RuntimeException) {
+                    NativeCertificateReadResult.Failure(NativeCertificateReadFailure.BRIDGE_ERROR)
+                } finally {
+                    canCopy.fill(0)
+                }
+            }
+        AppTrace.nativeQualifiedCertificateReadCompleted(
+            startedAt = startedAt,
+            result = result,
+        )
+        return result
+    }
+
+    /**
+     * One PACE handshake with the transferred CAN, then the PKCS#15
+     * selection and a counter-safe PIN2 preflight inside secure
+     * messaging. The CAN copy is cleared by the native border.
+     */
+    fun probePin2(
+        canCopy: ByteArray,
+        exchange: NativeBlockExchange,
+    ): NativePin2PreflightResult {
+        val startedAt = AppTrace.nativePin2StatusProbeStarted(NativeCardExchangeLevel.APDU)
+        val result =
+            if (!NativeCore.isLoaded) {
+                canCopy.fill(0)
+                NativePin2PreflightResult.Failure(NativePin2PreflightFailure.BRIDGE_ERROR)
+            } else {
+                try {
+                    NativePin2PreflightReply.decode(
+                        contactlessProbePin2Native(
+                            can = canCopy,
+                            callback = exchange,
+                        ),
+                    )
+                } catch (_: LinkageError) {
+                    NativePin2PreflightResult.Failure(NativePin2PreflightFailure.BRIDGE_ERROR)
+                } catch (_: RuntimeException) {
+                    NativePin2PreflightResult.Failure(NativePin2PreflightFailure.BRIDGE_ERROR)
+                } finally {
+                    canCopy.fill(0)
+                }
+            }
+        AppTrace.nativePin2StatusProbeCompleted(
+            startedAt = startedAt,
+            result = result,
+        )
+        return result
+    }
+
+    /**
+     * PACE, then the PKCS#15 selection, PIN2 preflight, VERIFY, and one
+     * qualified signature inside secure messaging. The PIN transfers to
+     * exactly this call; the CAN copy is cleared by the native border.
+     */
+    fun qualifiedSign(
+        canCopy: ByteArray,
+        algorithm: QualifiedSigningAlgorithm,
+        pin2: Pin2Submission,
+        content: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+        exchange: NativeBlockExchange,
+    ): NativeQualifiedSignResult {
+        val startedAt =
+            AppTrace.nativeQualifiedSignStarted(
+                algorithm = algorithm,
+                contentLength = content.size,
+            )
+        val result =
+            if (!algorithm.acceptsContentLength(content.size)) {
+                canCopy.fill(0)
+                pin2.close()
+                NativeQualifiedSignResult.Failure(NativeQualifiedSignFailure.BRIDGE_ERROR)
+            } else {
+                val expectedDer =
+                    try {
+                        expectedCertificate.copyDer()
+                    } catch (_: IllegalStateException) {
+                        canCopy.fill(0)
+                        pin2.close()
+                        null
+                    }
+                if (expectedDer == null) {
+                    NativeQualifiedSignResult.Failure(NativeQualifiedSignFailure.BRIDGE_ERROR)
+                } else {
+                    try {
+                        pin2.consume { pinBytes ->
+                            if (!NativeCore.isLoaded) {
+                                canCopy.fill(0)
+                                NativeQualifiedSignResult.Failure(
+                                    NativeQualifiedSignFailure.BRIDGE_ERROR,
+                                )
+                            } else {
+                                NativeQualifiedSignReply.decode(
+                                    contactlessQualifiedSignNative(
+                                        can = canCopy,
+                                        algorithm = algorithm.wireValue,
+                                        pin = pinBytes,
+                                        content = content,
+                                        expectedCertificate = expectedDer,
+                                        callback = exchange,
+                                    ),
+                                )
+                            }
+                        }
+                    } catch (_: LinkageError) {
+                        NativeQualifiedSignResult.Failure(NativeQualifiedSignFailure.BRIDGE_ERROR)
+                    } catch (_: RuntimeException) {
+                        NativeQualifiedSignResult.Failure(NativeQualifiedSignFailure.BRIDGE_ERROR)
+                    } finally {
+                        canCopy.fill(0)
+                        expectedDer.fill(ZERO_BYTE)
+                    }
+                }
+            }
+        AppTrace.nativeQualifiedSignCompleted(
+            startedAt = startedAt,
+            result = result,
+        )
+        return result
+    }
+
     @JvmStatic
     private external fun probeCardAccessNative(
         exchangeLevel: Int,
@@ -178,6 +331,30 @@ internal object NativeContactlessCore {
         message: ByteArray,
         callback: Any,
     ): ByteArray
+
+    @JvmStatic
+    private external fun contactlessReadQualifiedCertificateNative(
+        can: ByteArray,
+        callback: Any,
+    ): ByteArray
+
+    @JvmStatic
+    private external fun contactlessProbePin2Native(
+        can: ByteArray,
+        callback: Any,
+    ): ByteArray
+
+    @JvmStatic
+    private external fun contactlessQualifiedSignNative(
+        can: ByteArray,
+        algorithm: Int,
+        pin: ByteArray,
+        content: ByteArray,
+        expectedCertificate: ByteArray,
+        callback: Any,
+    ): ByteArray
+
+    private const val ZERO_BYTE: Byte = 0
 }
 
 /** Strict decoder for the bounded native card-access vocabulary. */

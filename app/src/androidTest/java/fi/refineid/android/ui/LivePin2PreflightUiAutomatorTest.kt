@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.uiAutomator
 import fi.refineid.android.ReFineIdApplication
 import fi.refineid.android.core.NativePin2PreflightResult
+import fi.refineid.android.core.NativePinReferenceScheme
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
@@ -70,7 +71,10 @@ internal class LivePin2PreflightUiAutomatorTest {
         )
         when (val preflightResult = result.get()) {
             is NativePin2PreflightResult.Success -> {
-                Unit
+                assertTrue(
+                    "PIN2 preflight must report a resolved reference scheme without a credential",
+                    preflightResult.preflight.referenceScheme in NativePinReferenceScheme.entries,
+                )
             }
 
             is NativePin2PreflightResult.Failure -> {

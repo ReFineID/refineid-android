@@ -28,9 +28,6 @@ import fi.refineid.android.document.QualifiedPdfSigningFailure
 import fi.refineid.android.document.SignedPdfDocument
 import fi.refineid.android.settings.TimestampAuthorityRepository
 import fi.refineid.android.settings.TimestampAuthorityStoreException
-import fi.refineid.android.usb.CardPresence
-import fi.refineid.android.usb.ReaderConnectionStatus
-import fi.refineid.android.usb.UsbReaderSnapshot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -46,15 +43,14 @@ import java.time.Instant
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun DocumentSigningHarness(
-    snapshot: UsbReaderSnapshot,
+    cardReady: Boolean,
     cardService: QualifiedCardService?,
     timestampAuthorityRepository: TimestampAuthorityRepository?,
 ) {
     if (
         cardService == null ||
         timestampAuthorityRepository == null ||
-        snapshot.status != ReaderConnectionStatus.READY ||
-        snapshot.cardPresence != CardPresence.PRESENT
+        !cardReady
     ) {
         return
     }

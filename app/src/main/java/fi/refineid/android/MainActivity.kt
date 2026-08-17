@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
                     onAuthenticate = readerController::authenticate,
                     browserCardService = readerController,
                     qualifiedCardService = readerController.qualifiedCardService,
+                    nfcQualifiedCardService = nfcReaderController.qualifiedCardService,
                     timestampAuthorityRepository =
                         (application as ReFineIdApplication).timestampAuthorityStore,
                     nfcSnapshot = nfcSnapshot,

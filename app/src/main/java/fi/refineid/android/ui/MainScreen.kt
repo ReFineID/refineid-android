@@ -62,6 +62,7 @@ internal fun MainScreen(
     onAuthenticate: (Pin1Submission) -> Unit,
     browserCardService: AuthenticationCardService? = null,
     qualifiedCardService: QualifiedCardService? = null,
+    nfcQualifiedCardService: QualifiedCardService? = null,
     timestampAuthorityRepository: TimestampAuthorityRepository? = null,
     nfcSnapshot: NfcReaderSnapshot = NfcReaderSnapshot(),
     onOpenNfcSettings: () -> Unit = {},
@@ -97,15 +98,18 @@ internal fun MainScreen(
             val usbCardReady =
                 snapshot.status == ReaderConnectionStatus.READY &&
                     snapshot.cardPresence == CardPresence.PRESENT
+            // A reader is only worth showing once one is attached; while
+            // it is, the contactless path is hidden, so the holder sees
+            // one transport at a time as the reference does.
+            val usbReaderPresent = snapshot.status != ReaderConnectionStatus.NOT_CONNECTED
 
             SectionHeader(stringResource(R.string.section_card))
-            ReaderCard(
-                snapshot = snapshot,
-                onRequestPermission = onRequestPermission,
-            )
-            // Devices without an NFC antenna get no disabled control,
-            // mirroring the Apple reference behavior.
-            if (nfcSnapshot.status != NfcReaderStatus.NOT_AVAILABLE) {
+            if (usbReaderPresent) {
+                ReaderCard(
+                    snapshot = snapshot,
+                    onRequestPermission = onRequestPermission,
+                )
+            } else if (nfcSnapshot.status != NfcReaderStatus.NOT_AVAILABLE) {
                 NfcCard(
                     snapshot = nfcSnapshot,
                     onOpenNfcSettings = onOpenNfcSettings,
@@ -137,9 +141,19 @@ internal fun MainScreen(
 
             SectionHeader(stringResource(R.string.section_document))
             DocumentValidationHarness()
+            // Qualified signing follows whichever transport holds a ready
+            // card: the wired reader when one is present, the contactless
+            // session otherwise, so the Document action is never hidden
+            // just because the card arrived over NFC.
+            val nfcCardReady = nfcSnapshot.status == NfcReaderStatus.CARD_READY
             DocumentSigningHarness(
-                snapshot = snapshot,
-                cardService = qualifiedCardService,
+                cardReady = usbCardReady || nfcCardReady,
+                cardService =
+                    if (usbCardReady) {
+                        qualifiedCardService
+                    } else {
+                        nfcQualifiedCardService
+                    },
                 timestampAuthorityRepository = timestampAuthorityRepository,
             )
             TimestampAuthoritySettingsHarness(timestampAuthorityRepository)
