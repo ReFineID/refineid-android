@@ -2,6 +2,7 @@ package fi.refineid.android.nfc
 
 import fi.refineid.android.core.NativeCardAccessFailure
 import fi.refineid.android.core.NativeCardAccessResult
+import fi.refineid.android.core.NativeCertificateReadFailure
 
 internal enum class NfcReaderStatus {
     NOT_AVAILABLE,
@@ -52,4 +53,20 @@ internal fun NativeCardAccessResult.toReaderStatus(): NfcReaderStatus =
                 }
             }
         }
+    }
+
+/** Coarse holder-facing status for one completed session open. */
+internal fun NativeCertificateReadFailure.toConnectStatus(): NfcReaderStatus =
+    when (this) {
+        NativeCertificateReadFailure.PACE_REJECTED -> NfcReaderStatus.WRONG_CAN
+
+        NativeCertificateReadFailure.CARD_UNAVAILABLE -> NfcReaderStatus.WAITING_FOR_CARD
+
+        NativeCertificateReadFailure.REJECTED,
+        NativeCertificateReadFailure.INVALID_CERTIFICATE,
+        -> NfcReaderStatus.CARD_NOT_SUPPORTED
+
+        NativeCertificateReadFailure.TRANSPORT_ERROR,
+        NativeCertificateReadFailure.BRIDGE_ERROR,
+        -> NfcReaderStatus.TRANSPORT_ERROR
     }

@@ -287,6 +287,8 @@ internal object AppTrace {
 
     fun nfcTagAdopted() = Unit
 
+    fun nfcPrimedOpenStarted() = Unit
+
     fun ccidEndpointsMissing() = Unit
 
     fun ccidOpenFailed() = Unit

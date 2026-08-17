@@ -18,6 +18,7 @@ import fi.refineid.android.core.NativeContactlessCore
 import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.keychain.nextProviderGeneration
+import fi.refineid.android.prime.PrimedCanStore
 import java.io.IOException
 import java.security.SecureRandom
 import java.util.concurrent.ExecutorService
@@ -33,6 +34,7 @@ import java.util.concurrent.RejectedExecutionException
  */
 internal class NfcReaderController(
     context: Context,
+    private val primedCanStore: PrimedCanStore,
 ) {
     private val applicationContext = context.applicationContext
     private val adapter: NfcAdapter? = NfcAdapter.getDefaultAdapter(applicationContext)
@@ -167,7 +169,7 @@ internal class NfcReaderController(
         AppTrace.nfcConnectStarted()
         try {
             probeExecutor.execute {
-                openSession(can, generation)
+                openSessionBytes(can.transfer(), generation, mintOnSuccess = true)
             }
         } catch (_: RejectedExecutionException) {
             can.close()
@@ -280,18 +282,32 @@ internal class NfcReaderController(
             // The tag may already be gone; the probe result stands.
         }
         AppTrace.nfcSessionClosed()
-        publishAsync(generation, result.toReaderStatus())
+        val status = result.toReaderStatus()
+        if (status == NfcReaderStatus.CARD_RECOGNIZED) {
+            val primedCan = primedCanStore.read()
+            if (primedCan != null) {
+                AppTrace.nfcPrimedOpenStarted()
+                publishAsync(generation, NfcReaderStatus.CONNECTING)
+                openSessionBytes(primedCan, generation, mintOnSuccess = false)
+                return
+            }
+        }
+        publishAsync(generation, status)
     }
 
-    /** Worker-thread confined; runs PACE, certificate read, and preflight. */
-    private fun openSession(
-        can: CanSubmission,
+    /**
+     * Worker-thread confined; runs PACE, certificate read, and
+     * preflight, owning and zeroizing the transferred digits.
+     */
+    private fun openSessionBytes(
+        canBytes: ByteArray,
         generation: Int,
+        mintOnSuccess: Boolean,
     ) {
         closeActiveSession()
         val isoDep = latestIsoDep
         if (isoDep == null || generation != probeGeneration) {
-            can.close()
+            canBytes.fill(0)
             publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
             return
         }
@@ -301,12 +317,11 @@ internal class NfcReaderController(
                 isoDep.timeout = TRANSCEIVE_TIMEOUT_MILLISECONDS
             }
         } catch (_: IOException) {
-            can.close()
+            canBytes.fill(0)
             AppTrace.nfcSessionOpenFailed()
             publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
             return
         }
-        val canBytes = can.transfer()
         val exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep))
         val material = NativeCardSessionMaterial()
         val status =
@@ -328,6 +343,9 @@ internal class NfcReaderController(
         }
         AppTrace.nfcSessionClosed()
         if (status == NfcReaderStatus.CARD_READY && generation == probeGeneration) {
+            if (mintOnSuccess) {
+                primedCanStore.write(canBytes.copyOf())
+            }
             activeSession =
                 ContactlessSession(
                     isoDep = isoDep,
@@ -336,6 +354,10 @@ internal class NfcReaderController(
                 )
             activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
         } else {
+            if (!mintOnSuccess && status == NfcReaderStatus.WRONG_CAN) {
+                // The primed digits no longer open this card.
+                primedCanStore.clear()
+            }
             canBytes.fill(0)
             material.close()
         }
@@ -392,18 +414,3 @@ internal class NfcReaderController(
         const val TRANSCEIVE_TIMEOUT_MILLISECONDS = 4_000
     }
 }
-
-private fun NativeCertificateReadFailure.toConnectStatus(): NfcReaderStatus =
-    when (this) {
-        NativeCertificateReadFailure.PACE_REJECTED -> NfcReaderStatus.WRONG_CAN
-
-        NativeCertificateReadFailure.CARD_UNAVAILABLE -> NfcReaderStatus.WAITING_FOR_CARD
-
-        NativeCertificateReadFailure.REJECTED,
-        NativeCertificateReadFailure.INVALID_CERTIFICATE,
-        -> NfcReaderStatus.CARD_NOT_SUPPORTED
-
-        NativeCertificateReadFailure.TRANSPORT_ERROR,
-        NativeCertificateReadFailure.BRIDGE_ERROR,
-        -> NfcReaderStatus.TRANSPORT_ERROR
-    }

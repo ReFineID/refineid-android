@@ -684,6 +684,10 @@ internal object AppTrace {
         debug("nfc:tag-adopted")
     }
 
+    fun nfcPrimedOpenStarted() {
+        debug("nfc:primed-open-started")
+    }
+
     fun ccidEndpointsMissing() {
         debug("ccid:endpoints-missing")
     }

@@ -8,6 +8,7 @@ import fi.refineid.android.keychain.ExternalKeyPinPromptBroker
 import fi.refineid.android.keychain.ExternalKeyProviderRuntime
 import fi.refineid.android.keychain.TransportSelectingCardSession
 import fi.refineid.android.nfc.NfcReaderController
+import fi.refineid.android.prime.PrimedCanStore
 import fi.refineid.android.settings.TimestampAuthorityStore
 import fi.refineid.android.usb.UsbReaderController
 
@@ -26,7 +27,11 @@ class ReFineIdApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         readerController = UsbReaderController(this)
-        nfcReaderController = NfcReaderController(this)
+        nfcReaderController =
+            NfcReaderController(
+                context = this,
+                primedCanStore = PrimedCanStore(this),
+            )
         timestampAuthorityStore = TimestampAuthorityStore(this)
         pinPromptBroker =
             ExternalKeyPinPromptBroker(
