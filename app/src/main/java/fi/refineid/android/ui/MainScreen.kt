@@ -94,11 +94,15 @@ internal fun MainScreen(
                 fontWeight = FontWeight.SemiBold,
             )
 
+            val usbCardReady =
+                snapshot.status == ReaderConnectionStatus.READY &&
+                    snapshot.cardPresence == CardPresence.PRESENT
+
+            SectionHeader(stringResource(R.string.section_card))
             ReaderCard(
                 snapshot = snapshot,
                 onRequestPermission = onRequestPermission,
             )
-
             // Devices without an NFC antenna get no disabled control,
             // mirroring the Apple reference behavior.
             if (nfcSnapshot.status != NfcReaderStatus.NOT_AVAILABLE) {
@@ -110,18 +114,9 @@ internal fun MainScreen(
                 )
             }
 
-            TimestampAuthoritySettingsHarness(timestampAuthorityRepository)
-
-            DocumentSigningHarness(
-                snapshot = snapshot,
-                cardService = qualifiedCardService,
-                timestampAuthorityRepository = timestampAuthorityRepository,
-            )
-
             if (
                 BuildDiagnostics.MANUAL_AUTHENTICATION_ENABLED &&
-                snapshot.status == ReaderConnectionStatus.READY &&
-                snapshot.cardPresence == CardPresence.PRESENT
+                usbCardReady
             ) {
                 AuthenticationCard(
                     status = snapshot.authenticationStatus,
@@ -129,9 +124,7 @@ internal fun MainScreen(
                 )
             }
 
-            val usbCardReady =
-                snapshot.status == ReaderConnectionStatus.READY &&
-                    snapshot.cardPresence == CardPresence.PRESENT
+            SectionHeader(stringResource(R.string.section_browser))
             BrowserHarness(
                 cardService =
                     if (usbCardReady) {
@@ -141,8 +134,28 @@ internal fun MainScreen(
                     },
                 pinCache = pinCache,
             )
+
+            SectionHeader(stringResource(R.string.section_document))
+            DocumentSigningHarness(
+                snapshot = snapshot,
+                cardService = qualifiedCardService,
+                timestampAuthorityRepository = timestampAuthorityRepository,
+            )
+            TimestampAuthoritySettingsHarness(timestampAuthorityRepository)
         }
     }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = SECTION_HEADER_TOP_PADDING),
+    )
 }
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")
@@ -658,6 +671,7 @@ private fun ReaderCard(
     }
 }
 
+private val SECTION_HEADER_TOP_PADDING = 8.dp
 private val SCREEN_HORIZONTAL_PADDING = 24.dp
 private val SCREEN_VERTICAL_PADDING = 28.dp
 private val SCREEN_ITEM_SPACING = 28.dp
