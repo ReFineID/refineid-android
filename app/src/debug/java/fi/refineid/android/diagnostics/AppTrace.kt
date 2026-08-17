@@ -522,8 +522,18 @@ internal object AppTrace {
         debug("browser:navigation-blocked")
     }
 
-    fun browserTlsError() {
-        debug("browser:tls-error")
+    fun browserTlsError(
+        host: String,
+        primaryError: Int,
+        issuedBy: String,
+        issuedTo: String,
+    ) {
+        debug(
+            "browser:tls-error host=" + host +
+                " primary-error=" + primaryError +
+                " issued-by=" + issuedBy +
+                " issued-to=" + issuedTo,
+        )
     }
 
     fun browserClientCertificateRequested(
@@ -536,6 +546,10 @@ internal object AppTrace {
                 " key-type-count=" + keyTypeCount +
                 " issuer-count=" + issuerCount,
         )
+    }
+
+    fun browserClientCertificateUnlockRequested() {
+        debug("browser:client-certificate-unlock-requested")
     }
 
     fun browserClientCertificateCompleted(outcome: BrowserClientCertificateOutcome) {

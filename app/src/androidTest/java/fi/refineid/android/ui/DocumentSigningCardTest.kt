@@ -12,10 +12,12 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import fi.refineid.android.R
+import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.PIN2_MAXIMUM_LENGTH
 import fi.refineid.android.core.Pin2Submission
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -36,8 +38,8 @@ internal class DocumentSigningCardTest {
             .assertIsDisplayed()
             .assertIsEnabled()
             .performClick()
-        composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_DESTINATION_ACTION).assertDoesNotExist()
         composeRule.onNodeWithTag(UiAutomationIds.PIN2_FIELD).assertDoesNotExist()
+        composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_CAN_FIELD).assertDoesNotExist()
         composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_SIGN_ACTION).assertDoesNotExist()
         composeRule.runOnIdle {
             assertEquals(SINGLE_ACTION, chooseCount)
@@ -45,35 +47,41 @@ internal class DocumentSigningCardTest {
     }
 
     @Test
-    fun selectedPdfRequiresDestinationBeforePin2() {
-        var destinationCount = NO_ACTIONS
-        show(
-            hasDocument = true,
-            onChooseDestination = { destinationCount += ACTION_COUNT_STEP },
-        )
+    fun selectedPdfPromptsForPin2WithoutAccessNumberWhenPrimed() {
+        show(hasDocument = true)
 
         composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_SELECTED_STATUS).assertIsDisplayed()
-        composeRule
-            .onNodeWithTag(UiAutomationIds.DOCUMENT_DESTINATION_ACTION)
-            .assertIsDisplayed()
-            .assertIsEnabled()
-            .performClick()
-        composeRule.onNodeWithTag(UiAutomationIds.PIN2_FIELD).assertDoesNotExist()
-        composeRule.runOnIdle {
-            assertEquals(SINGLE_ACTION, destinationCount)
-        }
+        composeRule.onNodeWithTag(UiAutomationIds.PIN2_FIELD).assertIsDisplayed()
+        composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_CAN_FIELD).assertDoesNotExist()
+        composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_SIGN_ACTION).assertIsNotEnabled()
+    }
+
+    @Test
+    fun anUnprimedCardAlsoPromptsForTheAccessNumber() {
+        show(hasDocument = true, canRequired = true)
+
+        val canField = composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_CAN_FIELD)
+        val pinField = composeRule.onNodeWithTag(UiAutomationIds.PIN2_FIELD)
+        val signAction = composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_SIGN_ACTION)
+
+        canField.assertIsDisplayed()
+        pinField.performTextInput(SYNTHETIC_PIN2)
+        signAction.assertIsNotEnabled()
+        canField.performTextInput(SYNTHETIC_CAN)
+        signAction.assertIsEnabled()
     }
 
     @Test
     fun securePin2SubmitsOnceAndClearsImmediately() {
         var submissionCount = NO_ACTIONS
         var submittedBytes: ByteArray? = null
+        var submittedCan: CanSubmission? = null
         show(
             hasDocument = true,
-            hasDestination = true,
-            onSign = { submission ->
+            onSign = { submission, can ->
                 submissionCount += ACTION_COUNT_STEP
                 submittedBytes = submission.consume { bytes -> bytes.copyOf() }
+                submittedCan = can
             },
         )
         val pinField = composeRule.onNodeWithTag(UiAutomationIds.PIN2_FIELD)
@@ -92,17 +100,20 @@ internal class DocumentSigningCardTest {
             composeRule.runOnIdle {
                 assertEquals(SINGLE_ACTION, submissionCount)
                 assertArrayEquals(expected, checkNotNull(submittedBytes))
+                // A primed card supplies no access number from the card.
+                assertNull(submittedCan)
             }
             signAction.assertIsNotEnabled()
         } finally {
             expected.fill(CLEARED_BYTE)
             submittedBytes?.fill(CLEARED_BYTE)
+            submittedCan?.close()
         }
     }
 
     @Test
     fun pin2InputRejectsNonDecimalAndOverlengthValues() {
-        show(hasDocument = true, hasDestination = true)
+        show(hasDocument = true)
         val pinField = composeRule.onNodeWithTag(UiAutomationIds.PIN2_FIELD)
         val signAction = composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_SIGN_ACTION)
 
@@ -116,12 +127,10 @@ internal class DocumentSigningCardTest {
     fun signingDisablesEveryMutableControlAndShowsTerseStatus() {
         show(
             hasDocument = true,
-            hasDestination = true,
             status = DocumentSigningStatus.SIGNING,
         )
 
         composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_CHOOSE_ACTION).assertIsNotEnabled()
-        composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_DESTINATION_ACTION).assertIsNotEnabled()
         composeRule.onNodeWithTag(UiAutomationIds.PIN2_FIELD).assertIsNotEnabled()
         composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_SIGN_ACTION).assertIsNotEnabled()
         composeRule
@@ -134,22 +143,41 @@ internal class DocumentSigningCardTest {
             )
     }
 
+    @Test
+    fun holdingForTheCardShowsTheTapPrompt() {
+        show(
+            hasDocument = true,
+            status = DocumentSigningStatus.HOLD_CARD,
+        )
+
+        composeRule
+            .onNodeWithTag(UiAutomationIds.DOCUMENT_SIGNING_STATUS)
+            .assertTextEquals(
+                InstrumentationRegistry
+                    .getInstrumentation()
+                    .targetContext
+                    .getString(R.string.hold_card),
+            )
+        composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_SIGN_ACTION).assertIsNotEnabled()
+    }
+
     private fun show(
         hasDocument: Boolean = false,
-        hasDestination: Boolean = false,
+        canRequired: Boolean = false,
         status: DocumentSigningStatus = DocumentSigningStatus.IDLE,
         onChooseDocument: () -> Unit = {},
-        onChooseDestination: () -> Unit = {},
-        onSign: (Pin2Submission) -> Unit = Pin2Submission::close,
+        onSign: (Pin2Submission, CanSubmission?) -> Unit = { pin2, can ->
+            pin2.close()
+            can?.close()
+        },
     ) {
         composeRule.setContent {
             ReFineIdTheme {
                 DocumentSigningCard(
                     hasDocument = hasDocument,
-                    hasDestination = hasDestination,
+                    canRequired = canRequired,
                     status = status,
                     onChooseDocument = onChooseDocument,
-                    onChooseDestination = onChooseDestination,
                     onSign = onSign,
                 )
             }
@@ -158,6 +186,7 @@ internal class DocumentSigningCardTest {
 
     private companion object {
         const val SYNTHETIC_PIN2 = "246810"
+        const val SYNTHETIC_CAN = "135790"
         const val NON_DECIMAL_PIN2 = "24A810"
         const val NO_ACTIONS = 0
         const val SINGLE_ACTION = 1

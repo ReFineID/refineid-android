@@ -66,6 +66,21 @@ internal class NfcReaderController(
     @Volatile
     private var primedCardStored = primedCanStore.isPrimed()
 
+    // Tap-to-sign: a qualified signature waits for the holder to present
+    // the card instead of requiring a pre-opened session. Confined to the
+    // shared worker thread for session mutation; the transient session it
+    // opens is the same one the qualified card service serves.
+    internal val tapToSign =
+        NfcTapToSign(
+            probeExecutor = probeExecutor,
+            mainHandler = mainHandler,
+            latestIsoDep = { latestIsoDep },
+            primedCan = { primedCanStore.read() },
+            activeSession = { activeSession },
+            adoptSession = { session -> activeSession = session },
+            closeSession = { closeActiveSession() },
+        )
+
     internal val authenticationCardService =
         NfcAuthenticationCardService(
             probeExecutor = probeExecutor,
@@ -83,7 +98,9 @@ internal class NfcReaderController(
         NfcQualifiedCardService(
             probeExecutor = probeExecutor,
             mainHandler = mainHandler,
-            isReady = { latestSnapshot.status == NfcReaderStatus.CARD_READY },
+            isReady = {
+                latestSnapshot.status == NfcReaderStatus.CARD_READY || tapToSign.inProgress
+            },
             currentGeneration = { probeGeneration },
             activeSession = { activeSession },
         )
@@ -152,6 +169,7 @@ internal class NfcReaderController(
     fun stop() {
         probeGeneration += 1
         latestIsoDep = null
+        tapToSign.cancel()
         probeExecutor.execute(::closeActiveSession)
         probeExecutor.shutdown()
     }
@@ -254,6 +272,18 @@ internal class NfcReaderController(
             return
         }
         latestIsoDep = isoDep
+        // A tap-to-sign in progress claims the tag before recognition, so
+        // signing never depends on a card already resting in the field.
+        if (tapToSign.inProgress) {
+            try {
+                probeExecutor.execute {
+                    tapToSign.onTag(isoDep)
+                }
+            } catch (_: RejectedExecutionException) {
+                AppTrace.nfcProbeResultDiscarded()
+            }
+            return
+        }
         if (isSessionActive) {
             try {
                 probeExecutor.execute {

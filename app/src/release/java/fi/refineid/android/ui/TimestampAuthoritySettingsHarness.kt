@@ -8,4 +8,7 @@ import fi.refineid.android.settings.TimestampAuthorityRepository
 /** Timestamp-authority settings remain hidden while release document signing is absent. */
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
-internal fun TimestampAuthoritySettingsHarness(repository: TimestampAuthorityRepository?) = Unit
+internal fun TimestampAuthoritySettingsHarness(
+    repository: TimestampAuthorityRepository?,
+    launcher: (@Composable (onOpen: () -> Unit) -> Unit)? = null,
+) = Unit

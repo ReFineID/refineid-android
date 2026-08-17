@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only network trust for the in-app browser (release ships no embedded browser).
+
+  Supplements the platform trust store with the public Telia Root CA v2 that DVV's
+  Suomi.fi identification endpoints chain to - for example the certificate-card login
+  at kortti.tunnistautuminen.suomi.fi. The bundled WebView omits this otherwise-public
+  Finnish root, so its server handshake fails ERR_CERT_AUTHORITY_INVALID without it.
+
+  cleartextTrafficPermitted stays true because a network security config overrides the
+  manifest usesCleartextTraffic flag, and certificate AIA, OCSP, and CRL fetches over
+  plain HTTP must keep working. This trade-off is intentional and debug-only, so the
+  InsecureBaseConfiguration warning is suppressed here rather than project-wide.
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config
+        cleartextTrafficPermitted="true"
+        tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/telia_root_ca_v2" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

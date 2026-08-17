@@ -66,6 +66,8 @@ class MainActivity : ComponentActivity() {
                     onNfcConnect = nfcReaderController::connect,
                     onForgetPrimedCard = nfcReaderController::forgetPrimedCard,
                     nfcCardService = nfcReaderController.authenticationCardService,
+                    onSignBeginTap = nfcReaderController.tapToSign::begin,
+                    onSignEndTap = nfcReaderController.tapToSign::end,
                     pinCache = (application as ReFineIdApplication).authenticationPinCache,
                 )
             }

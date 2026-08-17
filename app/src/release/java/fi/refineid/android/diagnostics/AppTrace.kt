@@ -206,13 +206,20 @@ internal object AppTrace {
 
     fun browserNavigationBlocked() = Unit
 
-    fun browserTlsError() = Unit
+    fun browserTlsError(
+        host: String,
+        primaryError: Int,
+        issuedBy: String,
+        issuedTo: String,
+    ) = Unit
 
     fun browserClientCertificateRequested(
         originAllowed: Boolean,
         keyTypeCount: Int,
         issuerCount: Int,
     ) = Unit
+
+    fun browserClientCertificateUnlockRequested() = Unit
 
     fun browserClientCertificateCompleted(outcome: BrowserClientCertificateOutcome) = Unit
 

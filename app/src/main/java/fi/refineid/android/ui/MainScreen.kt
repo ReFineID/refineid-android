@@ -1,5 +1,6 @@
 package fi.refineid.android.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,11 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Create
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,7 +34,11 @@ import androidx.compose.material3.SecureTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,6 +64,13 @@ import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
 import fi.refineid.android.usb.UsbReaderSnapshot
 
+/** The screens the grouped home navigates to, one at a time. */
+private enum class MainDestination {
+    HOME,
+    VERIFY,
+    SIGN,
+}
+
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun MainScreen(
@@ -69,7 +86,118 @@ internal fun MainScreen(
     onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit = { _, _ -> },
     onForgetPrimedCard: () -> Unit = {},
     nfcCardService: AuthenticationCardService? = null,
+    onSignBeginTap: (ByteArray?, () -> Unit, () -> Unit) -> Unit = { _, _, _ -> },
+    onSignEndTap: () -> Unit = {},
     pinCache: fi.refineid.android.core.AuthenticationPinCache? = null,
+) {
+    val usbCardReady =
+        snapshot.status == ReaderConnectionStatus.READY &&
+            snapshot.cardPresence == CardPresence.PRESENT
+    val usbReaderPresent = snapshot.status != ReaderConnectionStatus.NOT_CONNECTED
+    // Signing follows the one-transport rule: a wired reader signs on
+    // its open session, while a contactless card is never assumed
+    // present — the holder taps it when prompted.
+    val nfcSigningAvailable =
+        !usbReaderPresent &&
+            nfcSnapshot.status != NfcReaderStatus.NOT_AVAILABLE &&
+            nfcSnapshot.status != NfcReaderStatus.TURNED_OFF
+    val signingAvailable = usbCardReady || nfcSigningAvailable
+
+    var destination by rememberSaveable { mutableStateOf(MainDestination.HOME) }
+    BackHandler(enabled = destination != MainDestination.HOME) {
+        destination = MainDestination.HOME
+    }
+
+    when (destination) {
+        MainDestination.HOME -> {
+            HomeScreen(
+                snapshot = snapshot,
+                nfcSnapshot = nfcSnapshot,
+                usbCardReady = usbCardReady,
+                usbReaderPresent = usbReaderPresent,
+                signingAvailable = signingAvailable,
+                onRequestPermission = onRequestPermission,
+                onAuthenticate = onAuthenticate,
+                onOpenNfcSettings = onOpenNfcSettings,
+                onNfcConnect = onNfcConnect,
+                onForgetPrimedCard = onForgetPrimedCard,
+                browserCardService =
+                    if (usbCardReady) {
+                        browserCardService
+                    } else {
+                        nfcCardService ?: browserCardService
+                    },
+                pinCache = pinCache,
+                timestampAuthorityRepository = timestampAuthorityRepository,
+                onOpenVerify = { destination = MainDestination.VERIFY },
+                onOpenSign = { destination = MainDestination.SIGN },
+            )
+        }
+
+        MainDestination.VERIFY -> {
+            SubScreen(
+                title = stringResource(R.string.verify),
+                tag = UiAutomationIds.VERIFY_SCREEN,
+                onBack = { destination = MainDestination.HOME },
+            ) {
+                DocumentValidationHarness()
+            }
+        }
+
+        MainDestination.SIGN -> {
+            SubScreen(
+                title = stringResource(R.string.sign),
+                tag = UiAutomationIds.SIGN_SCREEN,
+                onBack = { destination = MainDestination.HOME },
+            ) {
+                DocumentSigningHarness(
+                    signingAvailable = signingAvailable,
+                    cardService =
+                        if (usbCardReady) {
+                            qualifiedCardService
+                        } else {
+                            nfcQualifiedCardService
+                        },
+                    tap =
+                        if (usbCardReady) {
+                            null
+                        } else {
+                            DocumentSignTap(
+                                begin = onSignBeginTap,
+                                end = onSignEndTap,
+                                canRequired = !nfcSnapshot.isPrimed,
+                            )
+                        },
+                    timestampAuthorityRepository = timestampAuthorityRepository,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The reference home: terse grouped navigation — the Document rows
+ * first, then the card, then the browser — every workflow on its own
+ * pushed screen.
+ */
+@Suppress("FunctionName", "ktlint:standard:function-naming", "LongParameterList")
+@Composable
+private fun HomeScreen(
+    snapshot: UsbReaderSnapshot,
+    nfcSnapshot: NfcReaderSnapshot,
+    usbCardReady: Boolean,
+    usbReaderPresent: Boolean,
+    signingAvailable: Boolean,
+    onRequestPermission: () -> Unit,
+    onAuthenticate: (Pin1Submission) -> Unit,
+    onOpenNfcSettings: () -> Unit,
+    onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
+    onForgetPrimedCard: () -> Unit,
+    browserCardService: AuthenticationCardService?,
+    pinCache: fi.refineid.android.core.AuthenticationPinCache?,
+    timestampAuthorityRepository: TimestampAuthorityRepository?,
+    onOpenVerify: () -> Unit,
+    onOpenSign: () -> Unit,
 ) {
     Scaffold(
         modifier =
@@ -95,13 +223,23 @@ internal fun MainScreen(
                 fontWeight = FontWeight.SemiBold,
             )
 
-            val usbCardReady =
-                snapshot.status == ReaderConnectionStatus.READY &&
-                    snapshot.cardPresence == CardPresence.PRESENT
-            // A reader is only worth showing once one is attached; while
-            // it is, the contactless path is hidden, so the holder sees
-            // one transport at a time as the reference does.
-            val usbReaderPresent = snapshot.status != ReaderConnectionStatus.NOT_CONNECTED
+            SectionHeader(stringResource(R.string.section_document))
+            NavigationGroup {
+                NavigationRow(
+                    icon = Icons.Outlined.CheckCircle,
+                    label = stringResource(R.string.verify),
+                    tag = UiAutomationIds.VERIFY_ROW,
+                    onClick = onOpenVerify,
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
+                NavigationRow(
+                    icon = Icons.Outlined.Create,
+                    label = stringResource(R.string.sign),
+                    tag = UiAutomationIds.SIGN_ROW,
+                    enabled = signingAvailable,
+                    onClick = onOpenSign,
+                )
+            }
 
             SectionHeader(stringResource(R.string.section_card))
             if (usbReaderPresent) {
@@ -117,7 +255,6 @@ internal fun MainScreen(
                     onForgetPrimedCard = onForgetPrimedCard,
                 )
             }
-
             if (
                 BuildDiagnostics.MANUAL_AUTHENTICATION_ENABLED &&
                 usbCardReady
@@ -130,35 +267,55 @@ internal fun MainScreen(
 
             SectionHeader(stringResource(R.string.section_browser))
             BrowserHarness(
-                cardService =
-                    if (usbCardReady) {
-                        browserCardService
-                    } else {
-                        nfcCardService ?: browserCardService
-                    },
+                cardService = browserCardService,
                 pinCache = pinCache,
+                // The contactless unlock sheet belongs only to the NFC
+                // path. A wired reader reads the certificate directly and
+                // prompts PIN1 at signing time, so it needs no card
+                // session to open first.
+                nfcStatus =
+                    if (usbCardReady || nfcSnapshot.status == NfcReaderStatus.NOT_AVAILABLE) {
+                        null
+                    } else {
+                        nfcSnapshot.status
+                    },
+                nfcPrimed = nfcSnapshot.isPrimed,
+                onNfcConnect = onNfcConnect,
+                launcher = { onOpen ->
+                    NavigationGroup {
+                        NavigationRow(
+                            icon = Icons.Outlined.Lock,
+                            label = stringResource(R.string.browser),
+                            tag = UiAutomationIds.BROWSER_ACTION,
+                            onClick = onOpen,
+                        )
+                    }
+                },
             )
 
-            SectionHeader(stringResource(R.string.section_document))
-            DocumentValidationHarness()
-            // Qualified signing follows whichever transport holds a ready
-            // card: the wired reader when one is present, the contactless
-            // session otherwise, so the Document action is never hidden
-            // just because the card arrived over NFC.
-            val nfcCardReady = nfcSnapshot.status == NfcReaderStatus.CARD_READY
-            DocumentSigningHarness(
-                cardReady = usbCardReady || nfcCardReady,
-                cardService =
-                    if (usbCardReady) {
-                        qualifiedCardService
-                    } else {
-                        nfcQualifiedCardService
-                    },
-                timestampAuthorityRepository = timestampAuthorityRepository,
-            )
-            TimestampAuthoritySettingsHarness(timestampAuthorityRepository)
+            if (BuildDiagnostics.TIMESTAMP_SETTINGS_ENABLED) {
+                TimestampSettingsRow(timestampAuthorityRepository)
+            }
         }
     }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun TimestampSettingsRow(timestampAuthorityRepository: TimestampAuthorityRepository?) {
+    TimestampAuthoritySettingsHarness(
+        repository = timestampAuthorityRepository,
+        launcher = { onOpen ->
+            NavigationGroup {
+                NavigationRow(
+                    icon = Icons.Outlined.Settings,
+                    label = stringResource(R.string.timestamp_authorities),
+                    tag = UiAutomationIds.TIMESTAMP_SETTINGS_ACTION,
+                    onClick = onOpen,
+                )
+            }
+        },
+    )
 }
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")

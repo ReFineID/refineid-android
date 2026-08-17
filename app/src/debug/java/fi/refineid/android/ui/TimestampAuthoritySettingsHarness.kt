@@ -63,12 +63,19 @@ private enum class TimestampAuthoritySettingsStatus {
 /** Debug settings surface for the holder-owned ordered timestamp-authority list. */
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
-internal fun TimestampAuthoritySettingsHarness(repository: TimestampAuthorityRepository?) {
+internal fun TimestampAuthoritySettingsHarness(
+    repository: TimestampAuthorityRepository?,
+    launcher: (@Composable (onOpen: () -> Unit) -> Unit)? = null,
+) {
     if (repository == null) {
         return
     }
     var isOpen by remember { mutableStateOf(false) }
     if (!isOpen) {
+        if (launcher != null) {
+            launcher { isOpen = true }
+            return
+        }
         Button(
             onClick = { isOpen = true },
             modifier =

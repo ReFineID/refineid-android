@@ -14,12 +14,14 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
@@ -63,8 +65,10 @@ import fi.refineid.android.browser.BrowserSignatureStatus
 import fi.refineid.android.browser.BundledIssuerCertificates
 import fi.refineid.android.browser.ReFineIdCardProviderRegistration
 import fi.refineid.android.core.AuthenticationCardService
+import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
+import fi.refineid.android.nfc.NfcReaderStatus
 import java.security.cert.X509Certificate
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -73,27 +77,39 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal fun BrowserHarness(
     cardService: AuthenticationCardService?,
     pinCache: fi.refineid.android.core.AuthenticationPinCache? = null,
+    nfcStatus: NfcReaderStatus? = null,
+    nfcPrimed: Boolean = false,
+    onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit = { _, _ -> },
+    launcher: (@Composable (onOpen: () -> Unit) -> Unit)? = null,
 ) {
     if (cardService == null) {
         return
     }
     var isOpen by remember { mutableStateOf(false) }
-    Button(
-        onClick = {
-            AppTrace.browserOpened()
-            isOpen = true
-        },
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .testTag(UiAutomationIds.BROWSER_ACTION),
-    ) {
-        Text(stringResource(R.string.browser))
+    val open = {
+        AppTrace.browserOpened()
+        isOpen = true
+    }
+    if (launcher != null) {
+        launcher(open)
+    } else {
+        Button(
+            onClick = open,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .testTag(UiAutomationIds.BROWSER_ACTION),
+        ) {
+            Text(stringResource(R.string.browser))
+        }
     }
     if (isOpen) {
         BrowserDialog(
             cardService = cardService,
             pinCache = pinCache,
+            nfcStatus = nfcStatus,
+            nfcPrimed = nfcPrimed,
+            onNfcConnect = onNfcConnect,
             onClose = {
                 AppTrace.browserClosed()
                 isOpen = false
@@ -110,13 +126,28 @@ internal fun BrowserHarness(
 private fun BrowserDialog(
     cardService: AuthenticationCardService,
     pinCache: fi.refineid.android.core.AuthenticationPinCache?,
+    nfcStatus: NfcReaderStatus?,
+    nfcPrimed: Boolean,
+    onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val isActive = remember { AtomicBoolean(true) }
     var pinRequest by remember { mutableStateOf<BrowserPinRequest?>(null) }
+    var unlockRequest by remember { mutableStateOf<BrowserCardUnlockRequest?>(null) }
+    var unlockWaiting by remember { mutableStateOf(false) }
     var signatureStatus by remember { mutableStateOf(BrowserSignatureStatus.IDLE) }
+    // Once the holder unlocked and the session opened, resolve the held
+    // certificate request; the handshake then proceeds with the card.
+    LaunchedEffect(nfcStatus, unlockWaiting) {
+        if (unlockWaiting && nfcStatus == NfcReaderStatus.CARD_READY) {
+            val held = unlockRequest
+            unlockRequest = null
+            unlockWaiting = false
+            held?.retry?.invoke()
+        }
+    }
     val coordinator =
         remember(cardService) {
             BrowserPinCoordinator(
@@ -152,7 +183,7 @@ private fun BrowserDialog(
         )
     }
     val webViewClient =
-        remember(cardService, coordinator, issuerCandidates, providerReady) {
+        remember(cardService, coordinator, issuerCandidates, providerReady, nfcStatus != null) {
             if (issuerCandidates == null || !providerReady) {
                 null
             } else {
@@ -160,6 +191,19 @@ private fun BrowserDialog(
                     cardService = cardService,
                     issuerCandidates = issuerCandidates,
                     signatureOperation = coordinator,
+                    onCardNeeded =
+                        if (nfcStatus == null) {
+                            null
+                        } else {
+                            { request ->
+                                if (isActive.get()) {
+                                    unlockRequest = request
+                                    unlockWaiting = false
+                                } else {
+                                    request.giveUp()
+                                }
+                            }
+                        },
                 )
             }
         }
@@ -188,15 +232,11 @@ private fun BrowserDialog(
                     .semantics { testTagsAsResourceId = true },
             color = MaterialTheme.colorScheme.background,
         ) {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .safeDrawingPadding()
-                        .padding(BROWSER_PADDING),
-                verticalArrangement = Arrangement.spacedBy(BROWSER_ITEM_SPACING),
-            ) {
-                var urlText by remember { mutableStateOf(START_PAGE_URL) }
+            // The page owns the whole screen; the browsing controls float
+            // over its bottom edge, the way the reference platform's
+            // browser keeps its bar over the content.
+            Box(modifier = Modifier.fillMaxSize()) {
+                var urlText by remember { mutableStateOf("") }
                 var liveWebView by remember { mutableStateOf<WebView?>(null) }
                 val navigate = {
                     val destination = normalizeHttpsUrl(urlText)
@@ -208,54 +248,11 @@ private fun BrowserDialog(
                     }
                     Unit
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(
-                        onClick = { liveWebView?.takeIf { it.canGoBack() }?.goBack() },
-                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_BACK_ACTION),
-                    ) {
-                        Text(stringResource(R.string.browser_back))
-                    }
-                    IconButton(
-                        onClick = { liveWebView?.takeIf { it.canGoForward() }?.goForward() },
-                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_FORWARD_ACTION),
-                    ) {
-                        Text(stringResource(R.string.browser_forward))
-                    }
-                    IconButton(
-                        onClick = { liveWebView?.reload() },
-                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_RELOAD_ACTION),
-                    ) {
-                        Text(stringResource(R.string.browser_reload))
-                    }
-                    OutlinedTextField(
-                        value = urlText,
-                        onValueChange = { urlText = it },
-                        modifier =
-                            Modifier
-                                .weight(BROWSER_VIEW_WEIGHT)
-                                .testTag(UiAutomationIds.BROWSER_URL_FIELD),
-                        singleLine = true,
-                        keyboardOptions =
-                            KeyboardOptions(
-                                autoCorrectEnabled = false,
-                                keyboardType = KeyboardType.Uri,
-                                imeAction = ImeAction.Go,
-                            ),
-                        keyboardActions = KeyboardActions(onGo = { navigate() }),
-                    )
-                    IconButton(
-                        onClick = onClose,
-                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_CLOSE_ACTION),
-                    ) {
-                        Text(stringResource(R.string.browser_close_glyph))
-                    }
-                }
-                BrowserStatus(signatureStatus)
                 if (webViewClient == null) {
-                    Text(stringResource(R.string.error))
+                    Text(
+                        text = stringResource(R.string.error),
+                        modifier = Modifier.align(Alignment.Center),
+                    )
                 } else {
                     val client = webViewClient
                     AndroidView(
@@ -268,17 +265,15 @@ private fun BrowserDialog(
                                 // JS dialogs, progress, and title handling.
                                 webChromeClient = WebChromeClient()
                                 liveWebView = this
-                                WebView.clearClientCertPreferences {
-                                    if (isActive.get()) {
-                                        loadUrl(START_PAGE_URL)
-                                    }
-                                }
+                                // Cached certificate choices are cleared so
+                                // every visit renegotiates; no page loads
+                                // until the holder types an address.
+                                WebView.clearClientCertPreferences {}
                             }
                         },
                         modifier =
                             Modifier
-                                .fillMaxWidth()
-                                .weight(BROWSER_VIEW_WEIGHT)
+                                .fillMaxSize()
                                 .testTag(UiAutomationIds.BROWSER_VIEW),
                         onRelease = { webView ->
                             liveWebView = null
@@ -288,11 +283,228 @@ private fun BrowserDialog(
                         },
                     )
                 }
+                Column(
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .safeDrawingPadding()
+                            .padding(
+                                horizontal = FLOATING_BAR_HORIZONTAL_PADDING,
+                                vertical = FLOATING_BAR_BOTTOM_PADDING,
+                            ),
+                    verticalArrangement = Arrangement.spacedBy(BROWSER_ITEM_SPACING),
+                ) {
+                    BrowserStatus(signatureStatus)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(FLOATING_BAR_CORNER_RADIUS),
+                        color =
+                            MaterialTheme.colorScheme.surface.copy(
+                                alpha = FLOATING_BAR_ALPHA,
+                            ),
+                        shadowElevation = FLOATING_BAR_ELEVATION,
+                    ) {
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(FLOATING_BAR_INNER_PADDING),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IconButton(
+                                onClick = { liveWebView?.takeIf { it.canGoBack() }?.goBack() },
+                                modifier = Modifier.testTag(UiAutomationIds.BROWSER_BACK_ACTION),
+                            ) {
+                                Text(stringResource(R.string.browser_back))
+                            }
+                            IconButton(
+                                onClick = { liveWebView?.takeIf { it.canGoForward() }?.goForward() },
+                                modifier = Modifier.testTag(UiAutomationIds.BROWSER_FORWARD_ACTION),
+                            ) {
+                                Text(stringResource(R.string.browser_forward))
+                            }
+                            IconButton(
+                                onClick = { liveWebView?.reload() },
+                                modifier = Modifier.testTag(UiAutomationIds.BROWSER_RELOAD_ACTION),
+                            ) {
+                                Text(stringResource(R.string.browser_reload))
+                            }
+                            OutlinedTextField(
+                                value = urlText,
+                                onValueChange = { urlText = it },
+                                modifier =
+                                    Modifier
+                                        .weight(BROWSER_VIEW_WEIGHT)
+                                        .testTag(UiAutomationIds.BROWSER_URL_FIELD),
+                                singleLine = true,
+                                keyboardOptions =
+                                    KeyboardOptions(
+                                        autoCorrectEnabled = false,
+                                        keyboardType = KeyboardType.Uri,
+                                        imeAction = ImeAction.Go,
+                                    ),
+                                keyboardActions = KeyboardActions(onGo = { navigate() }),
+                            )
+                            IconButton(
+                                onClick = onClose,
+                                modifier = Modifier.testTag(UiAutomationIds.BROWSER_CLOSE_ACTION),
+                            ) {
+                                Text(stringResource(R.string.browser_close_glyph))
+                            }
+                        }
+                    }
+                }
             }
         }
     }
     pinRequest?.let { request ->
         BrowserPinDialog(request)
+    }
+    unlockRequest?.let { request ->
+        BrowserCardUnlockDialog(
+            status = nfcStatus,
+            primed = nfcPrimed,
+            isWaiting = unlockWaiting,
+            onUnlock = { can, pin1 ->
+                unlockWaiting = true
+                onNfcConnect(can, pin1)
+            },
+            onCancel = {
+                unlockRequest = null
+                unlockWaiting = false
+                request.giveUp()
+            },
+        )
+    }
+}
+
+/**
+ * The reference flow's hold-and-unlock sheet: a site asked for the
+ * card, so the holder presents it, enters the basic code — and the
+ * access number when no card is saved — and the held handshake resumes.
+ */
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun BrowserCardUnlockDialog(
+    status: NfcReaderStatus?,
+    primed: Boolean,
+    isWaiting: Boolean,
+    onUnlock: (CanSubmission?, Pin1Submission) -> Unit,
+    onCancel: () -> Unit,
+) {
+    val canState = remember { TextFieldState() }
+    val pinState = remember { TextFieldState() }
+    DisposableEffect(canState, pinState) {
+        onDispose {
+            canState.clearText()
+            pinState.clearText()
+        }
+    }
+    val cardEntryReady =
+        status == NfcReaderStatus.CARD_RECOGNIZED ||
+            status == NfcReaderStatus.WRONG_CAN ||
+            status == NfcReaderStatus.TRANSPORT_ERROR
+    val canReady = primed || CanSubmission.isComplete(canState.text)
+    val pinReady = Pin1Submission.isComplete(pinState.text)
+    val submit = {
+        if (cardEntryReady && canReady && pinReady && !isWaiting) {
+            val can = if (primed) null else CanSubmission.from(canState.text)
+            val pin1 = Pin1Submission.from(pinState.text)
+            canState.clearText()
+            pinState.clearText()
+            onUnlock(can, pin1)
+        }
+        Unit
+    }
+    Dialog(onDismissRequest = onCancel) {
+        Surface(
+            modifier = Modifier.semantics { testTagsAsResourceId = true },
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(UNLOCK_DIALOG_PADDING),
+                verticalArrangement = Arrangement.spacedBy(UNLOCK_DIALOG_SPACING),
+            ) {
+                Text(
+                    text = stringResource(R.string.sign_in),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    text = stringResource(R.string.hold_card),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (!primed) {
+                    SecureTextField(
+                        state = canState,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .testTag(UiAutomationIds.BROWSER_UNLOCK_CAN_FIELD),
+                        enabled = !isWaiting,
+                        label = { Text(stringResource(R.string.can)) },
+                        inputTransformation = CanInputTransformation,
+                        textObfuscationMode = TextObfuscationMode.Hidden,
+                        keyboardOptions =
+                            KeyboardOptions(
+                                autoCorrectEnabled = false,
+                                keyboardType = KeyboardType.NumberPassword,
+                                imeAction = ImeAction.Next,
+                            ),
+                    )
+                }
+                SecureTextField(
+                    state = pinState,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag(UiAutomationIds.BROWSER_UNLOCK_PIN1_FIELD),
+                    enabled = !isWaiting,
+                    label = { Text(stringResource(R.string.pin1)) },
+                    inputTransformation = Pin1InputTransformation,
+                    textObfuscationMode = TextObfuscationMode.Hidden,
+                    keyboardOptions =
+                        KeyboardOptions(
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.NumberPassword,
+                            imeAction = ImeAction.Done,
+                        ),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(UNLOCK_DIALOG_SPACING),
+                ) {
+                    Button(
+                        onClick = onCancel,
+                        modifier =
+                            Modifier
+                                .weight(UNLOCK_BUTTON_WEIGHT)
+                                .testTag(UiAutomationIds.BROWSER_UNLOCK_CANCEL_ACTION),
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                    Button(
+                        onClick = submit,
+                        modifier =
+                            Modifier
+                                .weight(UNLOCK_BUTTON_WEIGHT)
+                                .testTag(UiAutomationIds.BROWSER_UNLOCK_ACTION),
+                        enabled = cardEntryReady && canReady && pinReady && !isWaiting,
+                    ) {
+                        Text(stringResource(R.string.unlock))
+                    }
+                }
+                if (isWaiting || !cardEntryReady) {
+                    Text(
+                        text = stringResource(R.string.checking),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -395,10 +607,17 @@ private fun BrowserStatus(status: BrowserSignatureStatus) {
     }
 }
 
+/** One held client-certificate request waiting for the card to unlock. */
+internal class BrowserCardUnlockRequest(
+    val retry: () -> Unit,
+    val giveUp: () -> Unit,
+)
+
 private class ReFineIdWebViewClient(
     private val cardService: AuthenticationCardService,
     private val issuerCandidates: List<X509Certificate>,
     private val signatureOperation: BrowserPinCoordinator,
+    private val onCardNeeded: ((BrowserCardUnlockRequest) -> Unit)? = null,
 ) : WebViewClient(),
     AutoCloseable {
     private val isClosed = AtomicBoolean(false)
@@ -419,7 +638,21 @@ private class ReFineIdWebViewClient(
         handler: SslErrorHandler,
         error: android.net.http.SslError,
     ) {
-        AppTrace.browserTlsError()
+        // The WebView trust store plus the debug network security config (which adds the
+        // public Telia Root CA v2 that DVV's Suomi.fi identification hosts chain to)
+        // validate legitimate chains; anything the WebView still rejects is logged with
+        // its host and issuer, then refused.
+        val host = runCatching { Uri.parse(error.url).host }.getOrNull().orEmpty()
+        AppTrace.browserTlsError(
+            host = host,
+            primaryError = error.primaryError,
+            issuedBy =
+                error.certificate.issuedBy.dName
+                    .orEmpty(),
+            issuedTo =
+                error.certificate.issuedTo.dName
+                    .orEmpty(),
+        )
         handler.cancel()
     }
 
@@ -439,6 +672,13 @@ private class ReFineIdWebViewClient(
             keyTypeCount = request.keyTypes?.size ?: NO_KEY_TYPES,
             issuerCount = request.principals?.size ?: NO_ISSUER_HINTS,
         )
+        resolveClientCertificate(request, allowUnlock = true)
+    }
+
+    private fun resolveClientCertificate(
+        request: ClientCertRequest,
+        allowUnlock: Boolean,
+    ) {
         if (isClosed.get()) {
             AppTrace.browserClientCertificateCompleted(BrowserClientCertificateOutcome.CLOSED)
             request.cancel()
@@ -446,6 +686,25 @@ private class ReFineIdWebViewClient(
         }
         cardService.requestAuthenticationCertificate { ownedLeaf ->
             if (ownedLeaf == null) {
+                // The card is not unlocked. Instead of failing the
+                // handshake, hold the request and ask the holder to
+                // present and unlock the card, then resolve once more.
+                val unlockPath = onCardNeeded
+                if (allowUnlock && unlockPath != null && !isClosed.get()) {
+                    AppTrace.browserClientCertificateUnlockRequested()
+                    unlockPath(
+                        BrowserCardUnlockRequest(
+                            retry = { resolveClientCertificate(request, allowUnlock = false) },
+                            giveUp = {
+                                AppTrace.browserClientCertificateCompleted(
+                                    BrowserClientCertificateOutcome.CARD_UNAVAILABLE,
+                                )
+                                request.cancel()
+                            },
+                        ),
+                    )
+                    return@requestAuthenticationCertificate
+                }
                 AppTrace.browserClientCertificateCompleted(
                     BrowserClientCertificateOutcome.CARD_UNAVAILABLE,
                 )
@@ -544,9 +803,16 @@ private fun normalizeHttpsUrl(input: String): String? {
 
 private const val HTTPS_SCHEME = "https"
 private const val SCHEME_SEPARATOR = "://"
-private const val START_PAGE_URL = "https://card.refineid.fi/"
-private val BROWSER_PADDING = 16.dp
 private val BROWSER_ITEM_SPACING = 12.dp
+private val FLOATING_BAR_HORIZONTAL_PADDING = 12.dp
+private val FLOATING_BAR_BOTTOM_PADDING = 8.dp
+private val FLOATING_BAR_CORNER_RADIUS = 28.dp
+private val FLOATING_BAR_INNER_PADDING = 4.dp
+private val FLOATING_BAR_ELEVATION = 6.dp
+private const val FLOATING_BAR_ALPHA = 0.95f
+private val UNLOCK_DIALOG_PADDING = 24.dp
+private val UNLOCK_DIALOG_SPACING = 14.dp
+private const val UNLOCK_BUTTON_WEIGHT = 1f
 private val PIN_DIALOG_PADDING = 24.dp
 private val PIN_DIALOG_ITEM_SPACING = 16.dp
 private const val BROWSER_VIEW_WEIGHT = 1F

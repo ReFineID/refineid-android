@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="section_card" tools:ignore="DuplicateStrings">Kortti</string>
-    <string name="section_browser">Selain</string>
+    <string name="section_browser" tools:ignore="DuplicateStrings">Selain</string>
     <string name="section_document">Asiakirja</string>
     <string name="usb_reader">USB-lukija</string>
     <string name="not_connected">Ei yhteyttä</string>
@@ -26,6 +26,10 @@
     <string name="not_present">Ei paikalla</string>
     <string name="authentication">Tunnistautuminen</string>
     <string name="sign">Allekirjoita</string>
+    <string name="verify">Tarkasta</string>
+    <string name="back">Takaisin</string>
+    <string name="browser">Selain</string>
+    <string name="timestamp_authorities">Aikaleimapalvelut</string>
     <string name="authenticate">Tunnistaudu</string>
     <string name="cancel">Peruuta</string>
     <string name="signing">Allekirjoitetaan</string>

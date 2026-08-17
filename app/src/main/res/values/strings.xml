@@ -30,6 +30,10 @@
     <string name="authentication">Authentication</string>
     <string name="pin1" translatable="false">PIN1</string>
     <string name="sign">Sign</string>
+    <string name="verify">Verify</string>
+    <string name="back">Back</string>
+    <string name="browser">Browser</string>
+    <string name="timestamp_authorities">Timestamp services</string>
     <string name="authenticate">Authenticate</string>
     <string name="cancel">Cancel</string>
     <string name="signing">Signing</string>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="section_card" tools:ignore="DuplicateStrings">Kort</string>
-    <string name="section_browser">Webbläsare</string>
+    <string name="section_browser" tools:ignore="DuplicateStrings">Webbläsare</string>
     <string name="section_document">Dokument</string>
     <string name="usb_reader">USB-läsare</string>
     <string name="not_connected">Inte ansluten</string>
@@ -26,6 +26,10 @@
     <string name="not_present">Inte närvarande</string>
     <string name="authentication">Autentisering</string>
     <string name="sign">Signera</string>
+    <string name="verify">Verifiera</string>
+    <string name="back">Tillbaka</string>
+    <string name="browser">Webbläsare</string>
+    <string name="timestamp_authorities">Tidsstämpeltjänster</string>
     <string name="authenticate">Identifiera dig</string>
     <string name="cancel">Avbryt</string>
     <string name="signing">Signerar</string>

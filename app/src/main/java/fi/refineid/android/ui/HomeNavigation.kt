@@ -1,0 +1,164 @@
+package fi.refineid.android.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.unit.dp
+import fi.refineid.android.R
+
+/**
+ * The reference app's grouped-list navigation, ported natively: a
+ * rounded group holds tappable rows, each with a tinted leading icon,
+ * a label, and a trailing chevron, pushing to a dedicated screen.
+ */
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+internal fun NavigationGroup(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = GROUP_ELEVATION),
+        shape = RoundedCornerShape(GROUP_CORNER_RADIUS),
+    ) {
+        Column(content = content)
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+internal fun NavigationRow(
+    icon: ImageVector,
+    label: String,
+    tag: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val contentColor =
+        if (enabled) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING)
+                .testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ROW_ITEM_SPACING),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint =
+                if (enabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            modifier = Modifier.size(ROW_ICON_SIZE),
+        )
+        Text(
+            text = label,
+            color = contentColor,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(ROW_LABEL_WEIGHT),
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** One pushed detail screen: a back arrow, its title, and the content. */
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SubScreen(
+    title: String,
+    tag: String,
+    onBack: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Scaffold(
+        modifier =
+            Modifier
+                .semantics { testTagsAsResourceId = true }
+                .testTag(tag),
+        topBar = {
+            TopAppBar(
+                title = { Text(title) },
+                navigationIcon = {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.testTag(UiAutomationIds.BACK_ACTION),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                        )
+                    }
+                },
+            )
+        },
+    ) { contentPadding ->
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(contentPadding)
+                    .padding(
+                        horizontal = SUBSCREEN_HORIZONTAL_PADDING,
+                        vertical = SUBSCREEN_VERTICAL_PADDING,
+                    ),
+            verticalArrangement = Arrangement.spacedBy(SUBSCREEN_ITEM_SPACING),
+            content = content,
+        )
+    }
+}
+
+internal val GROUP_DIVIDER_INSET = 60.dp
+private val GROUP_CORNER_RADIUS = 22.dp
+private val GROUP_ELEVATION = 2.dp
+private val ROW_HORIZONTAL_PADDING = 20.dp
+private val ROW_VERTICAL_PADDING = 18.dp
+private val ROW_ITEM_SPACING = 14.dp
+private val ROW_ICON_SIZE = 26.dp
+private const val ROW_LABEL_WEIGHT = 1f
+private val SUBSCREEN_HORIZONTAL_PADDING = 20.dp
+private val SUBSCREEN_VERTICAL_PADDING = 8.dp
+private val SUBSCREEN_ITEM_SPACING = 14.dp

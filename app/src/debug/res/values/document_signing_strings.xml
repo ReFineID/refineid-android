@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
-    <string name="pdf">PDF</string>
     <string name="choose_pdf">Choose PDF</string>
     <string name="pdf_selected">PDF selected</string>
-    <string name="save_as">Save as</string>
-    <string name="pin2">PIN2</string>
-    <string name="sign_pdf">Sign PDF</string>
+    <string name="signature_pin2">Signature PIN 2</string>
+    <string name="sign_document">Sign document</string>
     <string name="saving">Saving</string>
+    <string name="hold_card">Hold your identity card against the phone’s card reader</string>
+    <string name="no_card">No readable identity card was found</string>
+    <string name="signed_cert_revoked">Signature certificate revoked — no valid signature</string>
+    <string name="signed_at">signed at %1$s</string>
     <string name="verify_document">Verify document</string>
-    <string name="document_valid">Valid signature</string>
+    <string name="document_valid">Document intact — revocation not checked</string>
     <string name="document_invalid">Invalid signature</string>
     <string name="document_unsigned">No signature found</string>
     <string name="document_malformed">Unreadable signature</string>

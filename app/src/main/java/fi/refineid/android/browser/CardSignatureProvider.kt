@@ -13,6 +13,8 @@ import java.security.Security
 import java.security.SignatureException
 import java.security.SignatureSpi
 import java.security.spec.AlgorithmParameterSpec
+import java.security.spec.MGF1ParameterSpec
+import java.security.spec.PSSParameterSpec
 
 /** JCA provider consumed by Chromium's Android client-certificate bridge. */
 @Suppress("DEPRECATION")
@@ -217,8 +219,19 @@ internal abstract class CardBackedSignatureSpi(
         throw InvalidParameterException("signature parameters are fixed")
     }
 
-    final override fun engineSetParameter(parameters: AlgorithmParameterSpec): Unit =
-        throw InvalidParameterException("signature parameters are fixed")
+    // TLS 1.3 signs its CertificateVerify with RSA-PSS, and the platform
+    // TLS stack sets an explicit PSSParameterSpec on the delegated
+    // signature before signing. The card's PSS profile is fixed, so a
+    // spec naming exactly that profile is accepted as a no-op and any
+    // other parameters are refused.
+    final override fun engineSetParameter(parameters: AlgorithmParameterSpec) {
+        val pss =
+            parameters as? PSSParameterSpec
+                ?: throw InvalidParameterException("signature parameters are fixed")
+        if (!algorithm.acceptsPssParameters(pss)) {
+            throw InvalidParameterException("PSS parameters do not match the card profile")
+        }
+    }
 
     private fun requireReady(): CardBackedPrivateKey {
         if (hasSigned) {
@@ -254,6 +267,39 @@ internal abstract class CardBackedSignatureSpi(
         const val ZERO_BYTE: Byte = 0
     }
 }
+
+/**
+ * Whether an externally supplied PSS parameter spec is consistent with
+ * this card variant. The card computes the whole PSS block itself with a
+ * fixed profile, so the JCA spec is advisory: the only thing that must
+ * agree is the outer digest, which pins which TLS signature scheme the
+ * peer chose. MGF, salt length, and trailer are left to the card, so a
+ * mismatch there is not grounds to fail the handshake before it starts.
+ */
+internal fun AuthenticationSigningAlgorithm.acceptsPssParameters(parameters: PSSParameterSpec): Boolean {
+    val digestName =
+        when (this) {
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA256 -> MGF1ParameterSpec.SHA256.digestAlgorithm
+
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA384 -> MGF1ParameterSpec.SHA384.digestAlgorithm
+
+            AuthenticationSigningAlgorithm.RSA_PSS_SHA512 -> MGF1ParameterSpec.SHA512.digestAlgorithm
+
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384,
+            AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512,
+            AuthenticationSigningAlgorithm.ECDSA_P384_SHA256,
+            AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
+            -> return false
+        }
+    return sameDigestName(parameters.digestAlgorithm, digestName)
+}
+
+/** `SHA-256` and `SHA256` name the same digest across JCA providers. */
+private fun sameDigestName(
+    left: String,
+    right: String,
+): Boolean = left.replace("-", "").equals(right.replace("-", ""), ignoreCase = true)
 
 private class ZeroizingMessageBuffer(
     private val maximumLength: Int,

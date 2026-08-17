@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Copyright 2026 ReFineID contributors. Licensed under the Apache License, Version 2.0. -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
-    <string name="timestamp_authorities">Timestamp</string>
     <string name="address">Address</string>
     <string name="username">Username</string>
     <string name="password">Password</string>
