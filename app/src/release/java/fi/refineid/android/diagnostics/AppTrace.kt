@@ -289,6 +289,10 @@ internal object AppTrace {
 
     fun nfcPrimedOpenStarted() = Unit
 
+    fun nfcPrimedMinted() = Unit
+
+    fun nfcPrimedForgotten() = Unit
+
     fun ccidEndpointsMissing() = Unit
 
     fun ccidOpenFailed() = Unit

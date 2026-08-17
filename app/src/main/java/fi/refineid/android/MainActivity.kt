@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
                     nfcSnapshot = nfcSnapshot,
                     onOpenNfcSettings = ::openNfcSettings,
                     onNfcConnect = nfcReaderController::connect,
+                    onForgetPrimedCard = nfcReaderController::forgetPrimedCard,
                     nfcCardService = nfcReaderController.authenticationCardService,
                 )
             }

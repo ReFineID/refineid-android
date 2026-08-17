@@ -19,6 +19,10 @@ internal enum class NfcReaderStatus {
 
 internal data class NfcReaderSnapshot(
     val status: NfcReaderStatus = NfcReaderStatus.NOT_AVAILABLE,
+    /** True while a card access number is stored for tap-to-open. */
+    val isPrimed: Boolean = false,
+    /** True while a stored access number is opening a discovered card. */
+    val isPrimedOpening: Boolean = false,
 )
 
 /** Coarse holder-facing status for one completed card-access probe. */

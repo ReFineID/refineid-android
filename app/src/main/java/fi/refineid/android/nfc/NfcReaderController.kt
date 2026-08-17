@@ -60,6 +60,9 @@ internal class NfcReaderController(
     private var activeProviderGeneration: Long? = null
     private val providerGenerationRandom = SecureRandom()
 
+    @Volatile
+    private var primedCardStored = primedCanStore.isPrimed()
+
     internal val authenticationCardService =
         NfcAuthenticationCardService(
             probeExecutor = probeExecutor,
@@ -196,7 +199,11 @@ internal class NfcReaderController(
             nfcAdapter.disableReaderMode(activity)
             AppTrace.nfcReaderModeChanged(isEnabled = false)
             probeGeneration += 1
-            closeActiveSessionAsync()
+            try {
+                probeExecutor.execute(::closeActiveSession)
+            } catch (_: RejectedExecutionException) {
+                // The executor only stops when the process is terminating.
+            }
             publish(NfcReaderSnapshot(status = NfcReaderStatus.TURNED_OFF))
         }
     }
@@ -287,7 +294,7 @@ internal class NfcReaderController(
             val primedCan = primedCanStore.read()
             if (primedCan != null) {
                 AppTrace.nfcPrimedOpenStarted()
-                publishAsync(generation, NfcReaderStatus.CONNECTING)
+                publishAsync(generation, NfcReaderStatus.CONNECTING, isPrimedOpening = true)
                 openSessionBytes(primedCan, generation, mintOnSuccess = false)
                 return
             }
@@ -345,6 +352,8 @@ internal class NfcReaderController(
         if (status == NfcReaderStatus.CARD_READY && generation == probeGeneration) {
             if (mintOnSuccess) {
                 primedCanStore.write(canBytes.copyOf())
+                primedCardStored = true
+                AppTrace.nfcPrimedMinted()
             }
             activeSession =
                 ContactlessSession(
@@ -357,19 +366,12 @@ internal class NfcReaderController(
             if (!mintOnSuccess && status == NfcReaderStatus.WRONG_CAN) {
                 // The primed digits no longer open this card.
                 primedCanStore.clear()
+                primedCardStored = false
             }
             canBytes.fill(0)
             material.close()
         }
         publishAsync(generation, status)
-    }
-
-    private fun closeActiveSessionAsync() {
-        try {
-            probeExecutor.execute(::closeActiveSession)
-        } catch (_: RejectedExecutionException) {
-            // The executor only stops when the process is terminating.
-        }
     }
 
     private fun closeActiveSession() {
@@ -378,13 +380,37 @@ internal class NfcReaderController(
         activeSession = null
     }
 
+    /** Forget the primed card so the next tap requires the access number again. */
+    fun forgetPrimedCard() {
+        checkMainThread()
+        AppTrace.nfcPrimedForgotten()
+        try {
+            probeExecutor.execute {
+                primedCanStore.clear()
+                primedCardStored = false
+                closeActiveSession()
+                probeGeneration += 1
+                mainHandler.post { publish(NfcReaderSnapshot(status = NfcReaderStatus.WAITING_FOR_CARD)) }
+            }
+        } catch (_: RejectedExecutionException) {
+            // The executor only stops when the process is terminating.
+        }
+    }
+
     private fun publishAsync(
         generation: Int,
         status: NfcReaderStatus,
+        isPrimedOpening: Boolean = false,
     ) {
         mainHandler.post {
             if (generation == probeGeneration) {
-                publish(NfcReaderSnapshot(status = status))
+                publish(
+                    NfcReaderSnapshot(
+                        status = status,
+                        isPrimed = primedCardStored,
+                        isPrimedOpening = isPrimedOpening,
+                    ),
+                )
             } else {
                 AppTrace.nfcProbeResultDiscarded()
             }
@@ -392,9 +418,9 @@ internal class NfcReaderController(
     }
 
     private fun publish(snapshot: NfcReaderSnapshot) {
-        latestSnapshot = snapshot
-        AppTrace.nfcSnapshotPublished(snapshot.status)
-        stateListeners.toList().forEach { listener -> listener(snapshot) }
+        latestSnapshot = snapshot.copy(isPrimed = primedCardStored)
+        AppTrace.nfcSnapshotPublished(latestSnapshot.status)
+        stateListeners.toList().forEach { listener -> listener(latestSnapshot) }
     }
 
     private fun checkMainThread() {

@@ -688,6 +688,14 @@ internal object AppTrace {
         debug("nfc:primed-open-started")
     }
 
+    fun nfcPrimedMinted() {
+        debug("nfc:primed-minted")
+    }
+
+    fun nfcPrimedForgotten() {
+        debug("nfc:primed-forgotten")
+    }
+
     fun ccidEndpointsMissing() {
         debug("ccid:endpoints-missing")
     }

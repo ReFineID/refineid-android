@@ -66,6 +66,7 @@ internal fun MainScreen(
     nfcSnapshot: NfcReaderSnapshot = NfcReaderSnapshot(),
     onOpenNfcSettings: () -> Unit = {},
     onNfcConnect: (CanSubmission) -> Unit = {},
+    onForgetPrimedCard: () -> Unit = {},
     nfcCardService: AuthenticationCardService? = null,
 ) {
     Scaffold(
@@ -104,6 +105,7 @@ internal fun MainScreen(
                     snapshot = nfcSnapshot,
                     onOpenNfcSettings = onOpenNfcSettings,
                     onConnect = onNfcConnect,
+                    onForgetPrimedCard = onForgetPrimedCard,
                 )
             }
 
@@ -255,6 +257,7 @@ private fun NfcCard(
     snapshot: NfcReaderSnapshot,
     onOpenNfcSettings: () -> Unit,
     onConnect: (CanSubmission) -> Unit,
+    onForgetPrimedCard: () -> Unit,
 ) {
     val statusColor =
         when (snapshot.status) {
@@ -354,12 +357,21 @@ private fun NfcCard(
                 }
             }
 
+            // A primed card opens on tap; only prompt for the access
+            // number when nothing is saved to open with.
             if (
-                snapshot.status == NfcReaderStatus.CARD_RECOGNIZED ||
-                snapshot.status == NfcReaderStatus.WRONG_CAN ||
-                snapshot.status == NfcReaderStatus.TRANSPORT_ERROR
+                !snapshot.isPrimed &&
+                (
+                    snapshot.status == NfcReaderStatus.CARD_RECOGNIZED ||
+                        snapshot.status == NfcReaderStatus.WRONG_CAN ||
+                        snapshot.status == NfcReaderStatus.TRANSPORT_ERROR
+                )
             ) {
                 NfcCanEntry(onConnect = onConnect)
+            }
+
+            if (snapshot.isPrimed) {
+                NfcPrimedRow(onForgetPrimedCard = onForgetPrimedCard)
             }
 
             if (snapshot.status == NfcReaderStatus.CARD_READY) {
@@ -391,6 +403,29 @@ private fun NfcCard(
                     Text(stringResource(R.string.turn_on))
                 }
             }
+        }
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun NfcPrimedRow(onForgetPrimedCard: () -> Unit) {
+    HorizontalDivider()
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(R.string.card_primed),
+            color = SUCCESS_STATUS_COLOR,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Button(
+            onClick = onForgetPrimedCard,
+            modifier = Modifier.testTag(UiAutomationIds.NFC_FORGET_ACTION),
+        ) {
+            Text(stringResource(R.string.forget))
         }
     }
 }

@@ -29,6 +29,12 @@ internal class PrimedCanStore(
     private val preferences =
         context.applicationContext.getSharedPreferences(preferenceName, Context.MODE_PRIVATE)
 
+    /** Whether digits are stored, without decrypting them. */
+    @Synchronized
+    fun isPrimed(): Boolean =
+        preferences.contains(ENTRY_NAME + IV_SUFFIX) &&
+            preferences.contains(ENTRY_NAME + CIPHERTEXT_SUFFIX)
+
     /** Decrypted CAN digits owned by the caller, or null when unprimed. */
     @Synchronized
     fun read(): ByteArray? {
