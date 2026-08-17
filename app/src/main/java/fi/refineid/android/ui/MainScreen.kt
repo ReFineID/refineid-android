@@ -136,6 +136,7 @@ internal fun MainScreen(
             )
 
             SectionHeader(stringResource(R.string.section_document))
+            DocumentValidationHarness()
             DocumentSigningHarness(
                 snapshot = snapshot,
                 cardService = qualifiedCardService,

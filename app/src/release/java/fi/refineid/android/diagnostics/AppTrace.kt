@@ -281,6 +281,10 @@ internal object AppTrace {
 
     fun nfcSettingsUnavailable() = Unit
 
+    fun documentValidationStarted() = Unit
+
+    fun documentValidationCompleted(read: Boolean) = Unit
+
     fun nfcConnectStarted() = Unit
 
     fun nfcConnectIgnored() = Unit

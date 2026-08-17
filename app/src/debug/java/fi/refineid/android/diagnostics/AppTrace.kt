@@ -672,6 +672,14 @@ internal object AppTrace {
         debug("nfc:settings-unavailable")
     }
 
+    fun documentValidationStarted() {
+        debug("document:validation-started")
+    }
+
+    fun documentValidationCompleted(read: Boolean) {
+        debug("document:validation-completed read=" + read)
+    }
+
     fun nfcConnectStarted() {
         debug("nfc:connect-started")
     }

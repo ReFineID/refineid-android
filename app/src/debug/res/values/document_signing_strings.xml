@@ -7,4 +7,11 @@
     <string name="pin2">PIN2</string>
     <string name="sign_pdf">Sign PDF</string>
     <string name="saving">Saving</string>
+    <string name="verify_document">Verify document</string>
+    <string name="document_valid">Valid signature</string>
+    <string name="document_invalid">Invalid signature</string>
+    <string name="document_unsigned">No signature found</string>
+    <string name="document_malformed">Unreadable signature</string>
+    <string name="document_signature_ordinal">Signature %1$d</string>
+    <string name="document_partial_coverage">Covers only part of the document</string>
 </resources>
