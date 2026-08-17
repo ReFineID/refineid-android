@@ -1,5 +1,6 @@
 package fi.refineid.android.ui
 
+import android.annotation.SuppressLint
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -15,12 +16,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SecureTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.net.toUri
 import fi.refineid.android.R
 import fi.refineid.android.browser.BrowserClientCertificateMatcher
 import fi.refineid.android.browser.BrowserClientCertificateOutcome
@@ -93,6 +97,9 @@ internal fun BrowserHarness(
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
+// General sites need JavaScript; this browser exists only in debug
+// builds and every signature stays behind the holder's PIN.
+@SuppressLint("SetJavaScriptEnabled")
 private fun BrowserDialog(
     cardService: AuthenticationCardService,
     onClose: () -> Unit,
@@ -144,7 +151,6 @@ private fun BrowserDialog(
                     cardService = cardService,
                     issuerCandidates = issuerCandidates,
                     signatureOperation = coordinator,
-                    allowedOrigin = DIAGNOSTIC_ORIGIN,
                 )
             }
         }
@@ -195,6 +201,45 @@ private fun BrowserDialog(
                         Text(stringResource(R.string.close))
                     }
                 }
+                var urlText by remember { mutableStateOf(START_PAGE_URL) }
+                var liveWebView by remember { mutableStateOf<WebView?>(null) }
+                val navigate = {
+                    val destination = normalizeHttpsUrl(urlText)
+                    if (destination != null) {
+                        urlText = destination
+                        liveWebView?.loadUrl(destination)
+                    } else {
+                        AppTrace.browserNavigationBlocked()
+                    }
+                    Unit
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(BROWSER_ITEM_SPACING),
+                ) {
+                    OutlinedTextField(
+                        value = urlText,
+                        onValueChange = { urlText = it },
+                        modifier =
+                            Modifier
+                                .weight(BROWSER_VIEW_WEIGHT)
+                                .testTag(UiAutomationIds.BROWSER_URL_FIELD),
+                        singleLine = true,
+                        keyboardOptions =
+                            KeyboardOptions(
+                                autoCorrectEnabled = false,
+                                keyboardType = KeyboardType.Uri,
+                                imeAction = ImeAction.Go,
+                            ),
+                        keyboardActions = KeyboardActions(onGo = { navigate() }),
+                    )
+                    Button(
+                        onClick = navigate,
+                        modifier = Modifier.testTag(UiAutomationIds.BROWSER_GO_ACTION),
+                    ) {
+                        Text(stringResource(R.string.go))
+                    }
+                }
                 BrowserStatus(signatureStatus)
                 if (webViewClient == null) {
                     Text(stringResource(R.string.error))
@@ -206,10 +251,13 @@ private fun BrowserDialog(
                             WebView(viewContext).apply {
                                 settings.allowContentAccess = false
                                 settings.allowFileAccess = false
+                                settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
                                 this.webViewClient = client
+                                liveWebView = this
                                 WebView.clearClientCertPreferences {
                                     if (isActive.get()) {
-                                        loadUrl(DIAGNOSTIC_ORIGIN.url)
+                                        loadUrl(START_PAGE_URL)
                                     }
                                 }
                             }
@@ -220,6 +268,7 @@ private fun BrowserDialog(
                                 .weight(BROWSER_VIEW_WEIGHT)
                                 .testTag(UiAutomationIds.BROWSER_VIEW),
                         onRelease = { webView ->
+                            liveWebView = null
                             webView.stopLoading()
                             webView.webViewClient = WebViewClient()
                             webView.destroy()
@@ -334,7 +383,6 @@ private class ReFineIdWebViewClient(
     private val cardService: AuthenticationCardService,
     private val issuerCandidates: List<X509Certificate>,
     private val signatureOperation: BrowserPinCoordinator,
-    private val allowedOrigin: BrowserOrigin,
 ) : WebViewClient(),
     AutoCloseable {
     private val isClosed = AtomicBoolean(false)
@@ -343,7 +391,7 @@ private class ReFineIdWebViewClient(
         view: WebView,
         request: WebResourceRequest,
     ): Boolean {
-        val isBlocked = !allowedOrigin.allows(request.url)
+        val isBlocked = !request.url.isHttps()
         if (isBlocked) {
             AppTrace.browserNavigationBlocked()
         }
@@ -365,25 +413,18 @@ private class ReFineIdWebViewClient(
         error: WebResourceError,
     ) = Unit
 
+    // Any HTTPS origin may ask; the holder's PIN gates every signature.
     override fun onReceivedClientCertRequest(
         view: WebView,
         request: ClientCertRequest,
     ) {
-        val originAllowed = allowedOrigin.allows(request.host, request.port)
         AppTrace.browserClientCertificateRequested(
-            originAllowed = originAllowed,
+            originAllowed = true,
             keyTypeCount = request.keyTypes?.size ?: NO_KEY_TYPES,
             issuerCount = request.principals?.size ?: NO_ISSUER_HINTS,
         )
         if (isClosed.get()) {
             AppTrace.browserClientCertificateCompleted(BrowserClientCertificateOutcome.CLOSED)
-            request.cancel()
-            return
-        }
-        if (!originAllowed) {
-            AppTrace.browserClientCertificateCompleted(
-                BrowserClientCertificateOutcome.ORIGIN_REJECTED,
-            )
             request.cancel()
             return
         }
@@ -443,44 +484,27 @@ private class ReFineIdWebViewClient(
     }
 }
 
-private data class BrowserOrigin(
-    val url: String,
-    val host: String,
-    val port: Int,
-) {
-    fun allows(uri: Uri): Boolean {
-        val effectivePort =
-            if (uri.port == DEFAULT_URI_PORT) {
-                HTTPS_DEFAULT_PORT
-            } else {
-                uri.port
-            }
-        return uri.scheme == HTTPS_SCHEME &&
-            uri.host.equals(host, ignoreCase = true) &&
-            effectivePort == port
-    }
+private fun Uri.isHttps(): Boolean = scheme.equals(HTTPS_SCHEME, ignoreCase = true)
 
-    fun allows(
-        requestHost: String,
-        requestPort: Int,
-    ): Boolean = requestHost.equals(host, ignoreCase = true) && requestPort == port
-
-    private companion object {
-        const val DEFAULT_URI_PORT = -1
-        const val HTTPS_DEFAULT_PORT = 443
-        const val HTTPS_SCHEME = "https"
+/** Accept holder input as an HTTPS destination, or refuse it. */
+private fun normalizeHttpsUrl(input: String): String? {
+    val candidate = input.trim()
+    if (candidate.isEmpty()) {
+        return null
     }
+    val withScheme =
+        if (candidate.contains(SCHEME_SEPARATOR)) {
+            candidate
+        } else {
+            HTTPS_SCHEME + SCHEME_SEPARATOR + candidate
+        }
+    val uri = withScheme.toUri()
+    return withScheme.takeIf { uri.isHttps() && !uri.host.isNullOrEmpty() }
 }
 
-private const val DIAGNOSTIC_BROWSER_URL = "https://card.refineid.fi/"
-private const val DIAGNOSTIC_BROWSER_HOST = "card.refineid.fi"
-private const val DIAGNOSTIC_BROWSER_PORT = 443
-private val DIAGNOSTIC_ORIGIN =
-    BrowserOrigin(
-        url = DIAGNOSTIC_BROWSER_URL,
-        host = DIAGNOSTIC_BROWSER_HOST,
-        port = DIAGNOSTIC_BROWSER_PORT,
-    )
+private const val HTTPS_SCHEME = "https"
+private const val SCHEME_SEPARATOR = "://"
+private const val START_PAGE_URL = "https://card.refineid.fi/"
 private val BROWSER_PADDING = 16.dp
 private val BROWSER_ITEM_SPACING = 12.dp
 private val PIN_DIALOG_PADDING = 24.dp

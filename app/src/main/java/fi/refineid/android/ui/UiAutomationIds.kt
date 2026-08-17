@@ -29,6 +29,8 @@ internal object UiAutomationIds {
     const val TIMESTAMP_SETTINGS_STATUS = "timestampSettingsStatus"
     const val BROWSER_ACTION = "browserAction"
     const val BROWSER_VIEW = "browserView"
+    const val BROWSER_URL_FIELD = "browserUrlField"
+    const val BROWSER_GO_ACTION = "browserGoAction"
     const val BROWSER_CLOSE_ACTION = "browserCloseAction"
     const val BROWSER_PIN1_FIELD = "browserPin1Field"
     const val BROWSER_SIGN_ACTION = "browserSignAction"

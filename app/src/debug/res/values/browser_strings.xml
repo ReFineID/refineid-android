@@ -2,4 +2,5 @@
 <resources>
     <string name="browser">Browser</string>
     <string name="close">Close</string>
+    <string name="go">Go</string>
 </resources>

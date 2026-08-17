@@ -4,8 +4,10 @@ These rules apply to the entire repository. Less is more; terse is better.
 
 ## Product
 
-- The end state is native/system-browser authentication. An embedded browser
-  is a diagnostic harness, never the product boundary.
+- System-browser authentication remains the end state. The in-app browser is
+  a supported login vehicle on stock Android: any HTTPS site, both card
+  transports, every signature behind the holder's PIN.
+- Android also serves as the RAPP reader for the other ReFineID platforms.
 - User-facing UI is terse. Explanations, status, and diagnostics belong in
   documentation and developer tooling, not product copy.
 - Keep card transport, identity-card protocol, browser integration, and UI as

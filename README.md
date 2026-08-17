@@ -99,6 +99,9 @@ instrumented development harness, but it is not the product boundary.
 - Transport-selecting external-key provider session with generation-routed
   signing, so the privileged KeyChain boundary serves USB and contactless
   cards alike
+- General in-app browser over both card transports: any HTTPS site, an
+  address bar, client certificates served on request, and every signature
+  behind the holder's PIN
 - No embedded browser, Internet permission, or logging in the release build
 - Compose UI Test v2 and UI Automator 2.4 instrumentation on a physical device
 
