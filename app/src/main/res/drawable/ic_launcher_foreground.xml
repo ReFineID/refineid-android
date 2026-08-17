@@ -1,13 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  The reference app's icon: a white identity card carrying a gold contact
+  chip. Translated from Sources/App/AppIcon.icon (layer-card.svg and
+  layer-chip.svg); the chip keeps the original flipped coordinate space
+  through a group transform, and the whole mark is scaled to sit inside
+  the adaptive-icon safe zone.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M25,31 L83,31 Q87,31 87,35 L87,73 Q87,77 83,77 L25,77 Q21,77 21,73 L21,35 Q21,31 25,31 Z" />
-    <path
-        android:fillColor="#FF0056A6"
-        android:pathData="M30,42 L61,42 L61,48 L30,48 Z M30,55 L76,55 L76,61 L30,61 Z M30,66 L68,66 L68,71 L30,71 Z" />
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <group
+        android:pivotX="512"
+        android:pivotY="512"
+        android:scaleX="0.62"
+        android:scaleY="0.62">
+
+        <!-- card body -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M207,292 h610 a45,45 0 0 1 45,45 v350 a45,45 0 0 1 -45,45 h-610 a45,45 0 0 1 -45,-45 v-350 a45,45 0 0 1 45,-45 z" />
+
+        <!-- contact chip, in the source's flipped coordinate space -->
+        <group
+            android:scaleY="-1"
+            android:translateY="1092">
+            <path
+                android:fillColor="#D9B96B"
+                android:pathData="M275,520 h80 a35,35 0 0 1 35,35 v50 a35,35 0 0 1 -35,35 h-80 a35,35 0 0 1 -35,-35 v-50 a35,35 0 0 1 35,-35 z" />
+            <group>
+                <clip-path android:pathData="M275,520 h80 a35,35 0 0 1 35,35 v50 a35,35 0 0 1 -35,35 h-80 a35,35 0 0 1 -35,-35 v-50 a35,35 0 0 1 35,-35 z" />
+                <path
+                    android:strokeColor="#77602F"
+                    android:strokeWidth="6"
+                    android:pathData="M240,610 H390 M240,550 H390 M285,580 A30,30 0 1 0 345,580 A30,30 0 1 0 285,580 M315,640 V610 M315,550 V520 M275,610 Q285,640 305,640 M355,610 Q345,640 325,640 M275,550 Q285,520 305,520 M355,550 Q345,520 325,520 M240,580 H285 M345,580 H390 M275,520 h80 a35,35 0 0 1 35,35 v50 a35,35 0 0 1 -35,35 h-80 a35,35 0 0 1 -35,-35 v-50 a35,35 0 0 1 35,-35 z" />
+                <path
+                    android:fillColor="#77602F"
+                    android:pathData="M310,625 a5,5 0 1 0 10,0 a5,5 0 1 0 -10,0 z M310,535 a5,5 0 1 0 10,0 a5,5 0 1 0 -10,0 z" />
+            </group>
+        </group>
+    </group>
 </vector>
