@@ -140,7 +140,7 @@ internal class ExternalKeySigningCoordinator(
         }
         when (availability(request)) {
             ProviderAvailability.CURRENT -> {
-                Unit
+                // The current provider proceeds.
             }
 
             ProviderAvailability.UNAVAILABLE -> {
@@ -177,7 +177,7 @@ internal class ExternalKeySigningCoordinator(
             }
         when (availability(request)) {
             ProviderAvailability.CURRENT -> {
-                Unit
+                // The current provider proceeds.
             }
 
             ProviderAvailability.UNAVAILABLE -> {
@@ -289,7 +289,7 @@ internal class ExternalKeySigningCoordinator(
             }
         when (retainedAvailability) {
             ProviderAvailability.CURRENT -> {
-                Unit
+                // The current provider proceeds.
             }
 
             ProviderAvailability.UNAVAILABLE -> {

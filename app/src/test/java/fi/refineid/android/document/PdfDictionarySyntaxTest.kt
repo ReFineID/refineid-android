@@ -61,7 +61,7 @@ class PdfDictionarySyntaxTest {
     @Test
     fun rejectsMalformedDuplicateAndOverNestedValues() {
         val overNested =
-            "$DICTIONARY_WITH_ARRAY_PREFIX" +
+            DICTIONARY_WITH_ARRAY_PREFIX +
                 ARRAY_OPEN.repeat(OVER_NESTED_ARRAY_DEPTH) +
                 ZERO_VALUE +
                 ARRAY_CLOSE.repeat(OVER_NESTED_ARRAY_DEPTH) +

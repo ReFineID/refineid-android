@@ -501,7 +501,7 @@ internal object TimestampCmsSignedAttributes {
                 }
 
                 AttributeType.OTHER -> {
-                    Unit
+                    // Unrecognized attributes are permitted and carry no checks.
                 }
             }
         }

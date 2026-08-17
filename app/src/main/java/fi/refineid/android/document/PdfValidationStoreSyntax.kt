@@ -58,7 +58,7 @@ internal object PdfValidationStoreSyntax {
                 }
 
                 TYPE_NAME -> {
-                    Unit
+                    // The type entry itself needs no value validation.
                 }
 
                 VRI_NAME -> {

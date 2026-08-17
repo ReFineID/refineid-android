@@ -52,7 +52,7 @@ internal object CertificateExtensionReader {
                 DerValues.TAG_CONTEXT_1_PRIMITIVE,
                 DerValues.TAG_CONTEXT_2_PRIMITIVE,
                 -> {
-                    Unit
+                    // Primitive context tags carry no nested extension content.
                 }
 
                 DerValues.TAG_CONTEXT_3_CONSTRUCTED -> {

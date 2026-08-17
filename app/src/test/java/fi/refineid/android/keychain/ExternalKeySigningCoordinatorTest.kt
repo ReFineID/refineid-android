@@ -114,7 +114,7 @@ class ExternalKeySigningCoordinatorTest {
         )
         assertEquals(NO_OPERATIONS, cardService.signCount)
         assertThrows(IllegalStateException::class.java) {
-            submittedPin.consume { Unit }
+            submittedPin.consume { _ -> }
         }
         request.close()
         coordinator.close()
@@ -148,7 +148,7 @@ class ExternalKeySigningCoordinatorTest {
         )
         assertEquals(NO_OPERATIONS, cardService.signCount)
         assertThrows(IllegalStateException::class.java) {
-            submittedPin.consume { Unit }
+            submittedPin.consume { _ -> }
         }
         request.close()
         coordinator.close()

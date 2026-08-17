@@ -142,7 +142,7 @@ internal class ExternalKeyOperationCancellation {
         try {
             action?.invoke()
         } catch (_: Exception) {
-            Unit
+            // Completion callbacks are best-effort on an abandoned request.
         }
     }
 }

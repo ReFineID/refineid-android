@@ -247,7 +247,7 @@ internal class HttpSigningNetwork(
         try {
             connection.errorStream?.close()
         } catch (_: IOException) {
-            Unit
+            // Closing the error stream is best-effort cleanup.
         }
     }
 

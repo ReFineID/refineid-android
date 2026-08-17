@@ -133,6 +133,7 @@ android {
 
     lint {
         abortOnError = true
+        checkAllWarnings = true
         checkReleaseBuilds = true
         warningsAsErrors = true
         disable +=
@@ -140,6 +141,14 @@ android {
                 "AndroidGradlePluginVersion",
                 "GradleDependency",
                 "NewerVersionAvailable",
+                // JNA references desktop AWT on a code path Android never takes.
+                "InvalidPackage",
+                // Kotlin emits synthetic accessors by design; modern runtimes
+                // make the check moot.
+                "SyntheticAccessor",
+                // The USB host requirement is deliberate; the product targets
+                // physical Pixels, not ChromeOS.
+                "UnsupportedChromeOsHardware",
             )
     }
 
@@ -159,7 +168,7 @@ android {
         getByName("release").jniLibs.directories.add(
             rappReleaseJniLibs.get().asFile.absolutePath,
         )
-        getByName("main").kotlin.srcDir(rappGeneratedKotlin)
+        getByName("main").kotlin.directories.add(rappGeneratedKotlin.asFile.absolutePath)
     }
 }
 
@@ -167,6 +176,15 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
         allWarningsAsErrors.set(true)
+        extraWarnings.set(true)
+        // The generated RAPP binding cannot satisfy the stylistic extra
+        // checks; ktlint and detekt cover style for authored sources.
+        freeCompilerArgs.addAll(
+            "-Xwarning-level=REDUNDANT_RETURN_UNIT_TYPE:disabled",
+            "-Xwarning-level=REDUNDANT_VISIBILITY_MODIFIER:disabled",
+            "-Xwarning-level=CAN_BE_VAL:disabled",
+            "-Xwarning-level=CAN_BE_VAL_LATEINIT:disabled",
+        )
     }
 }
 
@@ -217,11 +235,16 @@ fun registerRappBuild(
     environment("ANDROID_NDK_HOME", androidNdkDirectory.get().asFile.absolutePath)
     val arguments =
         mutableListOf(
-            "cargo", "ndk",
-            "-t", "arm64-v8a",
-            "-t", "x86_64",
-            "-P", minimumAndroidApi,
-            "-o", output.get().asFile.absolutePath,
+            "cargo",
+            "ndk",
+            "-t",
+            "arm64-v8a",
+            "-t",
+            "x86_64",
+            "-P",
+            minimumAndroidApi,
+            "-o",
+            output.get().asFile.absolutePath,
             "build",
         )
     if (release) {
@@ -431,6 +454,7 @@ val verifyReleaseNoLogging =
                     "app:activity",
                     "native:",
                     "usb:",
+                    "nfc:",
                     "ccid:",
                     "card:public",
                     "card:credential",

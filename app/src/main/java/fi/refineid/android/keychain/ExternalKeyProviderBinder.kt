@@ -55,7 +55,7 @@ private class BinderOperationLiveness private constructor(
         try {
             token.unlinkToDeath(deathRecipient, NO_BINDER_FLAGS)
         } catch (_: RuntimeException) {
-            Unit
+            // A dead binder has already unlinked itself.
         }
     }
 

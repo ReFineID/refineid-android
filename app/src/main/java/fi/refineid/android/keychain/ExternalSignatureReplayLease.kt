@@ -221,6 +221,6 @@ private fun ReplayLeaseCancellation.cancelForCleanup() {
     try {
         cancel()
     } catch (_: Exception) {
-        Unit
+        // Cancellation is best-effort; an expired task is equivalent.
     }
 }

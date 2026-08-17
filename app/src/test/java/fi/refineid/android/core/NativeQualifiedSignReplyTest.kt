@@ -132,7 +132,7 @@ class NativeQualifiedSignReplyTest {
 
         assertTrue(consumedBytes.all { it == ZERO_BYTE })
         assertThrows(IllegalStateException::class.java) {
-            submission.consume { Unit }
+            submission.consume { _ -> }
         }
     }
 
