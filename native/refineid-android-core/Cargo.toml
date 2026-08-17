@@ -21,6 +21,14 @@ refineid-pkcs15 = { git = "https://github.com/ReFineID/refineid-core.git", rev =
 refineid-sign = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
 refineid-x509 = { git = "https://github.com/ReFineID/refineid-core.git", rev = "d264da6c55d8cbd6fdf4cc41179731ecc1a20e1e" }
 
+# The contactless crypto - PACE, ECDSA, RSA - lives entirely in the refineid-core
+# dependencies. Optimising every dependency at opt-level 3 even under the dev
+# profile keeps PACE and on-card signing fast in the debug APK (an unoptimised
+# curve/bignum build is several times slower); the crate's own JNI glue stays at
+# the dev opt-level so it remains debuggable.
+[profile.dev.package."*"]
+opt-level = 3
+
 [lints.rust]
 missing_docs = "warn"
 unsafe_code = "warn"
