@@ -43,6 +43,7 @@ internal object NativeAuthenticationSignWire {
     const val WRONG_PIN_TAG = 7
     const val VERIFICATION_REJECTED_TAG = 8
     const val SIGNING_REJECTED_TAG = 9
+    const val PACE_REJECTED_TAG = 10
 
     const val TAG_OFFSET = 0
     const val ALGORITHM_OFFSET = 1
@@ -280,6 +281,7 @@ internal enum class NativeAuthenticationSignFailure {
     WRONG_PIN,
     VERIFICATION_REJECTED,
     SIGNING_REJECTED,
+    PACE_REJECTED,
     BRIDGE_ERROR,
 }
 
@@ -363,6 +365,10 @@ internal object NativeAuthenticationSignReply {
 
                 NativeAuthenticationSignWire.SIGNING_REJECTED_TAG -> {
                     decodeFailure(reply, NativeAuthenticationSignFailure.SIGNING_REJECTED)
+                }
+
+                NativeAuthenticationSignWire.PACE_REJECTED_TAG -> {
+                    decodeFailure(reply, NativeAuthenticationSignFailure.PACE_REJECTED)
                 }
 
                 NativeAuthenticationSignWire.BRIDGE_ERROR_TAG -> {

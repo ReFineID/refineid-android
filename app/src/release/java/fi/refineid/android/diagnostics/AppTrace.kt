@@ -7,9 +7,11 @@ import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
 import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignResult
+import fi.refineid.android.core.NativeCardAccessResult
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativeCertificateReadResult
+import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.core.NativePin1PreflightResult
 import fi.refineid.android.core.NativePin2PreflightResult
 import fi.refineid.android.core.NativeQualifiedCertificate
@@ -22,6 +24,7 @@ import fi.refineid.android.document.QualifiedPdfSigningResult
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
 import fi.refineid.android.network.SigningTimestampAttemptOutcome
+import fi.refineid.android.nfc.NfcReaderStatus
 import fi.refineid.android.usb.AuthenticationStatus
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
@@ -96,6 +99,31 @@ internal object AppTrace {
     fun nativePin2StatusProbeCompleted(
         startedAt: Long,
         result: NativePin2PreflightResult,
+    ) = Unit
+
+    fun nativeCardAccessProbeStarted(level: NativeCardExchangeLevel): Long = 0L
+
+    fun nativeCardAccessProbeCompleted(
+        startedAt: Long,
+        result: NativeCardAccessResult,
+    ) = Unit
+
+    fun nativeContactlessOpenStarted(): Long = 0L
+
+    fun nativeContactlessOpenCompleted(
+        startedAt: Long,
+        result: NativeContactlessOpenResult,
+    ) = Unit
+
+    fun nativeContactlessSignStarted(
+        algorithm: AuthenticationSigningAlgorithm,
+        inputMode: AuthenticationSigningInputMode,
+        inputLength: Int,
+    ): Long = 0L
+
+    fun nativeContactlessSignCompleted(
+        startedAt: Long,
+        result: NativeAuthenticationSignResult,
     ) = Unit
 
     fun nativeAuthenticationSignStarted(
@@ -230,6 +258,34 @@ internal object AppTrace {
         status: ReaderConnectionStatus,
         cardPresence: CardPresence?,
     ) = Unit
+
+    fun nfcAdapterMissing() = Unit
+
+    fun nfcAdapterStateChanged() = Unit
+
+    fun nfcReaderModeChanged(isEnabled: Boolean) = Unit
+
+    fun nfcTagDiscovered(isIsoDep: Boolean) = Unit
+
+    fun nfcSessionOpenFailed() = Unit
+
+    fun nfcSessionClosed() = Unit
+
+    fun nfcTagLost() = Unit
+
+    fun nfcTransceiveFailed() = Unit
+
+    fun nfcProbeResultDiscarded() = Unit
+
+    fun nfcSnapshotPublished(status: NfcReaderStatus) = Unit
+
+    fun nfcSettingsUnavailable() = Unit
+
+    fun nfcConnectStarted() = Unit
+
+    fun nfcConnectIgnored() = Unit
+
+    fun nfcTagAdopted() = Unit
 
     fun ccidEndpointsMissing() = Unit
 

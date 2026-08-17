@@ -111,6 +111,8 @@ pub(crate) enum AuthenticationSignFailure {
     CardUnavailable,
     /// Transport state became unusable or indeterminate.
     Transport,
+    /// The contactless secure channel refused the CAN.
+    PaceRejected,
     /// An impossible local shape reached the bridge.
     Bridge,
 }

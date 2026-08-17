@@ -483,7 +483,11 @@ private fun NativeAuthenticationSignFailure.toAuthenticationFailure(): Authentic
             AuthenticationSignFailure.SIGNING_REJECTED
         }
 
-        NativeAuthenticationSignFailure.BRIDGE_ERROR -> {
+        // The USB path opens no PACE channel; a channel refusal reaching
+        // it is a local impossibility.
+        NativeAuthenticationSignFailure.PACE_REJECTED,
+        NativeAuthenticationSignFailure.BRIDGE_ERROR,
+        -> {
             AuthenticationSignFailure.BRIDGE_ERROR
         }
     }
@@ -722,6 +726,7 @@ internal class CcidUsbSessionOpener(
                                 }
 
                                 NativeCertificateReadFailure.TRANSPORT_ERROR,
+                                NativeCertificateReadFailure.PACE_REJECTED,
                                 NativeCertificateReadFailure.BRIDGE_ERROR,
                                 -> {
                                     CcidSessionOpenResult.TransportError

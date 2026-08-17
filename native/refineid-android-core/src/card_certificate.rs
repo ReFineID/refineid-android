@@ -1,10 +1,8 @@
 //! Typed public-certificate reads and public-key classification.
 
-use refineid_apdu::TransportOutcome;
+use refineid_apdu::{CardTransport, TransportOutcome};
 use refineid_pkcs15::{CertSlot, Pkcs15Error, Pkcs15Ops};
 use refineid_x509::{EcCurve, PublicKey};
-
-use crate::card_transport::{AndroidCardTransport, AndroidTransportError, SingleBlockExchange};
 
 const RSA_2048_BITS: usize = 2_048;
 const RSA_3072_BITS: usize = 3_072;
@@ -31,25 +29,27 @@ pub(crate) enum CertificateReadFailure {
     Rejected,
     Transport,
     InvalidCertificate,
+    /// The contactless secure channel refused the CAN.
+    PaceRejected,
     Bridge,
 }
 
 /// Read EF.4331 and reconstruct its public key before returning its DER.
-pub(crate) fn read_authentication_certificate<Exchange: SingleBlockExchange>(
-    transport: &mut AndroidCardTransport<Exchange>,
+pub(crate) fn read_authentication_certificate<T: CardTransport>(
+    transport: &mut T,
 ) -> Result<CardCertificate, CertificateReadFailure> {
     read_card_certificate(transport, CertSlot::Authentication)
 }
 
 /// Read EF.4332 and reconstruct its public key before returning its DER.
-pub(crate) fn read_qualified_certificate<Exchange: SingleBlockExchange>(
-    transport: &mut AndroidCardTransport<Exchange>,
+pub(crate) fn read_qualified_certificate<T: CardTransport>(
+    transport: &mut T,
 ) -> Result<CardCertificate, CertificateReadFailure> {
     read_card_certificate(transport, CertSlot::Signature)
 }
 
-fn read_card_certificate<Exchange: SingleBlockExchange>(
-    transport: &mut AndroidCardTransport<Exchange>,
+fn read_card_certificate<T: CardTransport>(
+    transport: &mut T,
     slot: CertSlot,
 ) -> Result<CardCertificate, CertificateReadFailure> {
     let certificate = transport.read_certificate(slot).map_err(map_pkcs15_error)?;
@@ -74,7 +74,7 @@ fn classify_public_key(public_key: &PublicKey) -> Result<CardKeyProfile, Certifi
     }
 }
 
-fn map_pkcs15_error(error: Pkcs15Error<AndroidTransportError>) -> CertificateReadFailure {
+pub(crate) fn map_pkcs15_error<E>(error: Pkcs15Error<E>) -> CertificateReadFailure {
     match error {
         Pkcs15Error::Outcome(TransportOutcome::NoCard | TransportOutcome::ReaderRemoved) => {
             CertificateReadFailure::CardUnavailable
@@ -107,11 +107,15 @@ mod tests {
     fn maps_card_and_transport_failures_without_details() {
         let [success_sw1, success_sw2] = StatusWord::Success.as_u16().to_be_bytes();
         assert_eq!(
-            map_pkcs15_error(Pkcs15Error::Outcome(TransportOutcome::NoCard)),
+            map_pkcs15_error::<AndroidTransportError>(Pkcs15Error::Outcome(
+                TransportOutcome::NoCard
+            )),
             CertificateReadFailure::CardUnavailable
         );
         assert_eq!(
-            map_pkcs15_error(Pkcs15Error::Status(StatusWord::FileNotFound)),
+            map_pkcs15_error::<AndroidTransportError>(Pkcs15Error::Status(
+                StatusWord::FileNotFound
+            )),
             CertificateReadFailure::Rejected
         );
         assert_eq!(
@@ -119,17 +123,19 @@ mod tests {
             CertificateReadFailure::Transport
         );
         assert_eq!(
-            map_pkcs15_error(Pkcs15Error::InvalidData("synthetic certificate")),
+            map_pkcs15_error::<AndroidTransportError>(Pkcs15Error::InvalidData(
+                "synthetic certificate"
+            )),
             CertificateReadFailure::InvalidCertificate
         );
         assert_eq!(
-            map_pkcs15_error(Pkcs15Error::Outcome(TransportOutcome::Response(
-                ResponseApdu {
+            map_pkcs15_error::<AndroidTransportError>(Pkcs15Error::Outcome(
+                TransportOutcome::Response(ResponseApdu {
                     body: Vec::new(),
                     sw1: success_sw1,
                     sw2: success_sw2,
-                }
-            ))),
+                })
+            )),
             CertificateReadFailure::Bridge
         );
     }

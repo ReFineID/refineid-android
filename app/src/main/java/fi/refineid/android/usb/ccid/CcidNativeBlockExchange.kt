@@ -1,19 +1,7 @@
 package fi.refineid.android.usb.ccid
 
 import fi.refineid.android.core.NativeBlockExchange
-
-/** Stable tags shared with the narrow Rust callback parser. */
-internal enum class NativeExchangeReplyTag(
-    val wireValue: Byte,
-) {
-    RESPONSE(0),
-    NO_CARD(1),
-    TIMEOUT_UNKNOWN_STATE(2),
-    CARD_RESET(3),
-    PROTOCOL_DESYNC(4),
-    READER_REMOVED(5),
-    BACKEND_FAILURE(6),
-}
+import fi.refineid.android.core.NativeExchangeReplyTag
 
 /** Adapts one claimed CCID session to the synchronous native callback ABI. */
 internal class CcidNativeBlockExchange(

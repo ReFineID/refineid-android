@@ -11,6 +11,14 @@
     <string name="allow">Allow</string>
     <string name="retry">Retry</string>
     <string name="card">Card</string>
+    <string name="nfc">NFC</string>
+    <string name="off">Off</string>
+    <string name="turn_on">Turn on</string>
+    <string name="card_recognized">Card recognized</string>
+    <string name="card_not_supported">Card not supported</string>
+    <string name="can" tools:ignore="Typos">CAN</string>
+    <string name="connect">Connect</string>
+    <string name="wrong_can" tools:ignore="Typos">Wrong CAN</string>
     <string name="present">Present</string>
     <string name="not_present">Not present</string>
     <string name="authentication">Authentication</string>

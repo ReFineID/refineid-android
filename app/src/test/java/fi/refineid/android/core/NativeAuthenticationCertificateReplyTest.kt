@@ -46,6 +46,8 @@ class NativeAuthenticationCertificateReplyTest {
                     NativeCertificateReadFailure.TRANSPORT_ERROR,
                 CERTIFICATE_INVALID to
                     NativeCertificateReadFailure.INVALID_CERTIFICATE,
+                CERTIFICATE_PACE_REJECTED to
+                    NativeCertificateReadFailure.PACE_REJECTED,
                 CERTIFICATE_BRIDGE_ERROR to
                     NativeCertificateReadFailure.BRIDGE_ERROR,
             )
@@ -124,6 +126,7 @@ class NativeAuthenticationCertificateReplyTest {
         const val CERTIFICATE_REJECTED: Byte = 3
         const val CERTIFICATE_TRANSPORT_ERROR: Byte = 4
         const val CERTIFICATE_INVALID: Byte = 5
+        const val CERTIFICATE_PACE_REJECTED: Byte = 6
         const val KEY_PROFILE_RSA_2048: Byte = 0
         const val UNKNOWN_KEY_PROFILE: Byte = 0x7F
         const val SYNTHETIC_DER_TAG: Byte = 0x30

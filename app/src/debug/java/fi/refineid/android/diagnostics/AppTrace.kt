@@ -8,9 +8,11 @@ import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
 import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignResult
+import fi.refineid.android.core.NativeCardAccessResult
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativeCertificateReadResult
+import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.core.NativePin1PreflightResult
 import fi.refineid.android.core.NativePin2PreflightResult
 import fi.refineid.android.core.NativeQualifiedCertificate
@@ -23,6 +25,7 @@ import fi.refineid.android.document.QualifiedPdfSigningResult
 import fi.refineid.android.keychain.ExternalKeyPinAuthorization
 import fi.refineid.android.keychain.ExternalKeySignResult
 import fi.refineid.android.network.SigningTimestampAttemptOutcome
+import fi.refineid.android.nfc.NfcReaderStatus
 import fi.refineid.android.usb.AuthenticationStatus
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
@@ -217,6 +220,59 @@ internal object AppTrace {
             }
         debug(
             "native:pin2-status-probe " + outcome +
+                " duration-us=" + elapsedMicroseconds(startedAt),
+        )
+    }
+
+    fun nativeCardAccessProbeStarted(level: NativeCardExchangeLevel): Long =
+        System.nanoTime().also {
+            debug("native:card-access-probe start level=" + level)
+        }
+
+    fun nativeCardAccessProbeCompleted(
+        startedAt: Long,
+        result: NativeCardAccessResult,
+    ) {
+        debug(
+            "native:card-access-probe result=" + result +
+                " duration-us=" + elapsedMicroseconds(startedAt),
+        )
+    }
+
+    fun nativeContactlessOpenStarted(): Long =
+        System.nanoTime().also {
+            debug("native:contactless-open start")
+        }
+
+    fun nativeContactlessOpenCompleted(
+        startedAt: Long,
+        result: NativeContactlessOpenResult,
+    ) {
+        debug(
+            "native:contactless-open result=" + result +
+                " duration-us=" + elapsedMicroseconds(startedAt),
+        )
+    }
+
+    fun nativeContactlessSignStarted(
+        algorithm: AuthenticationSigningAlgorithm,
+        inputMode: AuthenticationSigningInputMode,
+        inputLength: Int,
+    ): Long =
+        System.nanoTime().also {
+            debug(
+                "native:contactless-sign start algorithm=" + algorithm +
+                    " mode=" + inputMode +
+                    " input-length=" + inputLength,
+            )
+        }
+
+    fun nativeContactlessSignCompleted(
+        startedAt: Long,
+        result: NativeAuthenticationSignResult,
+    ) {
+        debug(
+            "native:contactless-sign result=" + result +
                 " duration-us=" + elapsedMicroseconds(startedAt),
         )
     }
@@ -570,6 +626,62 @@ internal object AppTrace {
             "usb:snapshot status=" + status +
                 " card=" + (cardPresence ?: "unknown"),
         )
+    }
+
+    fun nfcAdapterMissing() {
+        debug("nfc:adapter-missing")
+    }
+
+    fun nfcAdapterStateChanged() {
+        debug("nfc:adapter-state-changed")
+    }
+
+    fun nfcReaderModeChanged(isEnabled: Boolean) {
+        debug("nfc:reader-mode enabled=" + isEnabled)
+    }
+
+    fun nfcTagDiscovered(isIsoDep: Boolean) {
+        debug("nfc:tag-discovered iso-dep=" + isIsoDep)
+    }
+
+    fun nfcSessionOpenFailed() {
+        debug("nfc:session-open-failed")
+    }
+
+    fun nfcSessionClosed() {
+        debug("nfc:session-closed")
+    }
+
+    fun nfcTagLost() {
+        debug("nfc:tag-lost")
+    }
+
+    fun nfcTransceiveFailed() {
+        debug("nfc:transceive-failed")
+    }
+
+    fun nfcProbeResultDiscarded() {
+        debug("nfc:probe-result-discarded")
+    }
+
+    fun nfcSnapshotPublished(status: NfcReaderStatus) {
+        debug("nfc:snapshot status=" + status)
+    }
+
+    fun nfcSettingsUnavailable() {
+        debug("nfc:settings-unavailable")
+    }
+
+    fun nfcConnectStarted() {
+        debug("nfc:connect-started")
+    }
+
+    fun nfcConnectIgnored() {
+        debug("nfc:connect ignored=not-recognized")
+    }
+
+    fun nfcTagAdopted() {
+        debug("nfc:tag-adopted")
     }
 
     fun ccidEndpointsMissing() {

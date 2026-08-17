@@ -55,23 +55,16 @@ import fi.refineid.android.browser.ReFineIdCardProviderRegistration
 import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
-import fi.refineid.android.usb.CardPresence
-import fi.refineid.android.usb.ReaderConnectionStatus
-import fi.refineid.android.usb.UsbReaderSnapshot
 import java.security.cert.X509Certificate
 import java.util.concurrent.atomic.AtomicBoolean
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun BrowserHarness(
-    snapshot: UsbReaderSnapshot,
+    isCardReady: Boolean,
     cardService: AuthenticationCardService?,
 ) {
-    if (
-        cardService == null ||
-        snapshot.status != ReaderConnectionStatus.READY ||
-        snapshot.cardPresence != CardPresence.PRESENT
-    ) {
+    if (cardService == null || !isCardReady) {
         return
     }
     var isOpen by remember { mutableStateOf(false) }

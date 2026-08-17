@@ -91,6 +91,11 @@ instrumented development harness, but it is not the product boundary.
 - Live credential-free publication of the card leaf and its verified issuing
   intermediate through the external-key provider
 - Live credential-free qualified-certificate and PIN2 preflight checks
+- NFC reader-mode discovery with a credential-free contactless
+  `EF.CardAccess` probe that recognizes the published FINEID PACE profile
+- One-shot contactless operations behind PACE and secure messaging with a
+  holder-entered CAN: certificate read, counter-safe PIN1 preflight, and
+  authentication signing through the shared browser card service
 - No embedded browser, Internet permission, or logging in the release build
 - Compose UI Test v2 and UI Automator 2.4 instrumentation on a physical device
 

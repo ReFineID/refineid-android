@@ -42,9 +42,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import fi.refineid.android.R
 import fi.refineid.android.core.AuthenticationCardService
+import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.core.QualifiedCardService
 import fi.refineid.android.diagnostics.BuildDiagnostics
+import fi.refineid.android.nfc.NfcReaderSnapshot
+import fi.refineid.android.nfc.NfcReaderStatus
 import fi.refineid.android.settings.TimestampAuthorityRepository
 import fi.refineid.android.usb.AuthenticationStatus
 import fi.refineid.android.usb.CardPresence
@@ -60,6 +63,10 @@ internal fun MainScreen(
     browserCardService: AuthenticationCardService? = null,
     qualifiedCardService: QualifiedCardService? = null,
     timestampAuthorityRepository: TimestampAuthorityRepository? = null,
+    nfcSnapshot: NfcReaderSnapshot = NfcReaderSnapshot(),
+    onOpenNfcSettings: () -> Unit = {},
+    onNfcConnect: (CanSubmission) -> Unit = {},
+    nfcCardService: AuthenticationCardService? = null,
 ) {
     Scaffold(
         modifier =
@@ -90,6 +97,16 @@ internal fun MainScreen(
                 onRequestPermission = onRequestPermission,
             )
 
+            // Devices without an NFC antenna get no disabled control,
+            // mirroring the Apple reference behavior.
+            if (nfcSnapshot.status != NfcReaderStatus.NOT_AVAILABLE) {
+                NfcCard(
+                    snapshot = nfcSnapshot,
+                    onOpenNfcSettings = onOpenNfcSettings,
+                    onConnect = onNfcConnect,
+                )
+            }
+
             TimestampAuthoritySettingsHarness(timestampAuthorityRepository)
 
             DocumentSigningHarness(
@@ -109,9 +126,18 @@ internal fun MainScreen(
                 )
             }
 
+            val usbCardReady =
+                snapshot.status == ReaderConnectionStatus.READY &&
+                    snapshot.cardPresence == CardPresence.PRESENT
+            val nfcCardReady = nfcSnapshot.status == NfcReaderStatus.CARD_READY
             BrowserHarness(
-                snapshot = snapshot,
-                cardService = browserCardService,
+                isCardReady = usbCardReady || nfcCardReady,
+                cardService =
+                    if (usbCardReady) {
+                        browserCardService
+                    } else {
+                        nfcCardService
+                    },
             )
         }
     }
@@ -221,6 +247,206 @@ private fun AuthenticationStatusText(status: AuthenticationStatus) {
 internal val Pin1InputTransformation =
     InputTransformation {
         if (!Pin1Submission.acceptsEntry(asCharSequence())) {
+            revertAllChanges()
+        }
+    }
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun NfcCard(
+    snapshot: NfcReaderSnapshot,
+    onOpenNfcSettings: () -> Unit,
+    onConnect: (CanSubmission) -> Unit,
+) {
+    val statusColor =
+        when (snapshot.status) {
+            NfcReaderStatus.CARD_RECOGNIZED -> SUCCESS_STATUS_COLOR
+
+            NfcReaderStatus.CARD_READY -> SUCCESS_STATUS_COLOR
+
+            NfcReaderStatus.CARD_NOT_SUPPORTED -> MaterialTheme.colorScheme.error
+
+            NfcReaderStatus.WRONG_CAN -> MaterialTheme.colorScheme.error
+
+            NfcReaderStatus.TRANSPORT_ERROR -> MaterialTheme.colorScheme.error
+
+            NfcReaderStatus.TURNED_OFF -> PERMISSION_STATUS_COLOR
+
+            NfcReaderStatus.CHECKING -> MaterialTheme.colorScheme.primary
+
+            NfcReaderStatus.CONNECTING -> MaterialTheme.colorScheme.primary
+
+            NfcReaderStatus.WAITING_FOR_CARD,
+            NfcReaderStatus.NOT_AVAILABLE,
+            -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    val statusTitle =
+        when (snapshot.status) {
+            NfcReaderStatus.WAITING_FOR_CARD -> {
+                stringResource(R.string.ready)
+            }
+
+            NfcReaderStatus.CHECKING,
+            NfcReaderStatus.CONNECTING,
+            -> {
+                stringResource(R.string.checking)
+            }
+
+            NfcReaderStatus.CARD_RECOGNIZED -> {
+                stringResource(R.string.card_recognized)
+            }
+
+            NfcReaderStatus.CARD_READY -> {
+                stringResource(R.string.ready)
+            }
+
+            NfcReaderStatus.WRONG_CAN -> {
+                stringResource(R.string.wrong_can)
+            }
+
+            NfcReaderStatus.CARD_NOT_SUPPORTED -> {
+                stringResource(R.string.card_not_supported)
+            }
+
+            NfcReaderStatus.TRANSPORT_ERROR -> {
+                stringResource(R.string.error)
+            }
+
+            NfcReaderStatus.TURNED_OFF,
+            NfcReaderStatus.NOT_AVAILABLE,
+            -> {
+                stringResource(R.string.off)
+            }
+        }
+
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(UiAutomationIds.NFC_CARD),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = CARD_ELEVATION),
+        shape = RoundedCornerShape(CARD_CORNER_RADIUS),
+    ) {
+        Column(
+            modifier = Modifier.padding(CARD_PADDING),
+            verticalArrangement = Arrangement.spacedBy(CARD_ITEM_SPACING),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(READER_STATUS_ITEM_SPACING),
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(READER_STATUS_INDICATOR_SIZE)
+                            .background(statusColor, CircleShape),
+                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.nfc),
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Text(
+                        text = statusTitle,
+                        color = statusColor,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+
+            if (
+                snapshot.status == NfcReaderStatus.CARD_RECOGNIZED ||
+                snapshot.status == NfcReaderStatus.WRONG_CAN ||
+                snapshot.status == NfcReaderStatus.TRANSPORT_ERROR
+            ) {
+                NfcCanEntry(onConnect = onConnect)
+            }
+
+            if (snapshot.status == NfcReaderStatus.CARD_READY) {
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = stringResource(R.string.card),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = stringResource(R.string.present),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+
+            if (snapshot.status == NfcReaderStatus.TURNED_OFF) {
+                Button(
+                    onClick = onOpenNfcSettings,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag(UiAutomationIds.NFC_ACTION),
+                ) {
+                    Text(stringResource(R.string.turn_on))
+                }
+            }
+        }
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun NfcCanEntry(onConnect: (CanSubmission) -> Unit) {
+    val canState = remember { TextFieldState() }
+    DisposableEffect(canState) {
+        onDispose(canState::clearText)
+    }
+    val submit = {
+        val submission =
+            if (CanSubmission.isComplete(canState.text)) {
+                CanSubmission.from(canState.text)
+            } else {
+                null
+            }
+        canState.clearText()
+        submission?.let(onConnect)
+        Unit
+    }
+
+    SecureTextField(
+        state = canState,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(UiAutomationIds.NFC_CAN_FIELD),
+        label = { Text(stringResource(R.string.can)) },
+        inputTransformation = CanInputTransformation,
+        textObfuscationMode = TextObfuscationMode.Hidden,
+        keyboardOptions =
+            KeyboardOptions(
+                autoCorrectEnabled = false,
+                keyboardType = KeyboardType.NumberPassword,
+                imeAction = ImeAction.Done,
+            ),
+    )
+    Button(
+        onClick = submit,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(UiAutomationIds.NFC_CONNECT_ACTION),
+        enabled = CanSubmission.isComplete(canState.text),
+    ) {
+        Text(stringResource(R.string.connect))
+    }
+}
+
+internal val CanInputTransformation =
+    InputTransformation {
+        if (!CanSubmission.acceptsEntry(asCharSequence())) {
             revertAllChanges()
         }
     }

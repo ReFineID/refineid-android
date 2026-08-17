@@ -108,6 +108,7 @@ internal enum class NativeCertificateReadFailure {
     REJECTED,
     TRANSPORT_ERROR,
     INVALID_CERTIFICATE,
+    PACE_REJECTED,
     BRIDGE_ERROR,
 }
 
@@ -128,6 +129,19 @@ internal interface NativeBlockExchange {
     fun exchangePublic(block: ByteArray): ByteArray
 
     fun exchangeCredential(block: ByteArray): ByteArray
+}
+
+/** Stable tags shared with the narrow Rust callback parser. */
+internal enum class NativeExchangeReplyTag(
+    val wireValue: Byte,
+) {
+    RESPONSE(0),
+    NO_CARD(1),
+    TIMEOUT_UNKNOWN_STATE(2),
+    CARD_RESET(3),
+    PROTOCOL_DESYNC(4),
+    READER_REMOVED(5),
+    BACKEND_FAILURE(6),
 }
 
 internal object NativeCore {
@@ -458,6 +472,13 @@ internal object NativeCertificateReply {
                     )
                 }
 
+                CERTIFICATE_PACE_REJECTED -> {
+                    decodeFailure(
+                        reply,
+                        NativeCertificateReadFailure.PACE_REJECTED,
+                    )
+                }
+
                 CERTIFICATE_BRIDGE_ERROR -> {
                     decodeFailure(
                         reply,
@@ -517,6 +538,7 @@ internal object NativeCertificateReply {
     private const val CERTIFICATE_REJECTED = 3
     private const val CERTIFICATE_TRANSPORT_ERROR = 4
     private const val CERTIFICATE_INVALID = 5
+    private const val CERTIFICATE_PACE_REJECTED = 6
 
     private const val KEY_PROFILE_RSA_2048 = 0
     private const val KEY_PROFILE_RSA_3072 = 1

@@ -141,6 +141,7 @@ class NativeAuthenticationSignReplyTest {
                 NativeAuthenticationSignFailure.WRONG_PIN,
                 NativeAuthenticationSignFailure.VERIFICATION_REJECTED,
                 NativeAuthenticationSignFailure.SIGNING_REJECTED,
+                NativeAuthenticationSignFailure.PACE_REJECTED,
             )
         val tags =
             listOf(
@@ -153,6 +154,7 @@ class NativeAuthenticationSignReplyTest {
                 NativeAuthenticationSignWire.WRONG_PIN_TAG,
                 NativeAuthenticationSignWire.VERIFICATION_REJECTED_TAG,
                 NativeAuthenticationSignWire.SIGNING_REJECTED_TAG,
+                NativeAuthenticationSignWire.PACE_REJECTED_TAG,
             )
         for ((tag, failure) in tags.zip(expected)) {
             val result = NativeAuthenticationSignReply.decode(byteArrayOf(tag.toByte()))
@@ -187,7 +189,7 @@ class NativeAuthenticationSignReplyTest {
 
         assertTrue(consumedBytes.all { it == 0.toByte() })
         assertThrows(IllegalStateException::class.java) {
-            submission.consume { Unit }
+            submission.consume { _ -> }
         }
     }
 

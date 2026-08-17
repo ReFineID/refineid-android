@@ -5,7 +5,11 @@
     <uses-feature
         android:name="android.hardware.usb.host"
         android:required="true" />
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="false" />
 
+    <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
     <!-- Product images sign this APK with the platform key; see ADR 0027. -->
     <uses-permission

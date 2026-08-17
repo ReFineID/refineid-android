@@ -1,5 +1,6 @@
 package fi.refineid.android.usb.ccid
 
+import fi.refineid.android.core.NativeExchangeReplyTag
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test

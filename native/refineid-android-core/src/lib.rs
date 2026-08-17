@@ -6,8 +6,10 @@
 //! this border.
 
 mod authentication_signer;
+mod card_access;
 mod card_certificate;
 mod card_transport;
+mod contactless;
 mod jni_card_exchange;
 mod pin1_status;
 mod pin2_status;
@@ -17,11 +19,13 @@ use authentication_signer::{
     AuthenticationSignFailure, AuthenticationSignature, AuthenticationSigningAlgorithm,
     AuthenticationSigningInput, authenticate_and_sign,
 };
+use card_access::{CardAccessProbeFailure, CardAccessSummary, probe_card_access};
 use card_certificate::{
     CardCertificate, CardKeyProfile, CertificateReadFailure, read_authentication_certificate,
     read_qualified_certificate,
 };
 use card_transport::{AndroidCardTransport, CardExchangeLevel};
+use contactless::{contactless_authenticate_and_sign, contactless_open};
 use jni::objects::{JByteArray, JClass, JObject};
 use jni::sys::jint;
 use jni::{Env, NativeMethod};
@@ -58,6 +62,17 @@ const CERTIFICATE_CARD_UNAVAILABLE: u8 = 2;
 const CERTIFICATE_REJECTED: u8 = 3;
 const CERTIFICATE_TRANSPORT_ERROR: u8 = 4;
 const CERTIFICATE_INVALID: u8 = 5;
+const CERTIFICATE_PACE_REJECTED: u8 = 6;
+
+const CARD_ACCESS_BRIDGE_ERROR: u8 = 0;
+const CARD_ACCESS_SUCCEEDED: u8 = 1;
+const CARD_ACCESS_CARD_UNAVAILABLE: u8 = 2;
+const CARD_ACCESS_REJECTED: u8 = 3;
+const CARD_ACCESS_TRANSPORT_ERROR: u8 = 4;
+const CARD_ACCESS_INVALID: u8 = 5;
+
+const PUBLISHED_PROFILE_ABSENT: u8 = 0;
+const PUBLISHED_PROFILE_PRESENT: u8 = 1;
 
 const PIN1_PREFLIGHT_BRIDGE_ERROR: u8 = 0;
 const PIN1_PREFLIGHT_SUCCEEDED: u8 = 1;
@@ -79,6 +94,7 @@ const AUTHENTICATION_SIGNATURE_PIN_LOCKED: u8 = 6;
 const AUTHENTICATION_SIGNATURE_WRONG_PIN: u8 = 7;
 const AUTHENTICATION_SIGNATURE_VERIFICATION_REJECTED: u8 = 8;
 const AUTHENTICATION_SIGNATURE_SIGNING_REJECTED: u8 = 9;
+const AUTHENTICATION_SIGNATURE_PACE_REJECTED: u8 = 10;
 
 const AUTHENTICATION_ALGORITHM_RSA_PKCS1_SHA256: u8 = 0;
 const AUTHENTICATION_ALGORITHM_RSA_PSS_SHA256: u8 = 1;
@@ -140,7 +156,10 @@ const KEY_PROFILE_ECDSA_P256: u8 = 2;
 const KEY_PROFILE_ECDSA_P384: u8 = 3;
 
 const CERTIFICATE_REPLY_HEADER_LENGTH: usize = 2;
+const CARD_ACCESS_REPLY_LENGTH: usize = 3;
+const CONTACTLESS_OPEN_HEADER_LENGTH: usize = 2;
 const PIN1_PREFLIGHT_REPLY_LENGTH: usize = 5;
+const PIN1_PREFLIGHT_REPLY_LENGTH_BYTE: u8 = PIN1_PREFLIGHT_REPLY_LENGTH as u8;
 const PIN2_PREFLIGHT_REPLY_LENGTH: usize = 5;
 const AUTHENTICATION_SIGNATURE_REPLY_HEADER_LENGTH: usize = 2;
 const QUALIFIED_SIGNATURE_REPLY_HEADER_LENGTH: usize = 2;
@@ -214,6 +233,33 @@ const _: NativeMethod = jni::native_method! {
         exchange_level: jint,
         callback: JObject,
     ) -> jint,
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeContactlessCore",
+    static extern fn probe_card_access_native(
+        exchange_level: jint,
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeContactlessCore",
+    static extern fn contactless_open_native(
+        can: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeContactlessCore",
+    static extern fn contactless_authenticate_and_sign_native(
+        can: [jbyte],
+        request: jint,
+        pin: [jbyte],
+        message: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
 };
 
 fn validate_atr_native<'local>(
@@ -310,6 +356,131 @@ fn read_qualified_certificate_native<'local>(
         vec![CERTIFICATE_BRIDGE_ERROR]
     } else {
         encode_certificate_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn probe_card_access_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    exchange_level: jint,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let Some(level) = exchange_level_from_jint(exchange_level) else {
+        return env.byte_array_from_slice(&[CARD_ACCESS_BRIDGE_ERROR]);
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let mut transport = AndroidCardTransport::new(exchange, level);
+        let result = probe_card_access(&mut transport);
+        let exchange = transport.into_exchange();
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![CARD_ACCESS_BRIDGE_ERROR]
+    } else {
+        encode_card_access_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn contactless_open_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    can: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let can_bytes = take_secret_bytes(env, &can)?;
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let (result, exchange) = contactless_open(transport, can_bytes);
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![CERTIFICATE_BRIDGE_ERROR]
+    } else {
+        encode_contactless_open_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn contactless_authenticate_and_sign_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    can: JByteArray<'local>,
+    request: jint,
+    pin: JByteArray<'local>,
+    message: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let mut can_bytes = take_secret_bytes(env, &can)?;
+    let mut pin_bytes = match take_secret_bytes(env, &pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            can_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let Some((algorithm, input_mode)) = authentication_request_from_jint(request) else {
+        can_bytes.fill(0);
+        pin_bytes.fill(0);
+        return one_byte_reply(env, AUTHENTICATION_SIGNATURE_BRIDGE_ERROR);
+    };
+    let message_length = match message.len(env) {
+        Ok(length) => length,
+        Err(error) => {
+            can_bytes.fill(0);
+            pin_bytes.fill(0);
+            return Err(error);
+        }
+    };
+    if message_length > MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH {
+        can_bytes.fill(0);
+        pin_bytes.fill(0);
+        return one_byte_reply(env, AUTHENTICATION_SIGNATURE_BRIDGE_ERROR);
+    }
+    let mut message_bytes = match env.convert_byte_array(&message) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            can_bytes.fill(0);
+            pin_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let input = match input_mode {
+            AuthenticationSigningInputMode::Message => {
+                AuthenticationSigningInput::Message(&message_bytes)
+            }
+            AuthenticationSigningInputMode::Prehashed => {
+                AuthenticationSigningInput::Prehashed(&message_bytes)
+            }
+        };
+        let (result, exchange) =
+            contactless_authenticate_and_sign(transport, can_bytes, algorithm, pin_bytes, input);
+        (result, exchange.bridge_failed())
+    };
+    message_bytes.fill(0);
+
+    let mut reply = if bridge_failed {
+        vec![AUTHENTICATION_SIGNATURE_BRIDGE_ERROR]
+    } else {
+        encode_authentication_signature_reply(result)
     };
     let java_reply = env.byte_array_from_slice(&reply);
     reply.fill(0);
@@ -538,6 +709,27 @@ fn qualified_sign_native<'local>(
     java_reply
 }
 
+/// Copy a caller-owned secret array, clearing the Java copy immediately.
+/// The returned bytes are the only remaining copy and must be zeroized
+/// by the caller on every path.
+fn take_secret_bytes(
+    env: &mut Env<'_>,
+    array: &JByteArray<'_>,
+) -> Result<Vec<u8>, jni::errors::Error> {
+    let mut bytes = match env.convert_byte_array(array) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let _ = clear_java_byte_array(env, array);
+            return Err(error);
+        }
+    };
+    if let Err(error) = clear_java_byte_array(env, array) {
+        bytes.fill(0);
+        return Err(error);
+    }
+    Ok(bytes)
+}
+
 fn clear_java_byte_array(env: &Env<'_>, array: &JByteArray<'_>) -> Result<(), jni::errors::Error> {
     const ZEROES: [i8; JAVA_ARRAY_CLEAR_CHUNK_LENGTH] = [0; JAVA_ARRAY_CLEAR_CHUNK_LENGTH];
     let length = array.len(env)?;
@@ -703,7 +895,56 @@ fn encode_certificate_reply(result: Result<CardCertificate, CertificateReadFailu
             CertificateReadFailure::Rejected => CERTIFICATE_REJECTED,
             CertificateReadFailure::Transport => CERTIFICATE_TRANSPORT_ERROR,
             CertificateReadFailure::InvalidCertificate => CERTIFICATE_INVALID,
+            CertificateReadFailure::PaceRejected => CERTIFICATE_PACE_REJECTED,
             CertificateReadFailure::Bridge => CERTIFICATE_BRIDGE_ERROR,
+        }],
+    }
+}
+
+/// The contactless open reply nests the two established vocabularies:
+/// `[CERTIFICATE_SUCCEEDED, preflight-reply length, preflight reply,
+/// certificate reply]` on success, or one certificate-vocabulary failure
+/// byte. Kotlin splits the wrapper and reuses both strict sub-decoders.
+fn encode_contactless_open_reply(
+    result: Result<(CardCertificate, Pin1Preflight), CertificateReadFailure>,
+) -> Vec<u8> {
+    match result {
+        Ok((certificate, preflight)) => {
+            let mut preflight_reply = encode_pin1_preflight_reply(Ok(preflight));
+            let mut certificate_reply = encode_certificate_reply(Ok(certificate));
+            let mut reply = Vec::with_capacity(
+                CONTACTLESS_OPEN_HEADER_LENGTH + preflight_reply.len() + certificate_reply.len(),
+            );
+            reply.push(CERTIFICATE_SUCCEEDED);
+            reply.push(PIN1_PREFLIGHT_REPLY_LENGTH_BYTE);
+            reply.append(&mut preflight_reply);
+            reply.append(&mut certificate_reply);
+            reply
+        }
+        Err(failure) => encode_certificate_reply(Err(failure)),
+    }
+}
+
+fn encode_card_access_reply(result: Result<CardAccessSummary, CardAccessProbeFailure>) -> Vec<u8> {
+    match result {
+        Ok(summary) => {
+            let reply: [u8; CARD_ACCESS_REPLY_LENGTH] = [
+                CARD_ACCESS_SUCCEEDED,
+                if summary.supports_published_profile {
+                    PUBLISHED_PROFILE_PRESENT
+                } else {
+                    PUBLISHED_PROFILE_ABSENT
+                },
+                summary.pace_entry_count,
+            ];
+            reply.to_vec()
+        }
+        Err(failure) => vec![match failure {
+            CardAccessProbeFailure::CardUnavailable => CARD_ACCESS_CARD_UNAVAILABLE,
+            CardAccessProbeFailure::Rejected => CARD_ACCESS_REJECTED,
+            CardAccessProbeFailure::Transport => CARD_ACCESS_TRANSPORT_ERROR,
+            CardAccessProbeFailure::Invalid => CARD_ACCESS_INVALID,
+            CardAccessProbeFailure::Bridge => CARD_ACCESS_BRIDGE_ERROR,
         }],
     }
 }
@@ -825,6 +1066,7 @@ fn encode_authentication_signature_reply(
             AuthenticationSignFailure::SigningRejected => AUTHENTICATION_SIGNATURE_SIGNING_REJECTED,
             AuthenticationSignFailure::CardUnavailable => AUTHENTICATION_SIGNATURE_CARD_UNAVAILABLE,
             AuthenticationSignFailure::Transport => AUTHENTICATION_SIGNATURE_TRANSPORT_ERROR,
+            AuthenticationSignFailure::PaceRejected => AUTHENTICATION_SIGNATURE_PACE_REJECTED,
             AuthenticationSignFailure::Bridge => AUTHENTICATION_SIGNATURE_BRIDGE_ERROR,
         }],
     }
@@ -881,26 +1123,32 @@ mod tests {
         AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA256, AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA384,
         AUTHENTICATION_PREHASHED_RSA_PKCS1_SHA512, AUTHENTICATION_PREHASHED_RSA_PSS_SHA256,
         AUTHENTICATION_PREHASHED_RSA_PSS_SHA384, AUTHENTICATION_PREHASHED_RSA_PSS_SHA512,
-        AUTHENTICATION_SIGNATURE_CARD_UNAVAILABLE, AUTHENTICATION_SIGNATURE_REPLY_HEADER_LENGTH,
-        AUTHENTICATION_SIGNATURE_SUCCEEDED, CARD_OPERATION_CARD_UNAVAILABLE,
-        CARD_OPERATION_REJECTED, CARD_OPERATION_SUCCEEDED, CARD_OPERATION_TRANSPORT_ERROR,
-        CERTIFICATE_CARD_UNAVAILABLE, CERTIFICATE_INVALID, CERTIFICATE_REPLY_HEADER_LENGTH,
+        AUTHENTICATION_SIGNATURE_CARD_UNAVAILABLE, AUTHENTICATION_SIGNATURE_PACE_REJECTED,
+        AUTHENTICATION_SIGNATURE_REPLY_HEADER_LENGTH, AUTHENTICATION_SIGNATURE_SUCCEEDED,
+        CARD_ACCESS_BRIDGE_ERROR, CARD_ACCESS_CARD_UNAVAILABLE, CARD_ACCESS_INVALID,
+        CARD_ACCESS_REJECTED, CARD_ACCESS_REPLY_LENGTH, CARD_ACCESS_SUCCEEDED,
+        CARD_ACCESS_TRANSPORT_ERROR, CARD_OPERATION_CARD_UNAVAILABLE, CARD_OPERATION_REJECTED,
+        CARD_OPERATION_SUCCEEDED, CARD_OPERATION_TRANSPORT_ERROR, CERTIFICATE_CARD_UNAVAILABLE,
+        CERTIFICATE_INVALID, CERTIFICATE_PACE_REJECTED, CERTIFICATE_REPLY_HEADER_LENGTH,
         CERTIFICATE_SUCCEEDED, EXCHANGE_LEVEL_APDU, EXCHANGE_LEVEL_T0_TPDU, KEY_PROFILE_RSA_2048,
         NO_RETRY_COUNT, PIN_REFERENCE_CITIZEN, PIN1_PREFLIGHT_BRIDGE_ERROR,
-        PIN1_PREFLIGHT_CARD_UNAVAILABLE, PIN1_PREFLIGHT_REPLY_LENGTH, PIN1_PREFLIGHT_SUCCEEDED,
-        PIN1_STATE_REMAINING, PIN2_PREFLIGHT_BRIDGE_ERROR, PIN2_PREFLIGHT_CARD_UNAVAILABLE,
-        PIN2_PREFLIGHT_REPLY_LENGTH, PIN2_PREFLIGHT_SUCCEEDED, PIN2_STATE_REMAINING,
-        POLICY_PERMITTED, QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384,
+        PIN1_PREFLIGHT_CARD_UNAVAILABLE, PIN1_PREFLIGHT_REPLY_LENGTH,
+        PIN1_PREFLIGHT_REPLY_LENGTH_BYTE, PIN1_PREFLIGHT_SUCCEEDED, PIN1_STATE_REMAINING,
+        PIN2_PREFLIGHT_BRIDGE_ERROR, PIN2_PREFLIGHT_CARD_UNAVAILABLE, PIN2_PREFLIGHT_REPLY_LENGTH,
+        PIN2_PREFLIGHT_SUCCEEDED, PIN2_STATE_REMAINING, POLICY_PERMITTED, PUBLISHED_PROFILE_ABSENT,
+        PUBLISHED_PROFILE_PRESENT, QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384,
         QUALIFIED_SIGNATURE_CARD_UNAVAILABLE, QUALIFIED_SIGNATURE_REPLY_HEADER_LENGTH,
         QUALIFIED_SIGNATURE_SUCCEEDED, authentication_algorithm_from_jint,
         authentication_request_from_jint, encode_authentication_signature_reply,
-        encode_certificate_reply, encode_pin1_preflight_reply, encode_pin2_preflight_reply,
-        encode_qualified_signature_reply, exchange_level_from_jint, map_pkcs15_selection_result,
-        qualified_algorithm_from_jint, validate_atr_bytes,
+        encode_card_access_reply, encode_certificate_reply, encode_contactless_open_reply,
+        encode_pin1_preflight_reply, encode_pin2_preflight_reply, encode_qualified_signature_reply,
+        exchange_level_from_jint, map_pkcs15_selection_result, qualified_algorithm_from_jint,
+        validate_atr_bytes,
     };
     use crate::authentication_signer::{
         AuthenticationSignFailure, AuthenticationSignature, AuthenticationSigningAlgorithm,
     };
+    use crate::card_access::{CardAccessProbeFailure, CardAccessSummary};
     use crate::card_certificate::{CardCertificate, CardKeyProfile, CertificateReadFailure};
     use crate::card_transport::{AndroidTransportError, CardExchangeLevel};
     use crate::pin1_status::{Pin1Preflight, Pin1PreflightFailure, Pin1State};
@@ -1188,6 +1436,93 @@ mod tests {
     }
 
     #[test]
+    fn encodes_card_access_summary_and_typed_failures() {
+        const SYNTHETIC_PACE_ENTRY_COUNT: u8 = 2;
+        let published = encode_card_access_reply(Ok(CardAccessSummary {
+            supports_published_profile: true,
+            pace_entry_count: SYNTHETIC_PACE_ENTRY_COUNT,
+        }));
+        assert_eq!(
+            published,
+            vec![
+                CARD_ACCESS_SUCCEEDED,
+                PUBLISHED_PROFILE_PRESENT,
+                SYNTHETIC_PACE_ENTRY_COUNT,
+            ]
+        );
+        assert_eq!(published.len(), CARD_ACCESS_REPLY_LENGTH);
+        assert_eq!(
+            encode_card_access_reply(Ok(CardAccessSummary {
+                supports_published_profile: false,
+                pace_entry_count: 1,
+            })),
+            vec![CARD_ACCESS_SUCCEEDED, PUBLISHED_PROFILE_ABSENT, 1]
+        );
+        assert_eq!(
+            encode_card_access_reply(Err(CardAccessProbeFailure::CardUnavailable)),
+            vec![CARD_ACCESS_CARD_UNAVAILABLE]
+        );
+        assert_eq!(
+            encode_card_access_reply(Err(CardAccessProbeFailure::Rejected)),
+            vec![CARD_ACCESS_REJECTED]
+        );
+        assert_eq!(
+            encode_card_access_reply(Err(CardAccessProbeFailure::Transport)),
+            vec![CARD_ACCESS_TRANSPORT_ERROR]
+        );
+        assert_eq!(
+            encode_card_access_reply(Err(CardAccessProbeFailure::Invalid)),
+            vec![CARD_ACCESS_INVALID]
+        );
+        assert_eq!(
+            encode_card_access_reply(Err(CardAccessProbeFailure::Bridge)),
+            vec![CARD_ACCESS_BRIDGE_ERROR]
+        );
+    }
+
+    #[test]
+    fn encodes_contactless_open_as_nested_established_replies() {
+        const SYNTHETIC_DER: &[u8] = &[SYNTHETIC_DER_SEQUENCE_TAG, SYNTHETIC_DER_EMPTY_LENGTH];
+        let success = encode_contactless_open_reply(Ok((
+            CardCertificate {
+                profile: CardKeyProfile::Rsa2048,
+                der: SYNTHETIC_DER.to_vec(),
+            },
+            Pin1Preflight {
+                scheme: PinReferenceScheme::Citizen,
+                state: Pin1State::Remaining(SYNTHETIC_PIN_RETRY_COUNT),
+                consumer_authentication_permitted: true,
+            },
+        )));
+        assert_eq!(
+            success,
+            [
+                &[
+                    CERTIFICATE_SUCCEEDED,
+                    PIN1_PREFLIGHT_REPLY_LENGTH_BYTE,
+                    PIN1_PREFLIGHT_SUCCEEDED,
+                    PIN_REFERENCE_CITIZEN,
+                    PIN1_STATE_REMAINING,
+                    SYNTHETIC_PIN_RETRY_COUNT,
+                    POLICY_PERMITTED,
+                    CERTIFICATE_SUCCEEDED,
+                    KEY_PROFILE_RSA_2048,
+                ],
+                SYNTHETIC_DER,
+            ]
+            .concat()
+        );
+        assert_eq!(
+            encode_contactless_open_reply(Err(CertificateReadFailure::PaceRejected)),
+            vec![CERTIFICATE_PACE_REJECTED]
+        );
+        assert_eq!(
+            encode_contactless_open_reply(Err(CertificateReadFailure::CardUnavailable)),
+            vec![CERTIFICATE_CARD_UNAVAILABLE]
+        );
+    }
+
+    #[test]
     fn encodes_pin1_preflight_without_raw_card_values() {
         let success = encode_pin1_preflight_reply(Ok(Pin1Preflight {
             scheme: PinReferenceScheme::Citizen,
@@ -1269,6 +1604,10 @@ mod tests {
         assert_eq!(
             encode_authentication_signature_reply(Err(AuthenticationSignFailure::CardUnavailable,)),
             vec![AUTHENTICATION_SIGNATURE_CARD_UNAVAILABLE]
+        );
+        assert_eq!(
+            encode_authentication_signature_reply(Err(AuthenticationSignFailure::PaceRejected)),
+            vec![AUTHENTICATION_SIGNATURE_PACE_REJECTED]
         );
     }
 

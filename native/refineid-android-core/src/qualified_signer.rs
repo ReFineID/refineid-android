@@ -212,7 +212,11 @@ const fn map_certificate_failure(failure: CertificateReadFailure) -> QualifiedSi
         CertificateReadFailure::Rejected => QualifiedSignFailure::CertificateRejected,
         CertificateReadFailure::Transport => QualifiedSignFailure::Transport,
         CertificateReadFailure::InvalidCertificate => QualifiedSignFailure::InvalidCertificate,
-        CertificateReadFailure::Bridge => QualifiedSignFailure::Bridge,
+        // The qualified path never opens a PACE channel; a channel
+        // refusal reaching it is a local impossibility.
+        CertificateReadFailure::PaceRejected | CertificateReadFailure::Bridge => {
+            QualifiedSignFailure::Bridge
+        }
     }
 }
 
