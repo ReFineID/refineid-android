@@ -129,14 +129,12 @@ internal fun MainScreen(
             val usbCardReady =
                 snapshot.status == ReaderConnectionStatus.READY &&
                     snapshot.cardPresence == CardPresence.PRESENT
-            val nfcCardReady = nfcSnapshot.status == NfcReaderStatus.CARD_READY
             BrowserHarness(
-                isCardReady = usbCardReady || nfcCardReady,
                 cardService =
                     if (usbCardReady) {
                         browserCardService
                     } else {
-                        nfcCardService
+                        nfcCardService ?: browserCardService
                     },
             )
         }

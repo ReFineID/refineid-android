@@ -64,11 +64,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
-internal fun BrowserHarness(
-    isCardReady: Boolean,
-    cardService: AuthenticationCardService?,
-) {
-    if (cardService == null || !isCardReady) {
+internal fun BrowserHarness(cardService: AuthenticationCardService?) {
+    if (cardService == null) {
         return
     }
     var isOpen by remember { mutableStateOf(false) }
