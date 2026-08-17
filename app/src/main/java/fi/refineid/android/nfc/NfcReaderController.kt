@@ -58,6 +58,9 @@ internal class NfcReaderController(
     @Volatile
     private var latestIsoDep: IsoDep? = null
 
+    /** Suppresses redundant recognition re-probes of a resting card. */
+    private val reprobeThrottle = NfcReprobeThrottle()
+
     // Worker-thread confined. Main-thread state never owns a session.
     private var activeSession: ContactlessSession? = null
     private var activeProviderGeneration: Long? = null
@@ -294,6 +297,13 @@ internal class NfcReaderController(
             }
             return
         }
+        if (reprobeThrottle.shouldSkip(latestSnapshot.status)) {
+            // The resting card is already recognized; the stack re-polls it
+            // after every closed connection, so re-probing on each poll only
+            // re-runs the public read to the same result. latestIsoDep above
+            // stays fresh so a pending unlock uses the newest handle.
+            return
+        }
         publishAsync(generation, NfcReaderStatus.CHECKING)
         try {
             probeExecutor.execute {
@@ -323,6 +333,7 @@ internal class NfcReaderController(
         isoDep: IsoDep,
         generation: Int,
     ) {
+        reprobeThrottle.onProbe()
         closeActiveSession()
         if (generation != probeGeneration) {
             AppTrace.nfcProbeResultDiscarded()
