@@ -6,6 +6,7 @@ import fi.refineid.android.core.AuthenticationIssuerCertificateStore
 import fi.refineid.android.keychain.AndroidExternalKeyCallerLabelResolver
 import fi.refineid.android.keychain.ExternalKeyPinPromptBroker
 import fi.refineid.android.keychain.ExternalKeyProviderRuntime
+import fi.refineid.android.keychain.TransportSelectingCardSession
 import fi.refineid.android.nfc.NfcReaderController
 import fi.refineid.android.settings.TimestampAuthorityStore
 import fi.refineid.android.usb.UsbReaderController
@@ -34,7 +35,13 @@ class ReFineIdApplication : Application() {
             )
         externalKeyProviderRuntime =
             ExternalKeyProviderRuntime(
-                cardSession = readerController.externalKeyCardSession,
+                cardSession =
+                    TransportSelectingCardSession(
+                        listOf(
+                            readerController.externalKeyCardSession,
+                            nfcReaderController.externalKeyCardSession,
+                        ),
+                    ),
                 pinAuthorizer = pinPromptBroker,
                 issuerCertificateSource =
                     AuthenticationIssuerCertificateStore(

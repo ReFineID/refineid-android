@@ -4,6 +4,7 @@ import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
 import fi.refineid.android.core.acceptsInputLength
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Closed alias vocabulary exported by the privileged KeyChain provider. */
@@ -47,6 +48,18 @@ internal value class ExternalKeyProviderGeneration(
         const val INITIAL_PROVIDER_GENERATION = 1L
     }
 }
+
+/** Fresh positive provider generation for one opened card session. */
+internal fun SecureRandom.nextProviderGeneration(): Long {
+    var generation: Long
+    do {
+        generation = nextLong() and PROVIDER_GENERATION_VALUE_MASK
+    } while (generation < MINIMUM_PROVIDER_GENERATION)
+    return generation
+}
+
+private const val MINIMUM_PROVIDER_GENERATION = 1L
+private const val PROVIDER_GENERATION_VALUE_MASK = Long.MAX_VALUE
 
 /** KeyChain-derived browser identity used for holder-facing attribution. */
 internal class ExternalKeyCaller private constructor(

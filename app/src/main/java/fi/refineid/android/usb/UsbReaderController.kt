@@ -18,6 +18,7 @@ import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeCore
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
+import fi.refineid.android.keychain.nextProviderGeneration
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidUsbSession
 import fi.refineid.android.usb.ccid.CcidUsbSessionOpener
@@ -565,17 +566,6 @@ private fun UsbDevice.toDescriptor(): UsbDeviceDescriptor =
                 )
             },
     )
-
-private fun SecureRandom.nextProviderGeneration(): Long {
-    var generation: Long
-    do {
-        generation = nextLong() and PROVIDER_GENERATION_VALUE_MASK
-    } while (generation < MINIMUM_PROVIDER_GENERATION)
-    return generation
-}
-
-private const val MINIMUM_PROVIDER_GENERATION = 1L
-private const val PROVIDER_GENERATION_VALUE_MASK = Long.MAX_VALUE
 
 internal fun <T> CompletableFuture<T>.awaitPreservingInterrupt(): T {
     var wasInterrupted = false

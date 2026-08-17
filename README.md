@@ -96,6 +96,9 @@ instrumented development harness, but it is not the product boundary.
 - One-shot contactless operations behind PACE and secure messaging with a
   holder-entered CAN: certificate read, counter-safe PIN1 preflight, and
   authentication signing through the shared browser card service
+- Transport-selecting external-key provider session with generation-routed
+  signing, so the privileged KeyChain boundary serves USB and contactless
+  cards alike
 - No embedded browser, Internet permission, or logging in the release build
 - Compose UI Test v2 and UI Automator 2.4 instrumentation on a physical device
 

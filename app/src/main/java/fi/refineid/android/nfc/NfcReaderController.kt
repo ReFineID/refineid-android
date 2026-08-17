@@ -17,7 +17,9 @@ import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeContactlessCore
 import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.diagnostics.AppTrace
+import fi.refineid.android.keychain.nextProviderGeneration
 import java.io.IOException
+import java.security.SecureRandom
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -53,6 +55,8 @@ internal class NfcReaderController(
 
     // Worker-thread confined. Main-thread state never owns a session.
     private var activeSession: ContactlessSession? = null
+    private var activeProviderGeneration: Long? = null
+    private val providerGenerationRandom = SecureRandom()
 
     internal val authenticationCardService =
         NfcAuthenticationCardService(
@@ -62,6 +66,19 @@ internal class NfcReaderController(
             currentGeneration = { probeGeneration },
             activeSession = { activeSession },
             onCardLost = { generation ->
+                closeActiveSession()
+                publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+            },
+        )
+
+    internal val externalKeyCardSession =
+        NfcExternalKeyCardSession(
+            probeExecutor = probeExecutor,
+            isAvailable = { latestSnapshot.status == NfcReaderStatus.CARD_READY },
+            activeSession = { activeSession },
+            activeProviderGeneration = { activeProviderGeneration },
+            onCardLost = {
+                val generation = probeGeneration
                 closeActiveSession()
                 publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
             },
@@ -99,15 +116,15 @@ internal class NfcReaderController(
         refreshReaderMode()
     }
 
+    // The session outlives the activity: the privileged provider serves
+    // a foreground browser while this app is stopped, so only adapter
+    // loss, card loss, replacement, or process stop closes it.
     fun detach(activity: Activity) {
         checkMainThread()
         if (attachedActivity !== activity) {
             return
         }
-        probeGeneration += 1
         attachedActivity = null
-        latestIsoDep = null
-        closeActiveSessionAsync()
         if (adapter != null) {
             applicationContext.unregisterReceiver(adapterStateReceiver)
             adapter.disableReaderMode(activity)
@@ -161,8 +178,6 @@ internal class NfcReaderController(
         checkMainThread()
         val activity = attachedActivity ?: return
         val nfcAdapter = adapter ?: return
-        probeGeneration += 1
-        closeActiveSessionAsync()
         if (nfcAdapter.isEnabled) {
             nfcAdapter.enableReaderMode(
                 activity,
@@ -171,10 +186,15 @@ internal class NfcReaderController(
                 null,
             )
             AppTrace.nfcReaderModeChanged(isEnabled = true)
-            publish(NfcReaderSnapshot(status = NfcReaderStatus.WAITING_FOR_CARD))
+            if (latestSnapshot.status != NfcReaderStatus.CARD_READY) {
+                probeGeneration += 1
+                publish(NfcReaderSnapshot(status = NfcReaderStatus.WAITING_FOR_CARD))
+            }
         } else {
             nfcAdapter.disableReaderMode(activity)
             AppTrace.nfcReaderModeChanged(isEnabled = false)
+            probeGeneration += 1
+            closeActiveSessionAsync()
             publish(NfcReaderSnapshot(status = NfcReaderStatus.TURNED_OFF))
         }
     }
@@ -314,6 +334,7 @@ internal class NfcReaderController(
                     can = canBytes,
                     material = material,
                 )
+            activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
         } else {
             canBytes.fill(0)
             material.close()
@@ -330,6 +351,7 @@ internal class NfcReaderController(
     }
 
     private fun closeActiveSession() {
+        activeProviderGeneration = null
         activeSession?.close()
         activeSession = null
     }
@@ -339,7 +361,7 @@ internal class NfcReaderController(
         status: NfcReaderStatus,
     ) {
         mainHandler.post {
-            if (generation == probeGeneration && attachedActivity != null) {
+            if (generation == probeGeneration) {
                 publish(NfcReaderSnapshot(status = status))
             } else {
                 AppTrace.nfcProbeResultDiscarded()
