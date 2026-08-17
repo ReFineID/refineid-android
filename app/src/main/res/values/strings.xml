@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name">ReFineID</string>
+    <string name="app_name" translatable="false">ReFineID</string>
     <string name="section_card" tools:ignore="DuplicateStrings">Card</string>
     <string name="section_browser" tools:ignore="DuplicateStrings">Browser</string>
     <string name="section_document">Document</string>
@@ -14,12 +14,12 @@
     <string name="allow">Allow</string>
     <string name="retry">Retry</string>
     <string name="card">Card</string>
-    <string name="nfc">NFC</string>
+    <string name="nfc" translatable="false">NFC</string>
     <string name="off">Off</string>
     <string name="turn_on">Turn on</string>
     <string name="card_recognized">Card recognized</string>
     <string name="card_not_supported">Card not supported</string>
-    <string name="can" tools:ignore="Typos">CAN</string>
+    <string name="can" translatable="false">CAN</string>
     <string name="sign_in">Sign in</string>
     <string name="unlock">Unlock</string>
     <string name="wrong_can" tools:ignore="Typos">Wrong CAN</string>
@@ -28,7 +28,7 @@
     <string name="present">Present</string>
     <string name="not_present">Not present</string>
     <string name="authentication">Authentication</string>
-    <string name="pin1" tools:ignore="Typos">PIN1</string>
+    <string name="pin1" translatable="false">PIN1</string>
     <string name="sign">Sign</string>
     <string name="authenticate">Authenticate</string>
     <string name="cancel">Cancel</string>

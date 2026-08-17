@@ -426,12 +426,13 @@ private fun NfcPrimedRow(onForgetPrimedCard: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(READER_STATUS_ITEM_SPACING),
     ) {
         Text(
             text = stringResource(R.string.card_primed),
             color = SUCCESS_STATUS_COLOR,
             style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(WEIGHT_FILL),
         )
         Button(
             onClick = onForgetPrimedCard,
@@ -671,6 +672,7 @@ private fun ReaderCard(
     }
 }
 
+private const val WEIGHT_FILL = 1F
 private val SECTION_HEADER_TOP_PADDING = 8.dp
 private val SCREEN_HORIZONTAL_PADDING = 24.dp
 private val SCREEN_VERTICAL_PADDING = 28.dp

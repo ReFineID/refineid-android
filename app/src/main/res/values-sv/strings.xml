@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="section_card" tools:ignore="DuplicateStrings">Kort</string>
+    <string name="section_browser">Webbläsare</string>
+    <string name="section_document">Dokument</string>
+    <string name="usb_reader">USB-läsare</string>
+    <string name="not_connected">Inte ansluten</string>
+    <string name="permission_required">Behörighet krävs</string>
+    <string name="access_failed">Åtkomst misslyckades</string>
+    <string name="checking">Kontrollerar</string>
+    <string name="error">Fel</string>
+    <string name="ready">Klar</string>
+    <string name="allow">Tillåt</string>
+    <string name="retry">Försök igen</string>
+    <string name="card" tools:ignore="DuplicateStrings">Kort</string>
+    <string name="off">Av</string>
+    <string name="turn_on">Slå på</string>
+    <string name="card_recognized">Kortet igenkänt</string>
+    <string name="card_not_supported">Kortet stöds inte</string>
+    <string name="sign_in">Logga in</string>
+    <string name="unlock">Lås upp</string>
+    <string name="wrong_can" tools:ignore="Typos">Fel CAN</string>
+    <string name="card_primed">Kort sparat för tryck</string>
+    <string name="forget">Glöm</string>
+    <string name="present">Närvarande</string>
+    <string name="not_present">Inte närvarande</string>
+    <string name="authentication">Autentisering</string>
+    <string name="sign">Signera</string>
+    <string name="authenticate">Identifiera dig</string>
+    <string name="cancel">Avbryt</string>
+    <string name="signing">Signerar</string>
+    <string name="signed">Signerat</string>
+    <string name="wrong_pin">Fel PIN</string>
+    <string name="pin_locked">PIN låst</string>
+    <string name="unavailable">Inte tillgänglig</string>
+</resources>

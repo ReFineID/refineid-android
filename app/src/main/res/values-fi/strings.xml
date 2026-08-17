@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="section_card" tools:ignore="DuplicateStrings">Kortti</string>
+    <string name="section_browser">Selain</string>
+    <string name="section_document">Asiakirja</string>
+    <string name="usb_reader">USB-lukija</string>
+    <string name="not_connected">Ei yhteyttä</string>
+    <string name="permission_required">Lupa vaaditaan</string>
+    <string name="access_failed">Käyttö epäonnistui</string>
+    <string name="checking">Tarkistetaan</string>
+    <string name="error">Virhe</string>
+    <string name="ready">Valmis</string>
+    <string name="allow">Salli</string>
+    <string name="retry">Yritä uudelleen</string>
+    <string name="card" tools:ignore="DuplicateStrings">Kortti</string>
+    <string name="off">Pois</string>
+    <string name="turn_on">Ota käyttöön</string>
+    <string name="card_recognized">Kortti tunnistettu</string>
+    <string name="card_not_supported">Korttia ei tueta</string>
+    <string name="sign_in">Kirjaudu</string>
+    <string name="unlock">Avaa</string>
+    <string name="wrong_can" tools:ignore="Typos">Väärä CAN</string>
+    <string name="card_primed">Kortti tallennettu napautusta varten</string>
+    <string name="forget">Unohda</string>
+    <string name="present">Paikalla</string>
+    <string name="not_present">Ei paikalla</string>
+    <string name="authentication">Tunnistautuminen</string>
+    <string name="sign">Allekirjoita</string>
+    <string name="authenticate">Tunnistaudu</string>
+    <string name="cancel">Peruuta</string>
+    <string name="signing">Allekirjoitetaan</string>
+    <string name="signed">Allekirjoitettu</string>
+    <string name="wrong_pin">Väärä PIN</string>
+    <string name="pin_locked">PIN lukittu</string>
+    <string name="unavailable">Ei käytettävissä</string>
+</resources>
