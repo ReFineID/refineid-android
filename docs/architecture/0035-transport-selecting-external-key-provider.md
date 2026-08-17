@@ -46,3 +46,16 @@ identity absence, and PIN custody on unknown generations. System-browser
 hardware evidence — the KeyChain chooser offering the card identity and
 a PIN-prompted login completing — is pending for both transports on the
 patched platform build.
+
+## Physical evidence
+
+On 2026-08-17, on the physical Pixel 4, an open contactless session
+survived one minute in the background: returning to the activity
+re-armed reader mode, the stack re-polled the resting card, and the
+session adopted the fresh tag handle without losing its material. The
+same run showed the boundary that remains: the platform later killed
+the backgrounded process outright, taking the memory-only session and
+CAN with it, which is the intended custody outcome. The privileged
+provider is expected to hold the process through a login via KeyChain's
+service binding; after a process death the holder reconnects in the
+app. Recovery from process death was observed as a clean fresh start.
