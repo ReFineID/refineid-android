@@ -17,6 +17,7 @@ import fi.refineid.android.core.NativeCardSessionMaterial
 import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeContactlessCore
 import fi.refineid.android.core.NativeContactlessOpenResult
+import fi.refineid.android.core.NativeContactlessSession
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.keychain.nextProviderGeneration
@@ -396,7 +397,7 @@ internal class NfcReaderController(
         val exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep))
         val material = NativeCardSessionMaterial()
         val status =
-            when (val opened = NativeContactlessCore.open(canBytes.copyOf(), exchange)) {
+            when (val opened = NativeContactlessSession.connect(canBytes.copyOf(), exchange)) {
                 is NativeContactlessOpenResult.Success -> {
                     material.cacheAuthenticationCertificate(opened.certificate)
                     material.cachePin1Preflight(opened.preflight)
@@ -407,12 +408,6 @@ internal class NfcReaderController(
                     opened.kind.toConnectStatus()
                 }
             }
-        try {
-            isoDep.close()
-        } catch (_: IOException) {
-            // The session keeps the tag handle; reconnection happens per operation.
-        }
-        AppTrace.nfcSessionClosed()
         if (status == NfcReaderStatus.CARD_READY && generation == probeGeneration) {
             if (mintOnSuccess) {
                 primedCanStore.write(canBytes.copyOf())
@@ -423,11 +418,14 @@ internal class NfcReaderController(
             // prompt; the negative cache guards a genuinely wrong value.
             pin1.copyBytes()?.let(pinCache::recordVerified)
             pin1.close()
+            // Keep the field connected: the PACE session opened just now is
+            // held so the sign that follows reuses it with no second handshake.
             activeSession =
                 ContactlessSession(
                     isoDep = isoDep,
                     can = canBytes,
                     material = material,
+                    heldSession = true,
                 )
             activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
         } else {
@@ -439,6 +437,14 @@ internal class NfcReaderController(
             }
             canBytes.fill(0)
             material.close()
+            // Drop any session the connect retained and release the field.
+            NativeContactlessSession.close()
+            try {
+                isoDep.close()
+            } catch (_: IOException) {
+                // The tag may already be gone.
+            }
+            AppTrace.nfcSessionClosed()
         }
         publishAsync(generation, status)
     }

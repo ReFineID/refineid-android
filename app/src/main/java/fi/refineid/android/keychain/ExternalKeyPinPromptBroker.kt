@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import fi.refineid.android.core.AuthenticationPinCache
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
 import java.util.concurrent.CompletableFuture
@@ -70,6 +71,7 @@ internal data class ExternalKeyPinPromptView(
 internal class ExternalKeyPinPromptBroker(
     context: Context,
     private val callerLabelResolver: ExternalKeyCallerLabelResolver,
+    private val pinCache: AuthenticationPinCache,
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
     private val timeoutMilliseconds: Long = DEFAULT_TIMEOUT_MILLISECONDS,
 ) : ExternalKeyPinAuthorizer {
@@ -92,6 +94,13 @@ internal class ExternalKeyPinPromptBroker(
         val callerLabel =
             callerLabelResolver.resolve(request.caller)
                 ?: return ExternalKeyPinAuthorization.Unavailable
+        // A PIN1 the holder already proved at connect authorizes this signature
+        // silently, so a login is one tap with no per-signature prompt. Taking
+        // it consumes it, so this covers one signature per open session, exactly
+        // as the in-app browser path does; the next signature re-prompts.
+        pinCache.take()?.let { storedPin ->
+            return ExternalKeyPinAuthorization.Approved(storedPin)
+        }
         val prompt =
             synchronized(lock) {
                 if (isClosed || pendingPrompt != null) {

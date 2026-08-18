@@ -40,6 +40,7 @@ class ReFineIdApplication : Application() {
             ExternalKeyPinPromptBroker(
                 context = this,
                 callerLabelResolver = AndroidExternalKeyCallerLabelResolver(packageManager),
+                pinCache = authenticationPinCache,
             )
         externalKeyProviderRuntime =
             ExternalKeyProviderRuntime(

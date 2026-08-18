@@ -13,6 +13,7 @@ import fi.refineid.android.core.NativeCardSessionMaterial
 import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeCertificateReadResult
 import fi.refineid.android.core.NativeContactlessCore
+import fi.refineid.android.core.NativeContactlessSession
 import fi.refineid.android.core.NativePin2PreflightFailure
 import fi.refineid.android.core.NativePin2PreflightResult
 import fi.refineid.android.core.NativeQualifiedCertificate
@@ -29,14 +30,22 @@ import java.io.IOException
 
 /**
  * One holder-opened contactless card session, confined to the probe
- * worker thread. The session retains the resting tag handle, the CAN
- * for its lifetime only, and the cached public material; every card
- * operation reconnects ISO-DEP and re-runs PACE natively.
+ * worker thread. The session retains the tag handle, the CAN for its
+ * lifetime only, and the cached public material.
+ *
+ * When [heldSession] is set, a PACE secure-messaging session opened at
+ * connect is live on the still-connected field: authentication signing
+ * reuses that channel with no second handshake, and the field is held
+ * across operations. If the field drops and the stack re-polls the card
+ * ([adopt]), the held session is dropped and signing falls back to the
+ * resting-tag path that reconnects ISO-DEP and re-runs PACE per operation.
+ * Qualified (PIN2) operations always take that per-operation path.
  */
 internal class ContactlessSession(
     private var isoDep: IsoDep,
     private val can: ByteArray,
     private val material: NativeCardSessionMaterial,
+    private var heldSession: Boolean = false,
 ) : AutoCloseable {
     private val ownerThread = Thread.currentThread()
     private var isClosed = false
@@ -54,6 +63,12 @@ internal class ContactlessSession(
             isoDep.close()
         } catch (_: IOException) {
             // The replaced handle is expected to be gone already.
+        }
+        // The field cycled, so the card dropped its half of the secure
+        // channel; the next operation must re-run PACE on the fresh handle.
+        if (heldSession) {
+            NativeContactlessSession.close()
+            heldSession = false
         }
         isoDep = freshIsoDep
     }
@@ -83,32 +98,50 @@ internal class ContactlessSession(
                 AuthenticationSignFailure.KEY_PROFILE_MISMATCH,
             )
         }
-        try {
-            if (!isoDep.isConnected) {
-                isoDep.connect()
-                isoDep.timeout = TRANSCEIVE_TIMEOUT_MILLISECONDS
-            }
-        } catch (_: IOException) {
-            pin1.close()
-            AppTrace.nfcSessionOpenFailed()
-            return AuthenticationSignResult.Failure(AuthenticationSignFailure.CARD_UNAVAILABLE)
-        }
         val nativeResult =
-            NativeContactlessCore.authenticateAndSign(
-                canCopy = can.copyOf(),
-                algorithm = algorithm,
-                inputMode = inputMode,
-                pin1 = pin1,
-                input = input,
-                exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
-            )
-        try {
-            isoDep.close()
-        } catch (_: IOException) {
-            // The tag may already be gone; the signing result stands.
-        }
-        AppTrace.nfcSessionClosed()
-        return when (nativeResult) {
+            if (heldSession && isoDep.isConnected) {
+                // The PACE channel opened at connect is still live on the held
+                // field: VERIFY and sign on it with no second handshake, and
+                // leave the field up for any further operation.
+                NativeContactlessSession.authenticateAndSignOnSession(
+                    algorithm = algorithm,
+                    inputMode = inputMode,
+                    pin1 = pin1,
+                    input = input,
+                    exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+                )
+            } else {
+                // The field dropped and was re-polled: re-run PACE on the
+                // resting tag for this one operation, then drop it again.
+                if (!reconnect()) {
+                    pin1.close()
+                    AppTrace.nfcSessionOpenFailed()
+                    return AuthenticationSignResult.Failure(
+                        AuthenticationSignFailure.CARD_UNAVAILABLE,
+                    )
+                }
+                val result =
+                    NativeContactlessCore.authenticateAndSign(
+                        canCopy = can.copyOf(),
+                        algorithm = algorithm,
+                        inputMode = inputMode,
+                        pin1 = pin1,
+                        input = input,
+                        exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+                    )
+                closeIsoDep()
+                result
+            }
+        return verifyAndMapSignature(certificate, inputMode, input, nativeResult)
+    }
+
+    private fun verifyAndMapSignature(
+        certificate: NativeAuthenticationCertificate,
+        inputMode: AuthenticationSigningInputMode,
+        input: ByteArray,
+        nativeResult: NativeAuthenticationSignResult,
+    ): AuthenticationSignResult =
+        when (nativeResult) {
             is NativeAuthenticationSignResult.Success -> {
                 val isVerified =
                     when (inputMode) {
@@ -146,7 +179,6 @@ internal class ContactlessSession(
                 AuthenticationSignResult.Failure(nativeResult.kind.toContactlessFailure())
             }
         }
-    }
 
     /**
      * Read EF.4332 under a fresh PACE handshake. The one-shot channel
@@ -271,6 +303,10 @@ internal class ContactlessSession(
         isClosed = true
         can.fill(0)
         material.close()
+        if (heldSession) {
+            NativeContactlessSession.close()
+            heldSession = false
+        }
         try {
             isoDep.close()
         } catch (_: IOException) {
