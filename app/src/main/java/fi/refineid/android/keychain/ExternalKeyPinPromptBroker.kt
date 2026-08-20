@@ -95,9 +95,11 @@ internal class ExternalKeyPinPromptBroker(
             callerLabelResolver.resolve(request.caller)
                 ?: return ExternalKeyPinAuthorization.Unavailable
         // A PIN1 the holder already proved at connect authorizes this signature
-        // silently, so a login is one tap with no per-signature prompt. Taking
-        // it consumes it, so this covers one signature per open session, exactly
-        // as the in-app browser path does; the next signature re-prompts.
+        // silently, so a login is one tap with no per-signature prompt. The
+        // cache keeps it for a refreshed idle window, so repeated signatures in
+        // a session stay silent, exactly as the in-app browser path does; it
+        // re-prompts only after the window lapses, a process restart, or a
+        // card rejection.
         pinCache.take()?.let { storedPin ->
             return ExternalKeyPinAuthorization.Approved(storedPin)
         }
