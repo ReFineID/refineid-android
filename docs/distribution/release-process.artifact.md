@@ -28,7 +28,10 @@ Run the release script:
 ### Direct Website Distribution
 For users who prefer not to use the Play Store or to bypass verification waits,
 a Universal APK is provided. This APK contains native libraries for all
-supported architectures (`arm64-v8a` and `x86_64`).
+supported architectures (`arm64-v8a` and `x86_64`) and is signed with the
+developer's hardware identity card (PIN 2). The build script produces
+`app/build/outputs/apk/release/refineid-${versionName}.${buildNumber}.apk`
+(e.g., `refineid-26.8.22.165.apk`).
 
 Run the APK build script:
 ```bash

@@ -142,6 +142,14 @@ with:
     ./gradlew assembleDebug
     ./gradlew connectedDebugAndroidTest
 
+To build and sign a production release APK using a connected hardware identity card (PIN 2):
+
+    Scripts/build-release-apk.sh
+
+To spin up and interact with an Android Virtual Device:
+
+    android emulator start medium_phone
+
 Machine-specific SDK paths belong in the ignored local.properties file.
 
 For an AOSP checkout containing this repository at `packages/apps/ReFineID`,

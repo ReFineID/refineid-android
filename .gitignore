@@ -55,6 +55,7 @@ google-services.json
 *.pem
 *.trace
 card-dumps/
+certificates-from-smart-card/
 device-dumps/
 traces/
 
