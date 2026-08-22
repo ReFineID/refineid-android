@@ -4,6 +4,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Set JAVA_HOME if not already set, preferring the Android Studio bundled JDK on macOS.
+if [[ -z "${JAVA_HOME:-}" ]] && [[ "$(uname)" == "Darwin" ]]; then
+  studio_jdk="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+  if [[ -d "${studio_jdk}" ]]; then
+    export JAVA_HOME="${studio_jdk}"
+  fi
+fi
+
 # Ensure the current branch is main.
 branch=$(git rev-parse --abbrev-ref HEAD)
 if [[ "${branch}" != "main" ]]; then
