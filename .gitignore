@@ -9,6 +9,7 @@ build/
 local.properties
 secrets.properties
 keystore.properties
+play.properties
 .env
 .env.*
 !.env.example

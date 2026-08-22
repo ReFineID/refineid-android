@@ -102,7 +102,8 @@ instrumented development harness, but it is not the product boundary.
 - General in-app browser over both card transports: any HTTPS site, an
   address bar, client certificates served on request, and every signature
   behind the holder's PIN
-- No embedded browser, Internet permission, or logging in the release build
+- Release builds omit logging and background tracking; Internet access is
+  restricted to the browser boundary
 - Compose UI Test v2 and UI Automator 2.4 instrumentation on a physical device
 
 An ordinary APK cannot publish its process-local external key to every other
@@ -116,7 +117,9 @@ documentation or developer tooling.
 
 Versions follow the Apple release pair: `YY.M.D` and a ten-minute UTC build
 number. Android encodes the date and build into its monotonically increasing
-`versionCode`; see `docs/architecture/0006-calendar-versioning.md`.
+`versionCode`. Distribution is automated via the
+[Play Store Release Process](file:///Users/pk/src/refineid-android/docs/distribution/play-store-release.artifact.md).
+For the calendar versioning design, see `docs/architecture/0006-calendar-versioning.md`.
 
 ## Source hierarchy
 

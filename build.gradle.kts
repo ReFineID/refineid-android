@@ -2,6 +2,7 @@ plugins {
     base
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.detekt)
+    alias(libs.plugins.play.publisher) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.spotless)
 }
@@ -42,6 +43,7 @@ val repositoryShellScripts =
         "Scripts/build-aosp-flame.sh",
         "Scripts/configure-aosp-host-compat.sh",
         "Scripts/stamp-version.sh",
+        "Scripts/release-play-store.sh",
         "Scripts/stage-aosp-prebuilt.sh",
         aospProviderContractVerifier,
         "Scripts/verify-aosp-flame-device.sh",

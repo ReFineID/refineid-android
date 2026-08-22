@@ -30,6 +30,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.detekt)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.play.publisher)
 }
 
 detekt {
@@ -84,6 +85,20 @@ val refineIdVersionCode =
 require(refineIdVersionCode in minimumGooglePlayVersionCode..maximumGooglePlayVersionCode) {
     "derived versionCode is outside the Google Play range"
 }
+
+val playPropertiesFile = rootProject.layout.projectDirectory.file("play.properties")
+val playProperties =
+    if (playPropertiesFile.asFile.exists()) {
+        Properties().apply {
+            load(
+                StringReader(
+                    providers.fileContents(playPropertiesFile).asText.get(),
+                ),
+            )
+        }
+    } else {
+        null
+    }
 
 android {
     namespace = "fi.refineid.android"
@@ -591,4 +606,12 @@ val verifyReleaseNetworkIsolation =
 
 tasks.named("check").configure {
     dependsOn(verifyReleaseNoLogging, verifyReleaseNetworkIsolation)
+}
+
+play {
+    if (playProperties != null) {
+        serviceAccountCredentials.set(
+            rootProject.file(playProperties.getProperty("serviceAccountCredentials")),
+        )
+    }
 }
