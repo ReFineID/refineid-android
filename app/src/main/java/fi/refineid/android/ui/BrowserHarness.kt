@@ -68,6 +68,7 @@ import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
+import fi.refineid.android.diagnostics.BuildDiagnostics
 import fi.refineid.android.nfc.NfcReaderStatus
 import java.security.cert.X509Certificate
 import java.util.concurrent.atomic.AtomicBoolean
@@ -225,139 +226,11 @@ private fun BrowserDialog(
                 decorFitsSystemWindows = false,
             ),
     ) {
-        Surface(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .semantics { testTagsAsResourceId = true },
-            color = MaterialTheme.colorScheme.background,
-        ) {
-            // The page owns the whole screen; the browsing controls float
-            // over its bottom edge, the way the reference platform's
-            // browser keeps its bar over the content.
-            Box(modifier = Modifier.fillMaxSize()) {
-                var urlText by remember { mutableStateOf("") }
-                var liveWebView by remember { mutableStateOf<WebView?>(null) }
-                val navigate = {
-                    val destination = normalizeHttpsUrl(urlText)
-                    if (destination != null) {
-                        urlText = destination
-                        liveWebView?.loadUrl(destination)
-                    } else {
-                        AppTrace.browserNavigationBlocked()
-                    }
-                    Unit
-                }
-                if (webViewClient == null) {
-                    Text(
-                        text = stringResource(R.string.error),
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                } else {
-                    val client = webViewClient
-                    AndroidView(
-                        factory = { viewContext ->
-                            WebView.setWebContentsDebuggingEnabled(true)
-                            WebView(viewContext).apply {
-                                configureFullFeaturedBrowser()
-                                this.webViewClient = client
-                                // The base chrome client restores default
-                                // JS dialogs, progress, and title handling.
-                                webChromeClient = WebChromeClient()
-                                liveWebView = this
-                                // Cached certificate choices are cleared so
-                                // every visit renegotiates; no page loads
-                                // until the holder types an address.
-                                WebView.clearClientCertPreferences {}
-                            }
-                        },
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .safeDrawingPadding()
-                                .testTag(UiAutomationIds.BROWSER_VIEW),
-                        onRelease = { webView ->
-                            liveWebView = null
-                            webView.stopLoading()
-                            webView.webViewClient = WebViewClient()
-                            webView.destroy()
-                        },
-                    )
-                }
-                Column(
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .safeDrawingPadding()
-                            .padding(
-                                horizontal = FLOATING_BAR_HORIZONTAL_PADDING,
-                                vertical = FLOATING_BAR_BOTTOM_PADDING,
-                            ),
-                    verticalArrangement = Arrangement.spacedBy(BROWSER_ITEM_SPACING),
-                ) {
-                    BrowserStatus(signatureStatus)
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(FLOATING_BAR_CORNER_RADIUS),
-                        color =
-                            MaterialTheme.colorScheme.surface.copy(
-                                alpha = FLOATING_BAR_ALPHA,
-                            ),
-                        shadowElevation = FLOATING_BAR_ELEVATION,
-                    ) {
-                        Row(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(FLOATING_BAR_INNER_PADDING),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            IconButton(
-                                onClick = { liveWebView?.takeIf { it.canGoBack() }?.goBack() },
-                                modifier = Modifier.testTag(UiAutomationIds.BROWSER_BACK_ACTION),
-                            ) {
-                                Text(stringResource(R.string.browser_back))
-                            }
-                            IconButton(
-                                onClick = { liveWebView?.takeIf { it.canGoForward() }?.goForward() },
-                                modifier = Modifier.testTag(UiAutomationIds.BROWSER_FORWARD_ACTION),
-                            ) {
-                                Text(stringResource(R.string.browser_forward))
-                            }
-                            IconButton(
-                                onClick = { liveWebView?.reload() },
-                                modifier = Modifier.testTag(UiAutomationIds.BROWSER_RELOAD_ACTION),
-                            ) {
-                                Text(stringResource(R.string.browser_reload))
-                            }
-                            OutlinedTextField(
-                                value = urlText,
-                                onValueChange = { urlText = it },
-                                modifier =
-                                    Modifier
-                                        .weight(BROWSER_VIEW_WEIGHT)
-                                        .testTag(UiAutomationIds.BROWSER_URL_FIELD),
-                                singleLine = true,
-                                keyboardOptions =
-                                    KeyboardOptions(
-                                        autoCorrectEnabled = false,
-                                        keyboardType = KeyboardType.Uri,
-                                        imeAction = ImeAction.Go,
-                                    ),
-                                keyboardActions = KeyboardActions(onGo = { navigate() }),
-                            )
-                            IconButton(
-                                onClick = onClose,
-                                modifier = Modifier.testTag(UiAutomationIds.BROWSER_CLOSE_ACTION),
-                            ) {
-                                Text(stringResource(R.string.browser_close_glyph))
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        BrowserDialogContent(
+            webViewClient = webViewClient,
+            signatureStatus = signatureStatus,
+            onClose = onClose,
+        )
     }
     pinRequest?.let { request ->
         BrowserPinDialog(request)
@@ -377,6 +250,186 @@ private fun BrowserDialog(
                 request.giveUp()
             },
         )
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun BrowserDialogContent(
+    webViewClient: WebViewClient?,
+    signatureStatus: BrowserSignatureStatus,
+    onClose: () -> Unit,
+) {
+    Surface(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .semantics { testTagsAsResourceId = true },
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        // The page owns the whole screen; the browsing controls float
+        // over its bottom edge, the way the reference platform's
+        // browser keeps its bar over the content.
+        Box(modifier = Modifier.fillMaxSize()) {
+            var urlText by remember { mutableStateOf("") }
+            var liveWebView by remember { mutableStateOf<WebView?>(null) }
+            val navigate = {
+                val destination = normalizeHttpsUrl(urlText)
+                if (destination != null) {
+                    urlText = destination
+                    liveWebView?.loadUrl(destination)
+                } else {
+                    AppTrace.browserNavigationBlocked()
+                }
+                Unit
+            }
+
+            BrowserWebView(
+                client = webViewClient,
+                onWebViewCreated = { liveWebView = it },
+                onWebViewReleased = { liveWebView = null },
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            BrowserControlsBar(
+                urlText = urlText,
+                signatureStatus = signatureStatus,
+                onUrlChange = { urlText = it },
+                onNavigate = navigate,
+                onBack = { liveWebView?.takeIf { it.canGoBack() }?.goBack() },
+                onForward = { liveWebView?.takeIf { it.canGoForward() }?.goForward() },
+                onReload = { liveWebView?.reload() },
+                onClose = onClose,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun BrowserWebView(
+    client: WebViewClient?,
+    onWebViewCreated: (WebView) -> Unit,
+    onWebViewReleased: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (client == null) {
+        Box(modifier = modifier) {
+            Text(
+                text = stringResource(R.string.error),
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+    } else {
+        AndroidView(
+            factory = { viewContext ->
+                WebView.setWebContentsDebuggingEnabled(BuildDiagnostics.WEBVIEW_DEBUGGING_ENABLED)
+                WebView(viewContext).apply {
+                    configureFullFeaturedBrowser()
+                    this.webViewClient = client
+                    webChromeClient = WebChromeClient()
+                    onWebViewCreated(this)
+                    WebView.clearClientCertPreferences {}
+                }
+            },
+            modifier =
+                modifier
+                    .safeDrawingPadding()
+                    .testTag(UiAutomationIds.BROWSER_VIEW),
+            onRelease = { webView ->
+                onWebViewReleased()
+                webView.stopLoading()
+                webView.webViewClient = WebViewClient()
+                webView.destroy()
+            },
+        )
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun BrowserControlsBar(
+    urlText: String,
+    signatureStatus: BrowserSignatureStatus,
+    onUrlChange: (String) -> Unit,
+    onNavigate: () -> Unit,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    onReload: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .safeDrawingPadding()
+                .padding(
+                    horizontal = FLOATING_BAR_HORIZONTAL_PADDING,
+                    vertical = FLOATING_BAR_BOTTOM_PADDING,
+                ),
+        verticalArrangement = Arrangement.spacedBy(BROWSER_ITEM_SPACING),
+    ) {
+        BrowserStatus(signatureStatus)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(FLOATING_BAR_CORNER_RADIUS),
+            color =
+                MaterialTheme.colorScheme.surface.copy(
+                    alpha = FLOATING_BAR_ALPHA,
+                ),
+            shadowElevation = FLOATING_BAR_ELEVATION,
+        ) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(FLOATING_BAR_INNER_PADDING),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.testTag(UiAutomationIds.BROWSER_BACK_ACTION),
+                ) {
+                    Text(stringResource(R.string.browser_back))
+                }
+                IconButton(
+                    onClick = onForward,
+                    modifier = Modifier.testTag(UiAutomationIds.BROWSER_FORWARD_ACTION),
+                ) {
+                    Text(stringResource(R.string.browser_forward))
+                }
+                IconButton(
+                    onClick = onReload,
+                    modifier = Modifier.testTag(UiAutomationIds.BROWSER_RELOAD_ACTION),
+                ) {
+                    Text(stringResource(R.string.browser_reload))
+                }
+                OutlinedTextField(
+                    value = urlText,
+                    onValueChange = onUrlChange,
+                    modifier =
+                        Modifier
+                            .weight(BROWSER_VIEW_WEIGHT)
+                            .testTag(UiAutomationIds.BROWSER_URL_FIELD),
+                    singleLine = true,
+                    keyboardOptions =
+                        KeyboardOptions(
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.Uri,
+                            imeAction = ImeAction.Go,
+                        ),
+                    keyboardActions = KeyboardActions(onGo = { onNavigate() }),
+                )
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier.testTag(UiAutomationIds.BROWSER_CLOSE_ACTION),
+                ) {
+                    Text(stringResource(R.string.browser_close_glyph))
+                }
+            }
+        }
     }
 }
 
