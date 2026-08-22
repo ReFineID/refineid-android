@@ -274,6 +274,7 @@ private fun BrowserDialog(
                         modifier =
                             Modifier
                                 .fillMaxSize()
+                                .safeDrawingPadding()
                                 .testTag(UiAutomationIds.BROWSER_VIEW),
                         onRelease = { webView ->
                             liveWebView = null
