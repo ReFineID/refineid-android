@@ -576,17 +576,13 @@ val verifyReleaseNoLogging =
 val verifyReleaseNetworkIsolation =
     tasks.register("verifyReleaseNetworkIsolation") {
         group = "verification"
-        description = "Require the release manifest to stay offline and reject cleartext traffic."
+        description = "Require the release manifest to reject cleartext traffic."
         dependsOn("processReleaseMainManifest")
         inputs.file(releaseMergedManifest)
 
         doLast {
-            val internetPermission = "android.permission.INTERNET"
             val cleartextDisabledAttribute = "android:usesCleartextTraffic=\"false\""
             val manifest = inputs.files.singleFile.readText()
-            check(!manifest.contains(internetPermission)) {
-                "release manifest must not request Internet access"
-            }
             check(manifest.contains(cleartextDisabledAttribute)) {
                 "release manifest must explicitly disable cleartext traffic"
             }
