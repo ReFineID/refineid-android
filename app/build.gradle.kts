@@ -90,6 +90,20 @@ android {
     compileSdk = currentAndroidApi
     ndkVersion = "28.2.13676358"
 
+    val keystorePropertiesFile = rootProject.layout.projectDirectory.file("keystore.properties")
+    val keystoreProperties =
+        if (keystorePropertiesFile.asFile.exists()) {
+            Properties().apply {
+                load(
+                    StringReader(
+                        providers.fileContents(keystorePropertiesFile).asText.get(),
+                    ),
+                )
+            }
+        } else {
+            null
+        }
+
     defaultConfig {
         applicationId = "fi.refineid.android"
         minSdk = minimumAndroidApi
@@ -104,6 +118,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (keystoreProperties != null) {
+            register("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -112,6 +137,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
