@@ -26,12 +26,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecureTextField
@@ -143,6 +145,7 @@ internal fun MainScreen(
                 usbCardReady = usbCardReady,
                 usbReaderPresent = usbReaderPresent,
                 signingAvailable = signingAvailable,
+                holderName = snapshot.holderName,
                 onRequestPermission = onRequestPermission,
                 onAuthenticate = onAuthenticate,
                 onReaderConnect = onReaderConnect,
@@ -242,6 +245,7 @@ private fun HomeScreen(
     usbCardReady: Boolean,
     usbReaderPresent: Boolean,
     signingAvailable: Boolean,
+    holderName: String?,
     onRequestPermission: () -> Unit,
     onAuthenticate: (Pin1Submission) -> Unit,
     onReaderConnect: (CanSubmission) -> Unit,
@@ -315,29 +319,35 @@ private fun HomeScreen(
                 }
             }
 
-            Section(stringResource(R.string.section_card)) {
-                if (usbReaderPresent) {
-                    ReaderCard(
-                        snapshot = snapshot,
-                        onRequestPermission = onRequestPermission,
-                        onConnect = onReaderConnect,
-                    )
-                } else if (nfcSnapshot.status != NfcReaderStatus.NOT_AVAILABLE) {
-                    NfcCard(
-                        snapshot = nfcSnapshot,
-                        onOpenNfcSettings = onOpenNfcSettings,
-                        onConnect = onNfcConnect,
-                        onForgetPrimedCard = onForgetPrimedCard,
-                    )
-                }
-                if (
-                    BuildDiagnostics.MANUAL_AUTHENTICATION_ENABLED &&
-                    usbCardReady
-                ) {
-                    AuthenticationCard(
-                        status = snapshot.authenticationStatus,
-                        onAuthenticate = onAuthenticate,
-                    )
+            // The Card section is hidden when the USB reader has a ready
+            // card: PIN1 is cached for the session, so no manual entry is
+            // needed. It stays visible for NFC or when the USB reader
+            // needs permission or CAN entry.
+            if (!usbCardReady) {
+                Section(stringResource(R.string.section_card)) {
+                    if (usbReaderPresent) {
+                        ReaderCard(
+                            snapshot = snapshot,
+                            onRequestPermission = onRequestPermission,
+                            onConnect = onReaderConnect,
+                        )
+                    } else if (nfcSnapshot.status != NfcReaderStatus.NOT_AVAILABLE) {
+                        NfcCard(
+                            snapshot = nfcSnapshot,
+                            onOpenNfcSettings = onOpenNfcSettings,
+                            onConnect = onNfcConnect,
+                            onForgetPrimedCard = onForgetPrimedCard,
+                        )
+                    }
+                    if (
+                        BuildDiagnostics.MANUAL_AUTHENTICATION_ENABLED &&
+                        usbCardReady
+                    ) {
+                        AuthenticationCard(
+                            status = snapshot.authenticationStatus,
+                            onAuthenticate = onAuthenticate,
+                        )
+                    }
                 }
             }
 
@@ -368,6 +378,10 @@ private fun HomeScreen(
                         }
                     },
                 )
+            }
+
+            if (holderName != null) {
+                IdentitySection(holderName = holderName)
             }
 
             if (BuildDiagnostics.TIMESTAMP_SETTINGS_ENABLED) {

@@ -25,7 +25,10 @@ import fi.refineid.android.keychain.nextProviderGeneration
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidUsbSession
 import fi.refineid.android.usb.ccid.CcidUsbSessionOpener
+import java.io.ByteArrayInputStream
 import java.security.SecureRandom
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -66,6 +69,7 @@ internal data class UsbReaderSnapshot(
     val status: ReaderConnectionStatus = ReaderConnectionStatus.NOT_CONNECTED,
     val cardPresence: CardPresence? = null,
     val authenticationStatus: AuthenticationStatus = AuthenticationStatus.IDLE,
+    val holderName: String? = null,
 )
 
 internal class UsbReaderController(
@@ -392,12 +396,23 @@ internal class UsbReaderController(
             if (result is NativeContactlessOpenResult.Success) {
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
             }
+            val holder = if (result is NativeContactlessOpenResult.Success) {
+                try {
+                    val cert = activeSession?.copyAuthenticationCertificate()
+                    cert?.let { c ->
+                        try { holderNameFromCertificate(c) } finally { c.close() }
+                    }
+                } catch (_: Exception) { null }
+            } else {
+                null
+            }
             val snapshot =
                 when (result) {
                     is NativeContactlessOpenResult.Success -> {
                         UsbReaderSnapshot(
                             status = ReaderConnectionStatus.READY,
                             cardPresence = CardPresence.PRESENT,
+                            holderName = holder,
                         )
                     }
 
@@ -566,9 +581,14 @@ internal class UsbReaderController(
         ioExecutor.execute {
             closeActiveSession()
             val result = ccidSessionOpener.open(device)
+            var holder: String? = null
             if (result is CcidSessionOpenResult.Ready) {
                 activeSession = result.session
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
+                holder = try {
+                    val cert = result.session.copyAuthenticationCertificate()
+                    try { holderNameFromCertificate(cert) } finally { cert.close() }
+                } catch (_: Exception) { null }
             } else if (result is CcidSessionOpenResult.AccessNumberRequired) {
                 // Hold the contactless session so a CAN entry can run PACE on it.
                 // No provider generation until connect() actually opens the card.
@@ -587,6 +607,7 @@ internal class UsbReaderController(
                                 UsbReaderSnapshot(
                                     status = ReaderConnectionStatus.READY,
                                     cardPresence = CardPresence.PRESENT,
+                                    holderName = holder,
                                 )
                             }
 
@@ -727,4 +748,20 @@ private fun NativeCertificateReadFailure.toContactlessConnectStatus(): ReaderCon
         -> {
             ReaderConnectionStatus.TRANSPORT_ERROR
         }
+    }
+
+/**
+ * Extracts the common name (CN) from the authentication certificate's
+ * X.500 subject, returning the cardholder's full name or `null` on any
+ * parsing failure.
+ */
+private fun holderNameFromCertificate(certificate: NativeAuthenticationCertificate): String? =
+    try {
+        val der = certificate.copyDer()
+        val factory = CertificateFactory.getInstance("X.509")
+        val x509 = factory.generateCertificate(ByteArrayInputStream(der)) as X509Certificate
+        val rfc2253 = x509.subjectX500Principal.getName("RFC2253")
+        "(?:^|,)\\s*CN=([^,]+)".toRegex().find(rfc2253)?.groupValues?.get(1)
+    } catch (_: Exception) {
+        null
     }

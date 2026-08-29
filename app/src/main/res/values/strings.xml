@@ -44,4 +44,6 @@
     <string name="unavailable">Unavailable</string>
     <string name="section_remote">Remote computer</string>
     <string name="pair_computer">Pair with Mac / iPad</string>
+    <string name="section_identity">Identity</string>
+    <string name="person">Person</string>
 </resources>

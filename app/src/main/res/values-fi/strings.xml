@@ -40,4 +40,6 @@
     <string name="unavailable">Ei käytettävissä</string>
     <string name="section_remote">Etätietokone</string>
     <string name="pair_computer">Yhdistä Mac / iPad</string>
+    <string name="section_identity">Henkilöllisyys</string>
+    <string name="person">Henkilö</string>
 </resources>
