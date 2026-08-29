@@ -352,17 +352,6 @@ private fun HomeScreen(
                 }
             }
 
-            Section(stringResource(R.string.section_remote)) {
-                NavigationGroup {
-                    NavigationRow(
-                        icon = Icons.Outlined.Share,
-                        label = stringResource(R.string.pair_computer),
-                        tag = "RappPairingRow",
-                        onClick = onOpenPairing,
-                    )
-                }
-            }
-
             Section(stringResource(R.string.section_browser)) {
                 BrowserHarness(
                     cardService = browserCardService,
@@ -383,13 +372,23 @@ private fun HomeScreen(
                 )
             }
 
-            if (holderName != null) {
-                IdentitySection(
-                    holderName = holderName,
-                    onForget = onForgetIdentity,
-                    onOpenPerson = onOpenPerson,
-                )
+            Section(stringResource(R.string.section_remote)) {
+                NavigationGroup {
+                    NavigationRow(
+                        icon = Icons.Outlined.Share,
+                        label = stringResource(R.string.pair_computer),
+                        tag = "RappPairingRow",
+                        onClick = onOpenPairing,
+                    )
+                }
             }
+
+            IdentitySection(
+                holderName = holderName,
+                onForget = onForgetIdentity,
+                onOpenPerson = onOpenPerson,
+                onNfcConnect = onNfcConnect,
+            )
 
             if (BuildDiagnostics.TIMESTAMP_SETTINGS_ENABLED) {
                 TimestampSettingsRow(timestampAuthorityRepository)
@@ -401,11 +400,13 @@ private fun HomeScreen(
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 private fun IdentitySection(
-    holderName: String,
+    holderName: String?,
     onForget: (() -> Unit)?,
     onOpenPerson: () -> Unit,
+    onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
 ) {
     var showsForgetConfirmation by remember { mutableStateOf(false) }
+    var showsNfcReadDialog by remember { mutableStateOf(false) }
 
     Section(stringResource(R.string.section_identity)) {
         NavigationGroup {
@@ -413,8 +414,13 @@ private fun IdentitySection(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onOpenPerson)
-                        .padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING)
+                        .clickable {
+                            if (holderName != null) {
+                                onOpenPerson()
+                            } else {
+                                showsNfcReadDialog = true
+                            }
+                        }.padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING)
                         .testTag(UiAutomationIds.IDENTITY_ROW),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ROW_ITEM_SPACING),
@@ -426,12 +432,17 @@ private fun IdentitySection(
                     modifier = Modifier.size(ROW_ICON_SIZE),
                 )
                 Text(
-                    text = holderName,
+                    text = holderName ?: stringResource(R.string.read_identity_card),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color =
+                        if (holderName != null) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     modifier = Modifier.weight(ROW_LABEL_WEIGHT),
                 )
-                if (onForget != null) {
+                if (holderName != null && onForget != null) {
                     IconButton(
                         onClick = { showsForgetConfirmation = true },
                         modifier =
@@ -486,6 +497,106 @@ private fun IdentitySection(
             },
         )
     }
+
+    if (showsNfcReadDialog) {
+        ReadCardNfcDialog(
+            onDismiss = { showsNfcReadDialog = false },
+            onConnect = onNfcConnect,
+        )
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun ReadCardNfcDialog(
+    onDismiss: () -> Unit,
+    onConnect: (CanSubmission?, Pin1Submission) -> Unit,
+) {
+    val initialCan = remember { fi.refineid.android.core.CanSessionStore.currentCan ?: "" }
+    val canState = remember { TextFieldState(initialCan) }
+    val pinState = remember { TextFieldState() }
+    val canReady = CanSubmission.isComplete(canState.text)
+
+    val submit = {
+        if (canReady) {
+            fi.refineid.android.core.CanSessionStore
+                .remember(canState.text)
+            val can = CanSubmission.from(canState.text)
+            val pin1 =
+                if (Pin1Submission.isComplete(pinState.text)) {
+                    Pin1Submission.from(pinState.text)
+                } else {
+                    Pin1Submission.from("0000")
+                }
+            onConnect(can, pin1)
+            onDismiss()
+        }
+        Unit
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.read_identity_card),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                SecureTextField(
+                    state = canState,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag(UiAutomationIds.NFC_CAN_FIELD),
+                    label = { Text(stringResource(R.string.can)) },
+                    inputTransformation = CanInputTransformation,
+                    textObfuscationMode = TextObfuscationMode.Visible,
+                    keyboardOptions =
+                        KeyboardOptions(
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.NumberPassword,
+                            imeAction = ImeAction.Next,
+                        ),
+                )
+                SecureTextField(
+                    state = pinState,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag(UiAutomationIds.NFC_PIN1_FIELD),
+                    label = { Text(stringResource(R.string.pin1_optional)) },
+                    inputTransformation = Pin1InputTransformation,
+                    textObfuscationMode = TextObfuscationMode.Hidden,
+                    keyboardOptions =
+                        KeyboardOptions(
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.NumberPassword,
+                            imeAction = ImeAction.Done,
+                        ),
+                    onKeyboardAction = { submit() },
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = submit,
+                enabled = canReady,
+            ) {
+                Text(stringResource(R.string.read_identity_card))
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")

@@ -185,43 +185,29 @@ internal fun PersonScreen(
                     value = details.fullName,
                 )
                 if (details.dateOfBirth != null) {
-                    HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
+                    HorizontalDivider()
                     DetailInfoRow(
                         label = stringResource(R.string.date_of_birth),
                         value = details.dateOfBirth,
                     )
                 }
-                HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
+                HorizontalDivider()
                 DetailInfoRow(
                     label = stringResource(R.string.nationality),
                     value = details.nationality,
                 )
-                if (details.identifier != null) {
-                    HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
-                    DetailInfoRow(
-                        label = stringResource(R.string.identifier),
-                        value = details.identifier,
-                    )
-                }
             }
         }
 
         // Card Details Section
         Section(stringResource(R.string.card_details)) {
             NavigationGroup {
-                if (details.issuedDate != null) {
-                    DetailInfoRow(
-                        label = stringResource(R.string.issued),
-                        value = details.issuedDate,
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
-                }
                 if (details.expiryDate != null) {
                     DetailInfoRow(
                         label = stringResource(R.string.expires),
                         value = details.expiryDate,
                     )
-                    HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
+                    HorizontalDivider()
                 }
                 DetailInfoRow(
                     label = stringResource(R.string.signature_details_issuer),

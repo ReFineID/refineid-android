@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name" translatable="false">RefineID</string>
-    <string name="section_browser" tools:ignore="DuplicateStrings">Browser</string>
+    <string name="section_browser">Web access</string>
     <string name="section_document">Document</string>
+    <string name="read_identity_card">Read card</string>
+    <string name="pin1_optional" tools:ignore="Typos">PIN1 (optional)</string>
     <string name="usb_reader">USB reader</string>
     <string name="not_connected">Not connected</string>
     <string name="permission_required">Permission required</string>
@@ -50,9 +52,7 @@
     <string name="full_name">Name</string>
     <string name="date_of_birth">Date of birth</string>
     <string name="nationality">Nationality</string>
-    <string name="identifier">Identifier</string>
     <string name="card_details">Card details</string>
-    <string name="issued">Issued</string>
     <string name="expires">Expires</string>
     <string name="card_integrity">Authenticity &amp; integrity</string>
     <string name="card_untampered">Card genuine and untampered</string>

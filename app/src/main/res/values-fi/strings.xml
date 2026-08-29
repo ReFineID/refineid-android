@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="section_browser" tools:ignore="DuplicateStrings">Selain</string>
+    <string name="section_browser">Verkkokäyttö</string>
     <string name="section_document">Asiakirja</string>
+    <string name="read_identity_card">Lue kortti</string>
+    <string name="pin1_optional" tools:ignore="Typos">PIN1 (valinnainen)</string>
     <string name="usb_reader">USB-lukija</string>
     <string name="not_connected">Ei yhteyttä</string>
     <string name="permission_required">Lupa vaaditaan</string>
@@ -46,9 +48,7 @@
     <string name="full_name">Nimi</string>
     <string name="date_of_birth">Syntymäaika</string>
     <string name="nationality">Kansalaisuus</string>
-    <string name="identifier">Asiointitunnus</string>
     <string name="card_details">Kortin tiedot</string>
-    <string name="issued">Myönnetty</string>
     <string name="expires">Voimassaolo</string>
     <string name="card_integrity">Aitous ja eheys</string>
     <string name="card_untampered">Kortti on aito ja koskematon</string>

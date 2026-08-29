@@ -85,7 +85,8 @@ internal class MainScreenTest {
             .assertIsDisplayed()
         composeRule
             .onNodeWithTag(UiAutomationIds.IDENTITY_ROW)
-            .assertDoesNotExist()
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test

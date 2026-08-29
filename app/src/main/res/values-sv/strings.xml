@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="section_browser" tools:ignore="DuplicateStrings">Webbläsare</string>
+    <string name="section_browser">Webbanvändning</string>
     <string name="section_document">Dokument</string>
+    <string name="read_identity_card">Läs kort</string>
+    <string name="pin1_optional" tools:ignore="Typos">PIN1 (valfritt)</string>
     <string name="usb_reader">USB-läsare</string>
     <string name="not_connected">Inte ansluten</string>
     <string name="permission_required">Behörighet krävs</string>
@@ -46,9 +48,7 @@
     <string name="full_name">Namn</string>
     <string name="date_of_birth">Födelsedatum</string>
     <string name="nationality">Nationalitet</string>
-    <string name="identifier">Kundnummer</string>
     <string name="card_details">Kortuppgifter</string>
-    <string name="issued">Utfärdat</string>
     <string name="expires">Giltigt till</string>
     <string name="card_integrity">Äkthet och integritet</string>
     <string name="card_untampered">Kortet är äkta och orört</string>

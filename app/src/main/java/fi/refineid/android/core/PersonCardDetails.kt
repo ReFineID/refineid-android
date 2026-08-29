@@ -8,6 +8,28 @@ import java.security.cert.X509Certificate
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+internal object CardPhotoStore {
+    private val photos = mutableMapOf<String, ByteArray>()
+    private var defaultPhoto: ByteArray? = null
+
+    fun getPhoto(holderKey: String? = null): ByteArray? = holderKey?.let { photos[it] } ?: defaultPhoto
+
+    fun savePhoto(
+        photoBytes: ByteArray,
+        holderKey: String? = null,
+    ) {
+        defaultPhoto = photoBytes
+        if (holderKey != null) {
+            photos[holderKey] = photoBytes
+        }
+    }
+
+    fun clear() {
+        photos.clear()
+        defaultPhoto = null
+    }
+}
+
 internal data class PersonCardDetails(
     val holderName: String,
     val fullName: String,
@@ -22,7 +44,7 @@ internal data class PersonCardDetails(
     val photoBytes: ByteArray? = null,
 ) {
     fun getPhotoBitmap(): Bitmap? =
-        photoBytes?.let { bytes ->
+        (photoBytes ?: CardPhotoStore.getPhoto(holderName))?.let { bytes ->
             try {
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             } catch (_: Exception) {
@@ -98,21 +120,20 @@ internal data class PersonCardDetails(
                     }
 
                 val issuerRfc = x509.issuerX500Principal.getName("RFC2253")
-                val issuerCn = "(?:^|,)\\s*CN=([^,]+)".toRegex().find(issuerRfc)?.groupValues?.get(1)
+                val issuerCn =
+                    "(?:^|,)\\s*CN=([^,]+)".toRegex().find(issuerRfc)?.groupValues?.get(1)
+                        ?: "Digi- ja väestötietovirasto (DVV)"
                 val cleanIssuer =
-                    when {
-                        issuerCn?.contains("VRK", ignoreCase = true) == true ||
-                            issuerCn?.contains("DVV", ignoreCase = true) == true ||
-                            issuerCn?.contains("Digi", ignoreCase = true) == true -> {
-                            "Digi- ja väestötietovirasto (DVV)"
-                        }
-
-                        else -> {
-                            issuerCn ?: "Digi- ja väestötietovirasto (DVV)"
-                        }
+                    if (issuerCn.contains("VRK", ignoreCase = true) ||
+                        issuerCn.contains("DVV", ignoreCase = true) ||
+                        issuerCn.contains("FINEID", ignoreCase = true)
+                    ) {
+                        "Digi- ja väestötietovirasto (DVV)"
+                    } else {
+                        issuerCn
                     }
 
-                val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+                val dateFormat = SimpleDateFormat("d.M.yyyy", Locale.ROOT)
                 val issued =
                     try {
                         dateFormat.format(x509.notBefore)
@@ -126,6 +147,8 @@ internal data class PersonCardDetails(
                         null
                     }
 
+                val effectivePhoto = photoBytes ?: CardPhotoStore.getPhoto(formattedName)
+
                 PersonCardDetails(
                     holderName = cn,
                     fullName = formattedName,
@@ -137,7 +160,7 @@ internal data class PersonCardDetails(
                     issuer = cleanIssuer,
                     signatureAlgorithm = x509.sigAlgName,
                     isTamperProofVerified = true,
-                    photoBytes = photoBytes,
+                    photoBytes = effectivePhoto,
                 )
             } catch (_: Exception) {
                 null
@@ -156,6 +179,8 @@ internal data class PersonCardDetails(
                 }
             val formattedName = if (nameTokens.isNotEmpty()) nameTokens.joinToString(" ") else holderName
 
+            val effectivePhoto = CardPhotoStore.getPhoto(formattedName)
+
             return PersonCardDetails(
                 holderName = holderName,
                 fullName = formattedName,
@@ -167,7 +192,7 @@ internal data class PersonCardDetails(
                 issuer = "Digi- ja väestötietovirasto (DVV)",
                 signatureAlgorithm = "ECDSA_P384 / SHA-384",
                 isTamperProofVerified = true,
-                photoBytes = null,
+                photoBytes = effectivePhoto,
             )
         }
     }
