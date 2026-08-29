@@ -107,7 +107,7 @@ internal object XadesSignature {
         out.append("\"></ds:SignatureMethod>\n")
         objects.forEachIndexed { index, obj ->
             out.append("<ds:Reference Id=\"").append(referenceId(index)).append("\" ")
-            out.append("URI=\"").append(escapeAttribute(percentEncodePath(obj.name))).append("\">\n")
+            out.append("URI=\"").append(escapeAttribute(obj.name)).append("\">\n")
             out.append("<ds:DigestMethod Algorithm=\"").append(DIGEST_METHOD_SHA384).append("\"></ds:DigestMethod>\n")
             out.append("<ds:DigestValue>").append(base64(sha384(obj.content))).append("</ds:DigestValue>\n")
             out.append("</ds:Reference>\n")
