@@ -9,6 +9,7 @@
     <string name="sign_pdf_single">Sign document (PDF)</string>
     <string name="sign_pdf_multiple">Sign documents (PDF)</string>
     <string name="sign_container">Sign container (ASiC-E)</string>
+    <string name="default_container_name">container</string>
     <string name="saving">Saving</string>
     <string name="hold_card">Hold your identity card against the phone’s card reader</string>
     <string name="finalizing_signature">Finalizing signature…</string>

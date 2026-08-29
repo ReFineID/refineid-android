@@ -9,6 +9,7 @@
     <string name="sign_pdf_single">Allekirjoita asiakirja (PDF)</string>
     <string name="sign_pdf_multiple">Allekirjoita asiakirjat (PDF)</string>
     <string name="sign_container">Allekirjoita salkku (ASiC-E)</string>
+    <string name="default_container_name">salkku</string>
     <string name="saving">Tallennetaan</string>
     <string name="hold_card">Pidä henkilökorttia puhelimen lukijaa vasten</string>
     <string name="finalizing_signature">Viimeistellään allekirjoitusta…</string>

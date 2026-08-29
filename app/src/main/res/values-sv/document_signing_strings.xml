@@ -9,6 +9,7 @@
     <string name="sign_pdf_single">Signera dokument (PDF)</string>
     <string name="sign_pdf_multiple">Signera dokumenten (PDF)</string>
     <string name="sign_container">Signera portfölj (ASiC-E)</string>
+    <string name="default_container_name">portfölj</string>
     <string name="saving">Sparar</string>
     <string name="hold_card">Håll ditt identitetskort mot telefonens kortläsare</string>
     <string name="finalizing_signature">Slutför signatur…</string>

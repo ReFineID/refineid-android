@@ -413,7 +413,12 @@ private class DocumentSigningHarnessSession(
 
     private fun containerName(): String {
         val items = selectedItems
-        val original = if (items.size == 1) items[0].name else DEFAULT_CONTAINER_NAME
+        val original =
+            if (items.size == 1) {
+                items[0].name
+            } else {
+                context.getString(R.string.default_container_name)
+            }
         val phrase =
             context.getString(
                 R.string.signed_at,
@@ -938,7 +943,6 @@ private class DocumentSigningHarnessSession(
     private companion object {
         const val WRITE_MODE = "w"
         const val DEFAULT_DOCUMENT_NAME = "document.pdf"
-        const val DEFAULT_CONTAINER_NAME = "container"
     }
 }
 
