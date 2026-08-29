@@ -162,6 +162,54 @@ class AsicContainerTest {
     }
 
     @Test
+    fun xadesPlanEncodesValidationMaterialWithoutClearingEarly() {
+        val plan =
+            XadesSignature.plan(
+                profile = fi.refineid.android.core.NativeCardKeyProfile.ECDSA_P384,
+                objects = listOf(obj("doc.pdf")),
+                certificateDer = "cert".encodeToByteArray(),
+                signedAt = java.time.Instant.parse("2026-08-29T12:00:00Z"),
+            )
+        val cert = byteArrayOf(1, 2, 3, 4)
+        val ocsp = byteArrayOf(5, 6, 7, 8)
+        val crl = byteArrayOf(9, 10, 11, 12)
+        val material =
+            fi.refineid.android.document.PdfValidationMaterial.copyOf(
+                certificates = listOf(cert),
+                ocspResponses = listOf(ocsp),
+                revocationLists = listOf(crl),
+            )
+        val doc =
+            plan.document(
+                xmlSignature = ByteArray(96) { 1 },
+                timestampTokens = emptyList(),
+                material = material,
+            )
+        assertFalse(doc.contains("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"))
+        assertTrue(
+            doc.contains(
+                java.util.Base64
+                    .getEncoder()
+                    .encodeToString(cert),
+            ),
+        )
+        assertTrue(
+            doc.contains(
+                java.util.Base64
+                    .getEncoder()
+                    .encodeToString(ocsp),
+            ),
+        )
+        assertTrue(
+            doc.contains(
+                java.util.Base64
+                    .getEncoder()
+                    .encodeToString(crl),
+            ),
+        )
+    }
+
+    @Test
     fun preparedAsicSignatureClearsSensitiveMaterialOnClose() {
         val plan =
             XadesSignature.plan(

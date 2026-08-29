@@ -168,19 +168,7 @@ internal object XadesSignature {
         timestampTokens: List<ByteArray>,
         material: PdfValidationMaterial?,
     ): String {
-        var certificates: List<ByteArray> = emptyList()
-        var ocspResponses: List<ByteArray> = emptyList()
-        var revocationLists: List<ByteArray> = emptyList()
-        if (material != null && !material.isEmpty) {
-            material.useCopies { certs, ocsps, crls ->
-                certificates = certs
-                ocspResponses = ocsps
-                revocationLists = crls
-            }
-        }
-        if (timestampTokens.isEmpty() && certificates.isEmpty() && ocspResponses.isEmpty() &&
-            revocationLists.isEmpty()
-        ) {
+        if (timestampTokens.isEmpty() && (material == null || material.isEmpty)) {
             return ""
         }
         val out = StringBuilder()
@@ -188,56 +176,55 @@ internal object XadesSignature {
         out.append("<xades:UnsignedSignatureProperties>\n")
         timestampTokens.forEachIndexed { index, token ->
             out
-                .append(
-                    "<xades:SignatureTimeStamp Id=\"",
-                ).append(SIGNATURE_ID)
+                .append("<xades:SignatureTimeStamp Id=\"")
+                .append(SIGNATURE_ID)
                 .append("-TS-")
                 .append(index)
                 .append("\">\n")
             out
-                .append(
-                    "<ds:CanonicalizationMethod Algorithm=\"",
-                ).append(CANONICALIZATION_EXCLUSIVE)
+                .append("<ds:CanonicalizationMethod Algorithm=\"")
+                .append(CANONICALIZATION_EXCLUSIVE)
                 .append("\"></ds:CanonicalizationMethod>\n")
             out.append("<xades:EncapsulatedTimeStamp>").append(base64(token)).append("</xades:EncapsulatedTimeStamp>\n")
             out.append("</xades:SignatureTimeStamp>\n")
         }
-        if (certificates.isNotEmpty()) {
-            out.append("<xades:CertificateValues>\n")
-            for (cert in certificates) {
-                out
-                    .append(
-                        "<xades:EncapsulatedX509Certificate>",
-                    ).append(base64(cert))
-                    .append("</xades:EncapsulatedX509Certificate>\n")
-            }
-            out.append("</xades:CertificateValues>\n")
-        }
-        if (revocationLists.isNotEmpty() || ocspResponses.isNotEmpty()) {
-            out.append("<xades:RevocationValues>\n")
-            if (revocationLists.isNotEmpty()) {
-                out.append("<xades:CRLValues>\n")
-                for (crl in revocationLists) {
-                    out
-                        .append(
-                            "<xades:EncapsulatedCRLValue>",
-                        ).append(base64(crl))
-                        .append("</xades:EncapsulatedCRLValue>\n")
+        if (material != null && !material.isEmpty) {
+            material.useCopies { certificates, ocspResponses, revocationLists ->
+                if (certificates.isNotEmpty()) {
+                    out.append("<xades:CertificateValues>\n")
+                    for (cert in certificates) {
+                        out
+                            .append("<xades:EncapsulatedX509Certificate>")
+                            .append(base64(cert))
+                            .append("</xades:EncapsulatedX509Certificate>\n")
+                    }
+                    out.append("</xades:CertificateValues>\n")
                 }
-                out.append("</xades:CRLValues>\n")
-            }
-            if (ocspResponses.isNotEmpty()) {
-                out.append("<xades:OCSPValues>\n")
-                for (ocsp in ocspResponses) {
-                    out
-                        .append(
-                            "<xades:EncapsulatedOCSPValue>",
-                        ).append(base64(ocsp))
-                        .append("</xades:EncapsulatedOCSPValue>\n")
+                if (revocationLists.isNotEmpty() || ocspResponses.isNotEmpty()) {
+                    out.append("<xades:RevocationValues>\n")
+                    if (revocationLists.isNotEmpty()) {
+                        out.append("<xades:CRLValues>\n")
+                        for (crl in revocationLists) {
+                            out
+                                .append("<xades:EncapsulatedCRLValue>")
+                                .append(base64(crl))
+                                .append("</xades:EncapsulatedCRLValue>\n")
+                        }
+                        out.append("</xades:CRLValues>\n")
+                    }
+                    if (ocspResponses.isNotEmpty()) {
+                        out.append("<xades:OCSPValues>\n")
+                        for (ocsp in ocspResponses) {
+                            out
+                                .append("<xades:EncapsulatedOCSPValue>")
+                                .append(base64(ocsp))
+                                .append("</xades:EncapsulatedOCSPValue>\n")
+                        }
+                        out.append("</xades:OCSPValues>\n")
+                    }
+                    out.append("</xades:RevocationValues>\n")
                 }
-                out.append("</xades:OCSPValues>\n")
             }
-            out.append("</xades:RevocationValues>\n")
         }
         out.append("</xades:UnsignedSignatureProperties>\n")
         out.append("</xades:UnsignedProperties>\n")
