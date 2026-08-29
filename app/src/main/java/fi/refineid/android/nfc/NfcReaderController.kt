@@ -13,6 +13,7 @@ import android.os.Looper
 import fi.refineid.android.core.AuthenticationPinCache
 import fi.refineid.android.core.CanSessionStore
 import fi.refineid.android.core.CanSubmission
+import fi.refineid.android.core.CertificateHolderName
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardSessionMaterial
 import fi.refineid.android.core.NativeCertificateReadFailure
@@ -422,8 +423,9 @@ internal class NfcReaderController(
         }
         val exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep))
         val material = NativeCardSessionMaterial()
+        val opened = NativeContactlessSession.connect(canBytes.copyOf(), exchange)
         val status =
-            when (val opened = NativeContactlessSession.connect(canBytes.copyOf(), exchange)) {
+            when (opened) {
                 is NativeContactlessOpenResult.Success -> {
                     material.cacheAuthenticationCertificate(opened.certificate)
                     material.cachePin1Preflight(opened.preflight)
@@ -436,8 +438,15 @@ internal class NfcReaderController(
             }
         if (status == NfcReaderStatus.CARD_READY && generation == probeGeneration) {
             CanSessionStore.remember(String(canBytes, Charsets.US_ASCII))
+            val holderName =
+                if (opened is NativeContactlessOpenResult.Success) {
+                    CertificateHolderName.fromCertificate(opened.certificate)
+                } else {
+                    null
+                }
             if (mintOnSuccess) {
                 primedCanStore.write(canBytes.copyOf())
+                primedCanStore.writeHolderName(holderName)
                 primedCardStored = true
                 AppTrace.nfcPrimedMinted()
             }
@@ -528,7 +537,8 @@ internal class NfcReaderController(
     }
 
     private fun publish(snapshot: NfcReaderSnapshot) {
-        latestSnapshot = snapshot.copy(isPrimed = primedCardStored)
+        val holder = if (primedCardStored) primedCanStore.readHolderName() else snapshot.holderName
+        latestSnapshot = snapshot.copy(isPrimed = primedCardStored, holderName = holder)
         AppTrace.nfcSnapshotPublished(latestSnapshot.status)
         stateListeners.toList().forEach { listener -> listener(latestSnapshot) }
     }

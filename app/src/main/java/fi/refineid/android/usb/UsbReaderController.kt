@@ -15,6 +15,7 @@ import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
 import fi.refineid.android.core.CanSubmission
+import fi.refineid.android.core.CertificateHolderName
 import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeContactlessOpenResult
@@ -25,10 +26,7 @@ import fi.refineid.android.keychain.nextProviderGeneration
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidUsbSession
 import fi.refineid.android.usb.ccid.CcidUsbSessionOpener
-import java.io.ByteArrayInputStream
 import java.security.SecureRandom
-import java.security.cert.CertificateFactory
-import java.security.cert.X509Certificate
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -402,7 +400,7 @@ internal class UsbReaderController(
                         val cert = activeSession?.copyAuthenticationCertificate()
                         cert?.let { c ->
                             try {
-                                holderNameFromCertificate(c)
+                                CertificateHolderName.fromCertificate(c)
                             } finally {
                                 c.close()
                             }
@@ -596,7 +594,7 @@ internal class UsbReaderController(
                     try {
                         val cert = result.session.copyAuthenticationCertificate()
                         try {
-                            holderNameFromCertificate(cert)
+                            CertificateHolderName.fromCertificate(cert)
                         } finally {
                             cert.close()
                         }
@@ -762,20 +760,4 @@ private fun NativeCertificateReadFailure.toContactlessConnectStatus(): ReaderCon
         -> {
             ReaderConnectionStatus.TRANSPORT_ERROR
         }
-    }
-
-/**
- * Extracts the common name (CN) from the authentication certificate's
- * X.500 subject, returning the cardholder's full name or `null` on any
- * parsing failure.
- */
-private fun holderNameFromCertificate(certificate: NativeAuthenticationCertificate): String? =
-    try {
-        val der = certificate.copyDer()
-        val factory = CertificateFactory.getInstance("X.509")
-        val x509 = factory.generateCertificate(ByteArrayInputStream(der)) as X509Certificate
-        val rfc2253 = x509.subjectX500Principal.getName("RFC2253")
-        "(?:^|,)\\s*CN=([^,]+)".toRegex().find(rfc2253)?.groupValues?.get(1)
-    } catch (_: Exception) {
-        null
     }

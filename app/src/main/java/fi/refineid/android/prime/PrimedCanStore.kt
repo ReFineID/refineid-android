@@ -3,6 +3,7 @@ package fi.refineid.android.prime
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import androidx.core.content.edit
 import fi.refineid.android.core.CanSubmission
 import java.io.IOException
 import java.security.GeneralSecurityException
@@ -126,6 +127,20 @@ internal class PrimedCanStore(
     }
 
     @Synchronized
+    fun readHolderName(): String? = preferences.getString(ENTRY_HOLDER_NAME, null)
+
+    @Synchronized
+    fun writeHolderName(name: String?) {
+        preferences.edit {
+            if (name != null) {
+                putString(ENTRY_HOLDER_NAME, name)
+            } else {
+                remove(ENTRY_HOLDER_NAME)
+            }
+        }
+    }
+
+    @Synchronized
     fun clear() {
         val cleared = preferences.edit().clear().commit()
         if (!cleared) {
@@ -172,6 +187,7 @@ internal class PrimedCanStore(
         const val ANDROID_KEYSTORE_PROVIDER = "AndroidKeyStore"
         const val CIPHER_TRANSFORMATION = "AES/GCM/NoPadding"
         const val ENTRY_NAME = "can"
+        const val ENTRY_HOLDER_NAME = "holder_name"
         const val IV_SUFFIX = ".iv"
         const val CIPHERTEXT_SUFFIX = ".ciphertext"
         const val AES_KEY_SIZE_BITS = 256

@@ -23,6 +23,8 @@ internal data class NfcReaderSnapshot(
     val isPrimed: Boolean = false,
     /** True while a stored access number is opening a discovered card. */
     val isPrimedOpening: Boolean = false,
+    /** The cardholder name read from the certificate or primed store. */
+    val holderName: String? = null,
 )
 
 /** Coarse holder-facing status for one completed card-access probe. */

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name" translatable="false">RefineID</string>
-    <string name="section_card" tools:ignore="DuplicateStrings">Card</string>
     <string name="section_browser" tools:ignore="DuplicateStrings">Browser</string>
     <string name="section_document">Document</string>
     <string name="usb_reader">USB reader</string>
@@ -46,4 +45,6 @@
     <string name="pair_computer">Pair with Mac / iPad</string>
     <string name="section_identity">Identity</string>
     <string name="person">Person</string>
+    <string name="forget_identity_title">Forget identity?</string>
+    <string name="forget_identity">Forget identity</string>
 </resources>

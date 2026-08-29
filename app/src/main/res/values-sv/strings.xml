@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="section_card" tools:ignore="DuplicateStrings">Kort</string>
     <string name="section_browser" tools:ignore="DuplicateStrings">Webbläsare</string>
     <string name="section_document">Dokument</string>
     <string name="usb_reader">USB-läsare</string>
@@ -42,4 +41,6 @@
     <string name="pair_computer">Koppla med Mac / iPad</string>
     <string name="section_identity">Identitet</string>
     <string name="person">Person</string>
+    <string name="forget_identity_title">Glöm identitet?</string>
+    <string name="forget_identity">Glöm identitet</string>
 </resources>

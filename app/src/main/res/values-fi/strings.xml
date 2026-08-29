@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="section_card" tools:ignore="DuplicateStrings">Kortti</string>
     <string name="section_browser" tools:ignore="DuplicateStrings">Selain</string>
     <string name="section_document">Asiakirja</string>
     <string name="usb_reader">USB-lukija</string>
@@ -42,4 +41,6 @@
     <string name="pair_computer">Yhdistä Mac / iPad</string>
     <string name="section_identity">Henkilöllisyys</string>
     <string name="person">Henkilö</string>
+    <string name="forget_identity_title">Unohdetaanko henkilöllisyys?</string>
+    <string name="forget_identity">Unohda henkilöllisyys</string>
 </resources>

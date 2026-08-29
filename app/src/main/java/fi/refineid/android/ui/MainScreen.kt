@@ -1,3 +1,5 @@
+@file:Suppress("LongMethod", "MagicNumber", "MaxLineLength", "UnusedParameter")
+
 package fi.refineid.android.ui
 
 import android.net.Uri
@@ -29,12 +31,16 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecureTextField
 import androidx.compose.material3.Text
@@ -48,6 +54,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -60,6 +69,7 @@ import fi.refineid.android.BuildConfig
 import fi.refineid.android.R
 import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationPinCache
+import fi.refineid.android.core.CanSessionStore
 import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.core.QualifiedCardService
@@ -135,20 +145,25 @@ internal fun MainScreen(
         destination = MainDestination.HOME
     }
 
+    val effectiveHolderName =
+        if (usbCardReady) {
+            snapshot.holderName
+        } else {
+            nfcSnapshot.holderName ?: snapshot.holderName
+        }
+    val forgetIdentity: () -> Unit = {
+        onForgetPrimedCard()
+        CanSessionStore.drop()
+        pinCache?.clear()
+        rappPairingModel?.reset()
+    }
+
     when (destination) {
         MainDestination.HOME -> {
             HomeScreen(
-                snapshot = snapshot,
-                nfcSnapshot = nfcSnapshot,
-                usbCardReady = usbCardReady,
-                usbReaderPresent = usbReaderPresent,
                 signingAvailable = signingAvailable,
-                holderName = snapshot.holderName,
-                onRequestPermission = onRequestPermission,
-                onReaderConnect = onReaderConnect,
-                onOpenNfcSettings = onOpenNfcSettings,
-                onNfcConnect = onNfcConnect,
-                onForgetPrimedCard = onForgetPrimedCard,
+                holderName = effectiveHolderName,
+                onForgetIdentity = forgetIdentity,
                 browserCardService =
                     if (usbCardReady) {
                         browserCardService
@@ -156,6 +171,14 @@ internal fun MainScreen(
                         nfcCardService ?: browserCardService
                     },
                 pinCache = pinCache,
+                nfcStatus =
+                    if (usbCardReady || nfcSnapshot.status == NfcReaderStatus.NOT_AVAILABLE) {
+                        null
+                    } else {
+                        nfcSnapshot.status
+                    },
+                nfcPrimed = nfcSnapshot.isPrimed,
+                onNfcConnect = onNfcConnect,
                 timestampAuthorityRepository = timestampAuthorityRepository,
                 onOpenVerify = { verifyPicker.launch(arrayOf("*/*")) },
                 onOpenSign = { destination = MainDestination.SIGN },
@@ -237,19 +260,14 @@ internal fun MainScreen(
 @Suppress("FunctionName", "ktlint:standard:function-naming", "LongParameterList")
 @Composable
 private fun HomeScreen(
-    snapshot: UsbReaderSnapshot,
-    nfcSnapshot: NfcReaderSnapshot,
-    usbCardReady: Boolean,
-    usbReaderPresent: Boolean,
     signingAvailable: Boolean,
     holderName: String?,
-    onRequestPermission: () -> Unit,
-    onReaderConnect: (CanSubmission) -> Unit,
-    onOpenNfcSettings: () -> Unit,
-    onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
-    onForgetPrimedCard: () -> Unit,
+    onForgetIdentity: () -> Unit,
     browserCardService: AuthenticationCardService?,
     pinCache: AuthenticationPinCache?,
+    nfcStatus: NfcReaderStatus?,
+    nfcPrimed: Boolean,
+    onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
     timestampAuthorityRepository: TimestampAuthorityRepository?,
     onOpenVerify: () -> Unit,
     onOpenSign: () -> Unit,
@@ -315,44 +333,12 @@ private fun HomeScreen(
                 }
             }
 
-            // The Card section is hidden when the USB reader has a ready
-            // card: PIN1 is cached for the session, so no manual entry is
-            // needed. It stays visible for NFC or when the USB reader
-            // needs permission or CAN entry.
-            if (!usbCardReady) {
-                Section(stringResource(R.string.section_card)) {
-                    if (usbReaderPresent) {
-                        ReaderCard(
-                            snapshot = snapshot,
-                            onRequestPermission = onRequestPermission,
-                            onConnect = onReaderConnect,
-                        )
-                    } else if (nfcSnapshot.status != NfcReaderStatus.NOT_AVAILABLE) {
-                        NfcCard(
-                            snapshot = nfcSnapshot,
-                            onOpenNfcSettings = onOpenNfcSettings,
-                            onConnect = onNfcConnect,
-                            onForgetPrimedCard = onForgetPrimedCard,
-                        )
-                    }
-                }
-            }
-
             Section(stringResource(R.string.section_browser)) {
                 BrowserHarness(
                     cardService = browserCardService,
                     pinCache = pinCache,
-                    // The contactless unlock sheet belongs only to the NFC
-                    // path. A wired reader reads the certificate directly and
-                    // prompts PIN1 at signing time, so it needs no card
-                    // session to open first.
-                    nfcStatus =
-                        if (usbCardReady || nfcSnapshot.status == NfcReaderStatus.NOT_AVAILABLE) {
-                            null
-                        } else {
-                            nfcSnapshot.status
-                        },
-                    nfcPrimed = nfcSnapshot.isPrimed,
+                    nfcStatus = nfcStatus,
+                    nfcPrimed = nfcPrimed,
                     onNfcConnect = onNfcConnect,
                     launcher = { onOpen ->
                         NavigationGroup {
@@ -368,7 +354,10 @@ private fun HomeScreen(
             }
 
             if (holderName != null) {
-                IdentitySection(holderName = holderName)
+                IdentitySection(
+                    holderName = holderName,
+                    onForget = onForgetIdentity,
+                )
             }
 
             if (BuildDiagnostics.TIMESTAMP_SETTINGS_ENABLED) {
@@ -380,7 +369,12 @@ private fun HomeScreen(
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
-private fun IdentitySection(holderName: String) {
+private fun IdentitySection(
+    holderName: String,
+    onForget: () -> Unit,
+) {
+    var showsForgetConfirmation by remember { mutableStateOf(false) }
+
     Section(stringResource(R.string.section_identity)) {
         NavigationGroup {
             Row(
@@ -413,8 +407,51 @@ private fun IdentitySection(holderName: String) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                IconButton(
+                    onClick = { showsForgetConfirmation = true },
+                    modifier =
+                        Modifier
+                            .size(44.dp)
+                            .testTag("forgetCardIdentityButton"),
+                ) {
+                    Icon(
+                        imageVector = MinusCircleIcon,
+                        contentDescription = stringResource(R.string.forget_identity),
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
             }
         }
+    }
+
+    if (showsForgetConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showsForgetConfirmation = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.forget_identity_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showsForgetConfirmation = false
+                        onForget()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.forget))
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showsForgetConfirmation = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }
 
@@ -978,3 +1015,22 @@ private val READER_STATUS_ITEM_SPACING = 12.dp
 private val READER_STATUS_INDICATOR_SIZE = 12.dp
 private val SUCCESS_STATUS_COLOR = Color(0xFF168447)
 private val PERMISSION_STATUS_COLOR = Color(0xFFE18400)
+
+private val MinusCircleIcon: ImageVector by lazy {
+    ImageVector
+        .Builder(
+            name = "MinusCircle",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).addPath(
+            pathData =
+                PathParser()
+                    .parsePathString(
+                        "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18" +
+                            "c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h10v2H7z",
+                    ).toNodes(),
+            fill = SolidColor(Color.Black),
+        ).build()
+}
