@@ -151,12 +151,17 @@ internal fun MainScreen(
         } else {
             nfcSnapshot.holderName ?: snapshot.holderName
         }
-    val forgetIdentity: () -> Unit = {
-        onForgetPrimedCard()
-        CanSessionStore.drop()
-        pinCache?.clear()
-        rappPairingModel?.reset()
-    }
+    val forgetIdentity: (() -> Unit)? =
+        if (usbCardReady) {
+            null
+        } else {
+            {
+                onForgetPrimedCard()
+                CanSessionStore.drop()
+                pinCache?.clear()
+                rappPairingModel?.reset()
+            }
+        }
 
     when (destination) {
         MainDestination.HOME -> {
@@ -262,7 +267,7 @@ internal fun MainScreen(
 private fun HomeScreen(
     signingAvailable: Boolean,
     holderName: String?,
-    onForgetIdentity: () -> Unit,
+    onForgetIdentity: (() -> Unit)?,
     browserCardService: AuthenticationCardService?,
     pinCache: AuthenticationPinCache?,
     nfcStatus: NfcReaderStatus?,
@@ -371,7 +376,7 @@ private fun HomeScreen(
 @Composable
 private fun IdentitySection(
     holderName: String,
-    onForget: () -> Unit,
+    onForget: (() -> Unit)?,
 ) {
     var showsForgetConfirmation by remember { mutableStateOf(false) }
 
@@ -407,25 +412,27 @@ private fun IdentitySection(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(
-                    onClick = { showsForgetConfirmation = true },
-                    modifier =
-                        Modifier
-                            .size(44.dp)
-                            .testTag("forgetCardIdentityButton"),
-                ) {
-                    Icon(
-                        imageVector = MinusCircleIcon,
-                        contentDescription = stringResource(R.string.forget_identity),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(24.dp),
-                    )
+                if (onForget != null) {
+                    IconButton(
+                        onClick = { showsForgetConfirmation = true },
+                        modifier =
+                            Modifier
+                                .size(44.dp)
+                                .testTag("forgetCardIdentityButton"),
+                    ) {
+                        Icon(
+                            imageVector = MinusCircleIcon,
+                            contentDescription = stringResource(R.string.forget_identity),
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                 }
             }
         }
     }
 
-    if (showsForgetConfirmation) {
+    if (showsForgetConfirmation && onForget != null) {
         AlertDialog(
             onDismissRequest = { showsForgetConfirmation = false },
             title = {

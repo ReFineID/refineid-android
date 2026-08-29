@@ -41,8 +41,8 @@
     <string name="wrong_pin">Wrong PIN</string>
     <string name="pin_locked">PIN locked</string>
     <string name="unavailable">Unavailable</string>
-    <string name="section_remote">Remote computer</string>
-    <string name="pair_computer">Pair with Mac / iPad</string>
+    <string name="section_remote">Remote access</string>
+    <string name="pair_computer">Connect</string>
     <string name="section_identity">Identity</string>
     <string name="person">Person</string>
     <string name="forget_identity_title">Forget identity?</string>
