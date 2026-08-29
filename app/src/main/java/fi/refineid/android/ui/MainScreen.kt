@@ -69,7 +69,6 @@ import fi.refineid.android.nfc.NfcReaderStatus
 import fi.refineid.android.rapp.RappAuthorizationInbox
 import fi.refineid.android.rapp.RappPairingModel
 import fi.refineid.android.settings.TimestampAuthorityRepository
-import fi.refineid.android.usb.AuthenticationStatus
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
 import fi.refineid.android.usb.UsbReaderSnapshot
@@ -87,7 +86,6 @@ private enum class MainDestination {
 internal fun MainScreen(
     snapshot: UsbReaderSnapshot,
     onRequestPermission: () -> Unit,
-    onAuthenticate: (Pin1Submission) -> Unit,
     onReaderConnect: (CanSubmission) -> Unit = {},
     browserCardService: AuthenticationCardService? = null,
     qualifiedCardService: QualifiedCardService? = null,
@@ -147,7 +145,6 @@ internal fun MainScreen(
                 signingAvailable = signingAvailable,
                 holderName = snapshot.holderName,
                 onRequestPermission = onRequestPermission,
-                onAuthenticate = onAuthenticate,
                 onReaderConnect = onReaderConnect,
                 onOpenNfcSettings = onOpenNfcSettings,
                 onNfcConnect = onNfcConnect,
@@ -247,7 +244,6 @@ private fun HomeScreen(
     signingAvailable: Boolean,
     holderName: String?,
     onRequestPermission: () -> Unit,
-    onAuthenticate: (Pin1Submission) -> Unit,
     onReaderConnect: (CanSubmission) -> Unit,
     onOpenNfcSettings: () -> Unit,
     onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
@@ -339,15 +335,6 @@ private fun HomeScreen(
                             onForgetPrimedCard = onForgetPrimedCard,
                         )
                     }
-                    if (
-                        BuildDiagnostics.MANUAL_AUTHENTICATION_ENABLED &&
-                        usbCardReady
-                    ) {
-                        AuthenticationCard(
-                            status = snapshot.authenticationStatus,
-                            onAuthenticate = onAuthenticate,
-                        )
-                    }
                 }
             }
 
@@ -386,6 +373,46 @@ private fun HomeScreen(
 
             if (BuildDiagnostics.TIMESTAMP_SETTINGS_ENABLED) {
                 TimestampSettingsRow(timestampAuthorityRepository)
+            }
+        }
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun IdentitySection(holderName: String) {
+    Section(stringResource(R.string.section_identity)) {
+        NavigationGroup {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING)
+                        .testTag(UiAutomationIds.IDENTITY_ROW),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(ROW_ITEM_SPACING),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(ROW_ICON_SIZE),
+                )
+                Column(
+                    modifier = Modifier.weight(ROW_LABEL_WEIGHT),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.person),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = holderName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -433,107 +460,6 @@ private fun SectionHeader(title: String) {
         fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-@Suppress("FunctionName", "ktlint:standard:function-naming")
-@Composable
-private fun AuthenticationCard(
-    status: AuthenticationStatus,
-    onAuthenticate: (Pin1Submission) -> Unit,
-) {
-    val pinState = remember { TextFieldState() }
-    DisposableEffect(pinState) {
-        onDispose(pinState::clearText)
-    }
-    val isSigning = status == AuthenticationStatus.SIGNING
-    val submit = {
-        val submission =
-            if (Pin1Submission.isComplete(pinState.text)) {
-                Pin1Submission.from(pinState.text)
-            } else {
-                null
-            }
-        pinState.clearText()
-        submission?.let(onAuthenticate)
-        Unit
-    }
-
-    Card(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .testTag(UiAutomationIds.AUTHENTICATION_CARD),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = CARD_ELEVATION),
-        shape = RoundedCornerShape(CARD_CORNER_RADIUS),
-    ) {
-        Column(
-            modifier = Modifier.padding(CARD_PADDING),
-            verticalArrangement = Arrangement.spacedBy(CARD_ITEM_SPACING),
-        ) {
-            Text(
-                text = stringResource(R.string.authentication),
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.titleLarge,
-            )
-            SecureTextField(
-                state = pinState,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .testTag(UiAutomationIds.PIN1_FIELD),
-                enabled = !isSigning,
-                label = { Text(stringResource(R.string.pin1)) },
-                inputTransformation = Pin1InputTransformation,
-                textObfuscationMode = TextObfuscationMode.Hidden,
-                keyboardOptions =
-                    KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Done,
-                    ),
-            )
-            Button(
-                onClick = submit,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .testTag(UiAutomationIds.AUTHENTICATION_ACTION),
-                enabled = !isSigning && Pin1Submission.isComplete(pinState.text),
-            ) {
-                Text(stringResource(R.string.sign))
-            }
-            AuthenticationStatusText(status)
-        }
-    }
-}
-
-@Suppress("FunctionName", "ktlint:standard:function-naming")
-@Composable
-private fun AuthenticationStatusText(status: AuthenticationStatus) {
-    val text =
-        when (status) {
-            AuthenticationStatus.IDLE -> null
-            AuthenticationStatus.SIGNING -> stringResource(R.string.signing)
-            AuthenticationStatus.SUCCEEDED -> stringResource(R.string.signed)
-            AuthenticationStatus.WRONG_PIN -> stringResource(R.string.wrong_pin)
-            AuthenticationStatus.PIN_LOCKED -> stringResource(R.string.pin_locked)
-            AuthenticationStatus.REFUSED -> stringResource(R.string.unavailable)
-            AuthenticationStatus.ERROR -> stringResource(R.string.error)
-        }
-    if (text != null) {
-        Text(
-            text = text,
-            modifier = Modifier.testTag(UiAutomationIds.AUTHENTICATION_STATUS),
-            color =
-                if (status == AuthenticationStatus.SUCCEEDED) {
-                    SUCCESS_STATUS_COLOR
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
 }
 
 internal val Pin1InputTransformation =

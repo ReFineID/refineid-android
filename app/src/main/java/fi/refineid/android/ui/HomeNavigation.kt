@@ -152,13 +152,13 @@ internal fun SubScreen(
 }
 
 internal val GROUP_DIVIDER_INSET = 60.dp
-private val GROUP_CORNER_RADIUS = 22.dp
-private val GROUP_ELEVATION = 2.dp
-private val ROW_HORIZONTAL_PADDING = 20.dp
-private val ROW_VERTICAL_PADDING = 18.dp
-private val ROW_ITEM_SPACING = 14.dp
-private val ROW_ICON_SIZE = 26.dp
-private const val ROW_LABEL_WEIGHT = 1f
-private val SUBSCREEN_HORIZONTAL_PADDING = 20.dp
-private val SUBSCREEN_VERTICAL_PADDING = 8.dp
-private val SUBSCREEN_ITEM_SPACING = 14.dp
+internal val GROUP_CORNER_RADIUS = 22.dp
+internal val GROUP_ELEVATION = 2.dp
+internal val ROW_HORIZONTAL_PADDING = 20.dp
+internal val ROW_VERTICAL_PADDING = 18.dp
+internal val ROW_ITEM_SPACING = 14.dp
+internal val ROW_ICON_SIZE = 26.dp
+internal const val ROW_LABEL_WEIGHT = 1f
+internal val SUBSCREEN_HORIZONTAL_PADDING = 20.dp
+internal val SUBSCREEN_VERTICAL_PADDING = 8.dp
+internal val SUBSCREEN_ITEM_SPACING = 14.dp

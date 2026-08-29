@@ -18,6 +18,7 @@ internal object UiAutomationIds {
     const val NFC_PIN1_FIELD = "nfcPin1Field"
     const val NFC_CONNECT_ACTION = "nfcConnectAction"
     const val NFC_FORGET_ACTION = "nfcForgetAction"
+    const val IDENTITY_ROW = "identityRow"
     const val AUTHENTICATION_CARD = "authenticationCard"
     const val PIN1_FIELD = "pin1Field"
     const val AUTHENTICATION_ACTION = "authenticationAction"

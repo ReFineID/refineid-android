@@ -396,16 +396,23 @@ internal class UsbReaderController(
             if (result is NativeContactlessOpenResult.Success) {
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
             }
-            val holder = if (result is NativeContactlessOpenResult.Success) {
-                try {
-                    val cert = activeSession?.copyAuthenticationCertificate()
-                    cert?.let { c ->
-                        try { holderNameFromCertificate(c) } finally { c.close() }
+            val holder =
+                if (result is NativeContactlessOpenResult.Success) {
+                    try {
+                        val cert = activeSession?.copyAuthenticationCertificate()
+                        cert?.let { c ->
+                            try {
+                                holderNameFromCertificate(c)
+                            } finally {
+                                c.close()
+                            }
+                        }
+                    } catch (_: Exception) {
+                        null
                     }
-                } catch (_: Exception) { null }
-            } else {
-                null
-            }
+                } else {
+                    null
+                }
             val snapshot =
                 when (result) {
                     is NativeContactlessOpenResult.Success -> {
@@ -585,10 +592,17 @@ internal class UsbReaderController(
             if (result is CcidSessionOpenResult.Ready) {
                 activeSession = result.session
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
-                holder = try {
-                    val cert = result.session.copyAuthenticationCertificate()
-                    try { holderNameFromCertificate(cert) } finally { cert.close() }
-                } catch (_: Exception) { null }
+                holder =
+                    try {
+                        val cert = result.session.copyAuthenticationCertificate()
+                        try {
+                            holderNameFromCertificate(cert)
+                        } finally {
+                            cert.close()
+                        }
+                    } catch (_: Exception) {
+                        null
+                    }
             } else if (result is CcidSessionOpenResult.AccessNumberRequired) {
                 // Hold the contactless session so a CAN entry can run PACE on it.
                 // No provider generation until connect() actually opens the card.

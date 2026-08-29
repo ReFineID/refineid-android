@@ -69,7 +69,6 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     snapshot = readerSnapshot,
                     onRequestPermission = readerController::requestPermission,
-                    onAuthenticate = readerController::authenticate,
                     onReaderConnect = readerController::connect,
                     browserCardService = readerController,
                     qualifiedCardService = readerController.qualifiedCardService,
