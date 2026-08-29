@@ -275,7 +275,7 @@ private fun HomeScreen(
         ) {
             val appTitle =
                 if (BuildConfig.DEBUG) {
-                    "${stringResource(R.string.app_name)} - ${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_NUMBER})"
+                    "RID - ${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_NUMBER})"
                 } else {
                     stringResource(R.string.app_name)
                 }
