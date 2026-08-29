@@ -53,22 +53,17 @@ val versionProperties =
         }
     }
 val liveUtcDate = ZonedDateTime.now(ZoneOffset.UTC)
-val defaultLiveVersionName = "${liveUtcDate.year % 100}.${liveUtcDate.monthValue}.${liveUtcDate.dayOfMonth}"
-val defaultLiveBuildNumber = (liveUtcDate.hour * buildNumberHourScale + liveUtcDate.minute / 10).toString()
-
-val useAutoVersion =
-    providers.gradleProperty("autoVersion").map { it.toBoolean() }.getOrElse(false)
+val defaultLiveVersionName =
+    "${liveUtcDate.year % 100}.${liveUtcDate.monthValue}.${liveUtcDate.dayOfMonth}"
+val defaultLiveBuildNumber =
+    (liveUtcDate.hour * buildNumberHourScale + liveUtcDate.minute / 10).toString()
 
 val refineIdVersionName =
     (
         providers.gradleProperty("versionName").orNull
             ?: providers.environmentVariable("VERSION_NAME").orNull
-            ?: if (useAutoVersion) {
-                defaultLiveVersionName
-            } else {
-                versionProperties.getProperty("versionName")
-                    ?: defaultLiveVersionName
-            }
+            ?: versionProperties.getProperty("versionName")
+            ?: defaultLiveVersionName
     ).trim()
 
 val calendarVersionPattern =
@@ -86,12 +81,7 @@ val calendarVersionDate =
 val rawBuildNumber =
     providers.gradleProperty("buildNumber").orNull
         ?: providers.environmentVariable("BUILD_NUMBER").orNull
-        ?: if (useAutoVersion) {
-            defaultLiveBuildNumber
-        } else {
-            versionProperties.getProperty("buildNumber")
-                ?: defaultLiveBuildNumber
-        }
+        ?: defaultLiveBuildNumber
 
 val refineIdBuildNumber =
     rawBuildNumber.trim().toIntOrNull()
