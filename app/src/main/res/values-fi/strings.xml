@@ -40,7 +40,6 @@
     <string name="section_remote">Etäkäyttö</string>
     <string name="pair_computer">Yhdistä</string>
     <string name="section_identity">Henkilöllisyys</string>
-    <string name="person">Henkilö</string>
     <string name="forget_identity_title">Unohdetaanko henkilöllisyys?</string>
     <string name="forget_identity">Unohda henkilöllisyys</string>
 </resources>

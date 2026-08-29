@@ -40,7 +40,6 @@
     <string name="section_remote">Fjärranvändning</string>
     <string name="pair_computer">Anslut</string>
     <string name="section_identity">Identitet</string>
-    <string name="person">Person</string>
     <string name="forget_identity_title">Glöm identitet?</string>
     <string name="forget_identity">Glöm identitet</string>
 </resources>

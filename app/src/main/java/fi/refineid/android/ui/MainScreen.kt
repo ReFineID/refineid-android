@@ -397,21 +397,12 @@ private fun IdentitySection(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(ROW_ICON_SIZE),
                 )
-                Column(
+                Text(
+                    text = holderName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(ROW_LABEL_WEIGHT),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.person),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = holderName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                )
                 if (onForget != null) {
                     IconButton(
                         onClick = { showsForgetConfirmation = true },
