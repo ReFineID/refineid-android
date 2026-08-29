@@ -17,8 +17,11 @@ import fi.refineid.android.document.DocumentValidationResult
 import fi.refineid.android.document.RevocationStatus
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.math.BigInteger
 import java.net.URLDecoder
 import java.security.MessageDigest
+import java.security.PublicKey
 import java.security.Signature
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
@@ -200,14 +203,12 @@ internal object AsicValidator {
 
         val signedInfoSubstring = extractSignedInfoXml(xmlString)
         val signatureValid =
-            try {
-                val sig = Signature.getInstance(sigAlgorithm)
-                sig.initVerify(signerCert.publicKey)
-                sig.update(signedInfoSubstring.encodeToByteArray())
-                sig.verify(sigValBytes)
-            } catch (_: Exception) {
-                false
-            }
+            verifySignatureBytes(
+                algorithm = sigAlgorithm,
+                publicKey = signerCert.publicKey,
+                data = signedInfoSubstring.encodeToByteArray(),
+                signatureBytes = sigValBytes,
+            )
 
         val chainTrusted = isChainTrusted(signerCert, trustAnchors)
         val revocationStatus = if (chainTrusted) checkRevocation(signerCert) else RevocationStatus.UNCHECKED
@@ -223,7 +224,7 @@ internal object AsicValidator {
             digestMatches = allDigestsMatch,
             signatureValid = signatureValid,
             chainTrusted = chainTrusted,
-            hasSignatureTimestamp = false,
+            hasSignatureTimestamp = sigElement.getElementsByTagNameNS("*", "EncapsulatedTimeStamp").length > 0,
             isDocumentTimestamp = false,
             revocationStatus = revocationStatus,
         )
@@ -291,5 +292,63 @@ internal object AsicValidator {
         val rfc2253 = certificate.subjectX500Principal.getName("RFC2253")
         val match = "(?:^|,)\\s*SERIALNUMBER=([^,]+)".toRegex(RegexOption.IGNORE_CASE).find(rfc2253)
         return match?.groupValues?.get(1)?.trim() ?: certificate.serialNumber?.toString(16)
+    }
+
+    private fun verifySignatureBytes(
+        algorithm: String,
+        publicKey: PublicKey,
+        data: ByteArray,
+        signatureBytes: ByteArray,
+    ): Boolean {
+        val candidates =
+            if (algorithm.contains("ECDSA", ignoreCase = true)) {
+                val der = p1363ToDer(signatureBytes)
+                if (der != null && !der.contentEquals(signatureBytes)) {
+                    listOf(der, signatureBytes)
+                } else {
+                    listOf(signatureBytes)
+                }
+            } else {
+                listOf(signatureBytes)
+            }
+        for (candidate in candidates) {
+            try {
+                val sig = Signature.getInstance(algorithm)
+                sig.initVerify(publicKey)
+                sig.update(data)
+                if (sig.verify(candidate)) return true
+            } catch (_: Exception) {
+                // Try next candidate
+            }
+        }
+        return false
+    }
+
+    private fun p1363ToDer(sigBytes: ByteArray): ByteArray? {
+        if (sigBytes.isEmpty() || sigBytes.size % 2 != 0) return null
+        if (sigBytes[0] == 0x30.toByte()) return sigBytes
+        val half = sigBytes.size / 2
+        val rBytes = sigBytes.copyOfRange(0, half)
+        val sBytes = sigBytes.copyOfRange(half, sigBytes.size)
+        val r = BigInteger(1, rBytes)
+        val s = BigInteger(1, sBytes)
+        val rArr = r.toByteArray()
+        val sArr = s.toByteArray()
+        val totalLen = 2 + rArr.size + 2 + sArr.size
+        val out = ByteArrayOutputStream()
+        out.write(0x30)
+        if (totalLen < 128) {
+            out.write(totalLen)
+        } else {
+            out.write(0x81)
+            out.write(totalLen)
+        }
+        out.write(0x02)
+        out.write(rArr.size)
+        out.write(rArr)
+        out.write(0x02)
+        out.write(sArr.size)
+        out.write(sArr)
+        return out.toByteArray()
     }
 }
