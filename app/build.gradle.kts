@@ -62,7 +62,6 @@ val refineIdVersionName =
     (
         providers.gradleProperty("versionName").orNull
             ?: providers.environmentVariable("VERSION_NAME").orNull
-            ?: versionProperties.getProperty("versionName")
             ?: defaultLiveVersionName
     ).trim()
 
