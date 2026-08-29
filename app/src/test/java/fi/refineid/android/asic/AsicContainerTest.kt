@@ -62,8 +62,9 @@ class AsicContainerTest {
             String(AsicContainer.manifest(listOf(obj("räätäli.pdf", mimeType = "application/pdf"))))
         assertTrue(manifest.contains("manifest:full-path=\"/\""))
         assertTrue(manifest.contains("manifest:media-type=\"${AsicContainer.MIME_TYPE}\""))
-        // The name is percent-encoded over UTF-8 in the reference URI form.
-        assertTrue(manifest.contains("r%C3%A4%C3%A4t%C3%A4li.pdf"))
+        // The full path in manifest.xml matches the ZIP entry name verbatim (XML-escaped, not percent-encoded).
+        assertTrue(manifest.contains("manifest:full-path=\"räätäli.pdf\""))
+        assertTrue(manifest.contains("manifest:media-type=\"application/pdf\""))
     }
 
     @Test

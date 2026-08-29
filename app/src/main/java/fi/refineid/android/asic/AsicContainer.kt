@@ -101,7 +101,7 @@ internal object AsicContainer {
         out.append("  <manifest:file-entry manifest:full-path=\"/\" manifest:media-type=\"")
         out.append(MIME_TYPE).append("\"/>\n")
         for (obj in objects) {
-            val path = XadesSignature.escapeAttribute(XadesSignature.percentEncodePath(obj.name))
+            val path = XadesSignature.escapeAttribute(obj.name)
             val media = XadesSignature.escapeAttribute(obj.mimeType)
             out.append("  <manifest:file-entry manifest:full-path=\"").append(path)
             out.append("\" manifest:media-type=\"").append(media).append("\"/>\n")
