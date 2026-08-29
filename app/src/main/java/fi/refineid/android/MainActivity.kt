@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         nfcReaderController.attach(this)
+        readerController.refresh()
     }
 
     override fun onStop() {

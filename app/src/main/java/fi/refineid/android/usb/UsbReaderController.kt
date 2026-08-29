@@ -98,6 +98,18 @@ internal class UsbReaderController(
     @Volatile
     private var probeGeneration = 0
 
+    private val cardPresencePollRunnable =
+        Runnable {
+            if (isStarted) {
+                val device = selectedDevice
+                if (device != null && usbManager.hasPermission(device)) {
+                    if (latestSnapshot.cardPresence != CardPresence.PRESENT) {
+                        beginSessionOpen(device, probeGeneration)
+                    }
+                }
+            }
+        }
+
     // Worker-thread confined. Main-thread state never owns a USB connection.
     private var activeSession: CcidUsbSession? = null
     private var activeProviderGeneration: Long? = null
@@ -217,6 +229,7 @@ internal class UsbReaderController(
         applicationContext.unregisterReceiver(permissionReceiver)
         applicationContext.unregisterReceiver(usbEventReceiver)
         isStarted = false
+        mainHandler.removeCallbacks(cardPresencePollRunnable)
         probeGeneration += 1
         ioExecutor.execute(::closeActiveSession)
         ioExecutor.shutdown()
@@ -254,6 +267,7 @@ internal class UsbReaderController(
 
                 else -> {
                     closeActiveSessionAsync()
+                    requestPermission()
                     UsbReaderSnapshot(
                         status = ReaderConnectionStatus.PERMISSION_REQUIRED,
                     )
@@ -577,6 +591,7 @@ internal class UsbReaderController(
         device: UsbDevice,
         generation: Int,
     ) {
+        mainHandler.removeCallbacks(cardPresencePollRunnable)
         AppTrace.usbSessionOpenStarted()
         publish(
             UsbReaderSnapshot(
@@ -673,11 +688,21 @@ internal class UsbReaderController(
             status = snapshot.status,
             cardPresence = snapshot.cardPresence,
         )
+        mainHandler.removeCallbacks(cardPresencePollRunnable)
+        if (
+            isStarted &&
+            selectedDevice != null &&
+            snapshot.status == ReaderConnectionStatus.READY &&
+            snapshot.cardPresence != CardPresence.PRESENT
+        ) {
+            mainHandler.postDelayed(cardPresencePollRunnable, CARD_POLL_INTERVAL_MILLISECONDS)
+        }
         stateListeners.toList().forEach { listener -> listener(snapshot) }
     }
 
     private companion object {
         const val USB_PERMISSION_REQUEST_CODE = 0x5246
+        const val CARD_POLL_INTERVAL_MILLISECONDS = 1000L
         const val DIAGNOSTIC_AUTHENTICATION_MESSAGE = "ReFineID signing test"
     }
 }
