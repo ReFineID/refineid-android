@@ -10,6 +10,8 @@ import fi.refineid.android.core.QualifiedCardService
 import fi.refineid.android.core.QualifiedSignFailure
 import fi.refineid.android.core.QualifiedSignResult
 import fi.refineid.android.core.QualifiedSigningAlgorithm
+import fi.refineid.android.document.ValidationMaterialCollectionFailure
+import fi.refineid.android.document.ValidationPathRole
 import java.time.Instant
 
 /** Why a container could not be produced. */
@@ -32,6 +34,18 @@ internal sealed interface AsicSigningFailure {
     data class Card(
         val kind: QualifiedSignFailure,
     ) : AsicSigningFailure
+
+    /** TSA timestamp request failed. */
+    data object Timestamp : AsicSigningFailure
+
+    /** OCSP/CRL validation material collection failed. */
+    data class Validation(
+        val kind: ValidationMaterialCollectionFailure,
+        val pathRole: ValidationPathRole?,
+    ) : AsicSigningFailure
+
+    /** Network/validation sources unavailable. */
+    data object ValidationUnavailable : AsicSigningFailure
 }
 
 /** The container bytes, or why they could not be produced. */
@@ -46,112 +60,110 @@ internal sealed interface AsicSigningResult {
 }
 
 /**
- * Signs a set of files into one ASiC-E container at level XAdES-B, ported from
- * the reference `AsicSigner`. One signature over the whole set: one PIN 2 use
- * covering every file, attesting them as a single act.
- *
- * The order is forced by what each step attests, as in the PDF coordinator: the
- * certificate is read, the XAdES `SignedInfo` is built inside the card session
- * where the certificate first exists, and the card signs it. The container is
- * assembled only once the signature document is complete, because a container
- * is one write with no revision to extend later.
+ * Prepares and signs a set of files into one ASiC-E container, ported from
+ * the reference `AsicSigner`.
  */
 internal class AsicSigningCoordinator(
     private val cardService: QualifiedCardService,
     private val now: () -> Instant = Instant::now,
 ) {
+    fun prepare(
+        objects: List<AsicDataObject>,
+        pin2: Pin2Submission,
+        onResult: (PreparedAsicSignatureResult) -> Unit,
+    ) {
+        if (objects.isEmpty() || !AsicContainer.areNamesUsable(objects)) {
+            pin2.close()
+            onResult(PreparedAsicSignatureResult.Failure(AsicSigningFailure.UnusableNames))
+            return
+        }
+        cardService.requestQualifiedCertificate { certificateResult ->
+            when (certificateResult) {
+                is NativeCertificateReadResult.Failure -> {
+                    pin2.close()
+                    onResult(
+                        PreparedAsicSignatureResult.Failure(AsicSigningFailure.Certificate(certificateResult.kind)),
+                    )
+                }
+
+                is NativeCertificateReadResult.Success -> {
+                    val certificate = certificateResult.certificate
+                    val algorithm =
+                        QualifiedSigningAlgorithm.entries.firstOrNull { it.keyProfile == certificate.keyProfile }
+                    if (algorithm == null) {
+                        certificate.close()
+                        pin2.close()
+                        onResult(PreparedAsicSignatureResult.Failure(AsicSigningFailure.KeyProfileUnsupported))
+                        return@requestQualifiedCertificate
+                    }
+                    val certDer = certificate.copyDer()
+                    val plan =
+                        XadesSignature.plan(
+                            profile = certificate.keyProfile,
+                            objects = objects,
+                            certificateDer = certDer,
+                            signedAt = now(),
+                        )
+                    cardService.requestQualifiedSignature(
+                        algorithm = algorithm,
+                        pin2 = pin2,
+                        content = plan.signedInfo.encodeToByteArray(),
+                        expectedCertificate = certificate,
+                    ) { signatureResult ->
+                        certificate.close()
+                        when (signatureResult) {
+                            is QualifiedSignResult.Failure -> {
+                                certDer.fill(0)
+                                onResult(
+                                    PreparedAsicSignatureResult.Failure(AsicSigningFailure.Card(signatureResult.kind)),
+                                )
+                            }
+
+                            is QualifiedSignResult.Success -> {
+                                val rawSignature = signatureResult.signature.useBytes { it.copyOf() }
+                                signatureResult.signature.close()
+                                onResult(
+                                    PreparedAsicSignatureResult.Success(
+                                        PreparedAsicSignature(
+                                            plan = plan,
+                                            objects = objects,
+                                            rawSignature = rawSignature,
+                                            certificateDer = certDer,
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fun sign(
         objects: List<AsicDataObject>,
         pin2: Pin2Submission,
         onResult: (AsicSigningResult) -> Unit,
     ) {
-        // Asked before the card is touched: a set that cannot be carried is
-        // refused while a refusal is still free, sparing a PIN attempt.
-        if (objects.isEmpty() || !AsicContainer.areNamesUsable(objects)) {
-            pin2.close()
-            onResult(AsicSigningResult.Failure(AsicSigningFailure.UnusableNames))
-            return
-        }
-        cardService.requestQualifiedCertificate { certificateResult ->
-            certificateReceived(certificateResult, objects, pin2, onResult)
-        }
-    }
+        prepare(objects, pin2) { preparedResult ->
+            when (preparedResult) {
+                is PreparedAsicSignatureResult.Failure -> {
+                    onResult(AsicSigningResult.Failure(preparedResult.reason))
+                }
 
-    private fun certificateReceived(
-        result: NativeCertificateReadResult<NativeQualifiedCertificate>,
-        objects: List<AsicDataObject>,
-        pin2: Pin2Submission,
-        onResult: (AsicSigningResult) -> Unit,
-    ) {
-        when (result) {
-            is NativeCertificateReadResult.Failure -> {
-                pin2.close()
-                onResult(AsicSigningResult.Failure(AsicSigningFailure.Certificate(result.kind)))
-            }
-
-            is NativeCertificateReadResult.Success -> {
-                signWithCertificate(result.certificate, objects, pin2, onResult)
-            }
-        }
-    }
-
-    private fun signWithCertificate(
-        certificate: NativeQualifiedCertificate,
-        objects: List<AsicDataObject>,
-        pin2: Pin2Submission,
-        onResult: (AsicSigningResult) -> Unit,
-    ) {
-        val algorithm =
-            QualifiedSigningAlgorithm.entries.firstOrNull { it.keyProfile == certificate.keyProfile }
-        if (algorithm == null) {
-            certificate.close()
-            pin2.close()
-            onResult(AsicSigningResult.Failure(AsicSigningFailure.KeyProfileUnsupported))
-            return
-        }
-        val plan =
-            XadesSignature.plan(
-                profile = certificate.keyProfile,
-                objects = objects,
-                certificateDer = certificate.copyDer(),
-                signedAt = now(),
-            )
-        cardService.requestQualifiedSignature(
-            algorithm = algorithm,
-            pin2 = pin2,
-            content = plan.signedInfo.encodeToByteArray(),
-            expectedCertificate = certificate,
-        ) { signatureResult ->
-            signatureReceived(signatureResult, plan, objects, certificate, onResult)
-        }
-    }
-
-    private fun signatureReceived(
-        result: QualifiedSignResult,
-        plan: XadesPlan,
-        objects: List<AsicDataObject>,
-        certificate: NativeQualifiedCertificate,
-        onResult: (AsicSigningResult) -> Unit,
-    ) {
-        certificate.close()
-        when (result) {
-            is QualifiedSignResult.Failure -> {
-                onResult(AsicSigningResult.Failure(AsicSigningFailure.Card(result.kind)))
-            }
-
-            is QualifiedSignResult.Success -> {
-                // The card's raw signature is already the XAdES SignatureValue
-                // form: r||s for ECDSA, the PKCS#1 block for RSA.
-                val document = result.signature.useBytes { plan.document(it) }
-                result.signature.close()
-                val archive = AsicContainer.container(objects, document.encodeToByteArray())
-                onResult(
-                    if (archive == null) {
-                        AsicSigningResult.Failure(AsicSigningFailure.ContainerOverflow)
-                    } else {
-                        AsicSigningResult.Success(archive)
-                    },
-                )
+                is PreparedAsicSignatureResult.Success -> {
+                    val prepared = preparedResult.prepared
+                    val document = prepared.plan.document(prepared.rawSignature)
+                    val archive = AsicContainer.container(prepared.objects, document.encodeToByteArray())
+                    prepared.close()
+                    onResult(
+                        if (archive == null) {
+                            AsicSigningResult.Failure(AsicSigningFailure.ContainerOverflow)
+                        } else {
+                            AsicSigningResult.Success(archive)
+                        },
+                    )
+                }
             }
         }
     }

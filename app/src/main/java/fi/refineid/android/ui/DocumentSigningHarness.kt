@@ -24,6 +24,9 @@ import fi.refineid.android.asic.AsicDataObject
 import fi.refineid.android.asic.AsicSigningCoordinator
 import fi.refineid.android.asic.AsicSigningFailure
 import fi.refineid.android.asic.AsicSigningResult
+import fi.refineid.android.asic.PreparedAsicSignature
+import fi.refineid.android.asic.PreparedAsicSignatureResult
+import fi.refineid.android.asic.QualifiedAsicArchivalCompletion
 import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.Pin2Submission
 import fi.refineid.android.core.QualifiedCardService
@@ -366,49 +369,116 @@ private class DocumentSigningHarnessSession(
             return
         }
         status = DocumentSigningStatus.SIGNING
-        scope.launch {
-            try {
-                val objects =
-                    withContext(Dispatchers.IO) {
-                        items.map { item ->
-                            AsicDataObject(
-                                name = item.name,
-                                content = readBytes(item.uri),
-                                mimeType = item.mimeType,
+        val running =
+            scope.launch {
+                try {
+                    val objects =
+                        withContext(Dispatchers.IO) {
+                            items.map { item ->
+                                AsicDataObject(
+                                    name = item.name,
+                                    content = readBytes(item.uri),
+                                    mimeType = item.mimeType,
+                                )
+                            }
+                        }
+                    val sources =
+                        withContext(Dispatchers.IO) {
+                            DebugDocumentSigningSources.create(
+                                context = context,
+                                transferredConfigurations = timestampAuthorityRepository.load(),
                             )
                         }
+                    var sourcesTransferred = false
+                    try {
+                        pendingArchivalSources = sources
+                        val prepResult =
+                            suspendCancellableCoroutine { cont ->
+                                asicCoordinator.prepare(objects, pin2) { res ->
+                                    cont.resume(res)
+                                }
+                            }
+                        when (prepResult) {
+                            is PreparedAsicSignatureResult.Failure -> {
+                                tap()?.end?.invoke()
+                                if (pendingArchivalSources === sources) {
+                                    pendingArchivalSources = null
+                                }
+                                sources.close()
+                                status = prepResult.reason.status()
+                            }
+
+                            is PreparedAsicSignatureResult.Success -> {
+                                tap()?.end?.invoke()
+                                if (pendingArchivalSources === sources) {
+                                    pendingArchivalSources = null
+                                }
+                                sourcesTransferred = true
+                                status = DocumentSigningStatus.FINALIZING
+                                completeContainerArchival(prepResult.prepared, sources)
+                            }
+                        }
+                    } finally {
+                        if (!sourcesTransferred) {
+                            pendingArchivalSources = null
+                            sources.close()
+                        }
                     }
-                asicCoordinator.sign(objects, pin2) { result ->
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: TimestampAuthorityStoreException) {
                     tap()?.end?.invoke()
-                    containerSigningCompleted(result)
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                pin2.close()
-                tap()?.end?.invoke()
-                if (!isClosed) {
-                    status = DocumentSigningStatus.ERROR
+                    if (!isClosed) {
+                        status = DocumentSigningStatus.UNAVAILABLE
+                    }
+                } catch (_: Exception) {
+                    pin2.close()
+                    tap()?.end?.invoke()
+                    if (!isClosed) {
+                        status = DocumentSigningStatus.ERROR
+                    }
                 }
             }
-        }
+        signingSetupJob = running
     }
 
-    private fun containerSigningCompleted(result: AsicSigningResult) {
-        if (isClosed) {
-            return
-        }
-        when (result) {
-            is AsicSigningResult.Failure -> {
-                status = result.reason.status()
-            }
+    private fun completeContainerArchival(
+        prepared: PreparedAsicSignature,
+        archivalSources: DebugDocumentSigningSources,
+    ) {
+        val running =
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                try {
+                    val result =
+                        runInterruptible(Dispatchers.IO) {
+                            QualifiedAsicArchivalCompletion.complete(
+                                prepared = prepared,
+                                timestampSource = archivalSources.timestamp,
+                                validationSource = archivalSources.validation,
+                            )
+                        }
+                    when (result) {
+                        is AsicSigningResult.Failure -> {
+                            status = result.reason.status()
+                        }
 
-            is AsicSigningResult.Success -> {
-                discardSigned()
-                signedContainer = result.container
-                saveRequest = DocumentSaveRequest(suggestedName = containerName(), isContainer = true)
+                        is AsicSigningResult.Success -> {
+                            discardSigned()
+                            signedContainer = result.container
+                            saveRequest = DocumentSaveRequest(suggestedName = containerName(), isContainer = true)
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: RuntimeException) {
+                    if (!isClosed) {
+                        status = DocumentSigningStatus.ERROR
+                    }
+                } finally {
+                    archivalSources.close()
+                }
             }
-        }
+        archivalJob = running
     }
 
     private fun containerName(): String {
@@ -908,10 +978,13 @@ private class DocumentSigningHarnessSession(
         when (this) {
             AsicSigningFailure.KeyProfileUnsupported,
             is AsicSigningFailure.Certificate,
+            AsicSigningFailure.ValidationUnavailable,
             -> DocumentSigningStatus.UNAVAILABLE
 
             AsicSigningFailure.UnusableNames,
             AsicSigningFailure.ContainerOverflow,
+            AsicSigningFailure.Timestamp,
+            is AsicSigningFailure.Validation,
             -> DocumentSigningStatus.ERROR
 
             is AsicSigningFailure.Card -> kind.status()

@@ -139,6 +139,45 @@ class AsicContainerTest {
         }
     }
 
+    @Test
+    fun xadesPlanGeneratesUnsignedPropertiesWithTimestampsAndValidationMaterial() {
+        val plan =
+            XadesSignature.plan(
+                profile = fi.refineid.android.core.NativeCardKeyProfile.ECDSA_P384,
+                objects = listOf(obj("doc.pdf")),
+                certificateDer = "cert".encodeToByteArray(),
+                signedAt = java.time.Instant.parse("2026-08-29T12:00:00Z"),
+            )
+        val token = "sample-token".encodeToByteArray()
+        val doc =
+            plan.document(
+                xmlSignature = ByteArray(96) { 1 },
+                timestampTokens = listOf(token),
+                material = null,
+            )
+        assertTrue(doc.contains("<xades:UnsignedProperties>"))
+        assertTrue(doc.contains("<xades:UnsignedSignatureProperties>"))
+        assertTrue(doc.contains("<xades:SignatureTimeStamp Id=\"SIG-1-TS-0\">"))
+        assertTrue(doc.contains("<xades:EncapsulatedTimeStamp>"))
+    }
+
+    @Test
+    fun preparedAsicSignatureClearsSensitiveMaterialOnClose() {
+        val plan =
+            XadesSignature.plan(
+                profile = fi.refineid.android.core.NativeCardKeyProfile.ECDSA_P384,
+                objects = listOf(obj("doc.pdf")),
+                certificateDer = "cert".encodeToByteArray(),
+                signedAt = java.time.Instant.parse("2026-08-29T12:00:00Z"),
+            )
+        val rawSig = ByteArray(96) { 0x42 }
+        val certDer = ByteArray(100) { 0x24 }
+        val prepared = PreparedAsicSignature(plan, listOf(obj("doc.pdf")), rawSig, certDer)
+        prepared.close()
+        assertTrue(rawSig.all { it == 0.toByte() })
+        assertTrue(certDer.all { it == 0.toByte() })
+    }
+
     private class StoredEntry(
         val name: String,
         val method: Int,

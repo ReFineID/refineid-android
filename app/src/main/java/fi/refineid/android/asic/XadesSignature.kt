@@ -1,6 +1,7 @@
 package fi.refineid.android.asic
 
 import fi.refineid.android.core.NativeCardKeyProfile
+import fi.refineid.android.document.PdfValidationMaterial
 import java.security.MessageDigest
 import java.time.Instant
 import java.time.format.DateTimeFormatter
@@ -22,11 +23,15 @@ internal class XadesPlan(
     private val objects: List<AsicDataObject>,
 ) {
     /**
-     * The finished `signatures0.xml` at level B-B: the SignedInfo and
+     * The finished `signatures0.xml` at level B-B, B-T, or B-LT: the SignedInfo and
      * SignedProperties are inserted byte-for-byte as they were signed
      * and digested, so a verifier canonicalises them to the same bytes.
      */
-    fun document(xmlSignature: ByteArray): String {
+    fun document(
+        xmlSignature: ByteArray,
+        timestampTokens: List<ByteArray> = emptyList(),
+        material: PdfValidationMaterial? = null,
+    ): String {
         val out = StringBuilder()
         out.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
         out.append("<asic:XAdESSignatures xmlns:asic=\"").append(XadesSignature.NAMESPACE_ASIC).append("\">\n")
@@ -41,6 +46,7 @@ internal class XadesPlan(
         out.append("<xades:QualifyingProperties xmlns:xades=\"").append(XadesSignature.NAMESPACE_XADES)
         out.append("\" Target=\"#").append(XadesSignature.SIGNATURE_ID).append("\">\n")
         out.append(signedProperties).append("\n")
+        out.append(XadesSignature.unsignedProperties(timestampTokens, material))
         out.append("</xades:QualifyingProperties>\n")
         out.append("</ds:Object>\n")
         out.append("</ds:Signature>\n")
@@ -151,6 +157,90 @@ internal object XadesSignature {
         }
         out.append("</xades:SignedDataObjectProperties>\n")
         out.append("</xades:SignedProperties>")
+        return out.toString()
+    }
+
+    /**
+     * The unsigned properties: timestamps and validation material.
+     * Schema order is fixed: timestamps, then CertificateValues, then RevocationValues.
+     */
+    fun unsignedProperties(
+        timestampTokens: List<ByteArray>,
+        material: PdfValidationMaterial?,
+    ): String {
+        var certificates: List<ByteArray> = emptyList()
+        var ocspResponses: List<ByteArray> = emptyList()
+        var revocationLists: List<ByteArray> = emptyList()
+        if (material != null && !material.isEmpty) {
+            material.useCopies { certs, ocsps, crls ->
+                certificates = certs
+                ocspResponses = ocsps
+                revocationLists = crls
+            }
+        }
+        if (timestampTokens.isEmpty() && certificates.isEmpty() && ocspResponses.isEmpty() &&
+            revocationLists.isEmpty()
+        ) {
+            return ""
+        }
+        val out = StringBuilder()
+        out.append("<xades:UnsignedProperties>\n")
+        out.append("<xades:UnsignedSignatureProperties>\n")
+        timestampTokens.forEachIndexed { index, token ->
+            out
+                .append(
+                    "<xades:SignatureTimeStamp Id=\"",
+                ).append(SIGNATURE_ID)
+                .append("-TS-")
+                .append(index)
+                .append("\">\n")
+            out
+                .append(
+                    "<ds:CanonicalizationMethod Algorithm=\"",
+                ).append(CANONICALIZATION_EXCLUSIVE)
+                .append("\"></ds:CanonicalizationMethod>\n")
+            out.append("<xades:EncapsulatedTimeStamp>").append(base64(token)).append("</xades:EncapsulatedTimeStamp>\n")
+            out.append("</xades:SignatureTimeStamp>\n")
+        }
+        if (certificates.isNotEmpty()) {
+            out.append("<xades:CertificateValues>\n")
+            for (cert in certificates) {
+                out
+                    .append(
+                        "<xades:EncapsulatedX509Certificate>",
+                    ).append(base64(cert))
+                    .append("</xades:EncapsulatedX509Certificate>\n")
+            }
+            out.append("</xades:CertificateValues>\n")
+        }
+        if (revocationLists.isNotEmpty() || ocspResponses.isNotEmpty()) {
+            out.append("<xades:RevocationValues>\n")
+            if (revocationLists.isNotEmpty()) {
+                out.append("<xades:CRLValues>\n")
+                for (crl in revocationLists) {
+                    out
+                        .append(
+                            "<xades:EncapsulatedCRLValue>",
+                        ).append(base64(crl))
+                        .append("</xades:EncapsulatedCRLValue>\n")
+                }
+                out.append("</xades:CRLValues>\n")
+            }
+            if (ocspResponses.isNotEmpty()) {
+                out.append("<xades:OCSPValues>\n")
+                for (ocsp in ocspResponses) {
+                    out
+                        .append(
+                            "<xades:EncapsulatedOCSPValue>",
+                        ).append(base64(ocsp))
+                        .append("</xades:EncapsulatedOCSPValue>\n")
+                }
+                out.append("</xades:OCSPValues>\n")
+            }
+            out.append("</xades:RevocationValues>\n")
+        }
+        out.append("</xades:UnsignedSignatureProperties>\n")
+        out.append("</xades:UnsignedProperties>\n")
         return out.toString()
     }
 
