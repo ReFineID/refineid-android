@@ -415,7 +415,7 @@ private fun IdentitySection(
                     Modifier
                         .fillMaxWidth()
                         .clickable {
-                            if (holderName != null) {
+                            if (fi.refineid.android.core.CanSessionStore.hasCan && holderName != null) {
                                 onOpenPerson()
                             } else {
                                 showsNfcReadDialog = true
@@ -502,6 +502,7 @@ private fun IdentitySection(
         ReadCardNfcDialog(
             onDismiss = { showsNfcReadDialog = false },
             onConnect = onNfcConnect,
+            onOpenPerson = onOpenPerson,
         )
     }
 }
@@ -511,6 +512,7 @@ private fun IdentitySection(
 private fun ReadCardNfcDialog(
     onDismiss: () -> Unit,
     onConnect: (CanSubmission?, Pin1Submission) -> Unit,
+    onOpenPerson: () -> Unit,
 ) {
     val initialCan = remember { fi.refineid.android.core.CanSessionStore.currentCan ?: "" }
     val canState = remember { TextFieldState(initialCan) }
@@ -530,6 +532,7 @@ private fun ReadCardNfcDialog(
                 }
             onConnect(can, pin1)
             onDismiss()
+            onOpenPerson()
         }
         Unit
     }
