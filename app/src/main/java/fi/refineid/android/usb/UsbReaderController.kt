@@ -15,6 +15,7 @@ import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
 import fi.refineid.android.core.CanSubmission
+import fi.refineid.android.core.CardPhotoStore
 import fi.refineid.android.core.CertificateHolderName
 import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeCertificateReadFailure
@@ -410,6 +411,7 @@ internal class UsbReaderController(
             if (result is NativeContactlessOpenResult.Success) {
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
             }
+            val photoBytes = NativeCore.readCardFacePhoto()
             var cardDetails: PersonCardDetails? = null
             val holder =
                 if (result is NativeContactlessOpenResult.Success) {
@@ -417,7 +419,7 @@ internal class UsbReaderController(
                         val cert = activeSession?.copyAuthenticationCertificate()
                         cert?.let { c ->
                             try {
-                                cardDetails = PersonCardDetails.fromDer(c.copyDer())
+                                cardDetails = PersonCardDetails.fromDer(c.copyDer(), photoBytes)
                                 cardDetails?.holderName ?: CertificateHolderName.fromCertificate(c)
                             } finally {
                                 c.close()
@@ -429,6 +431,9 @@ internal class UsbReaderController(
                 } else {
                     null
                 }
+            if (photoBytes != null && photoBytes.isNotEmpty()) {
+                CardPhotoStore.savePhoto(photoBytes, holder)
+            }
             val snapshot =
                 when (result) {
                     is NativeContactlessOpenResult.Success -> {

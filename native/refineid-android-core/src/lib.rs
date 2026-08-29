@@ -244,6 +244,11 @@ const _: NativeMethod = jni::native_method! {
 };
 
 const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCore",
+    static extern fn read_card_face_photo_native() -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
     java_type = "fi.refineid.android.core.NativeContactlessCore",
     static extern fn probe_card_access_native(
         exchange_level: jint,
@@ -574,8 +579,20 @@ fn contactless_close_native<'local>(
     _env: &mut Env<'local>,
     _class: JClass<'local>,
 ) -> Result<jint, jni::errors::Error> {
+    contactless::set_last_read_face_photo(None);
     contactless_close();
     Ok(CONTACTLESS_SESSION_CLOSED)
+}
+
+fn read_card_face_photo_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let photo = contactless::get_last_read_face_photo();
+    match photo {
+        Some(bytes) => env.byte_array_from_slice(&bytes),
+        None => env.new_byte_array(0),
+    }
 }
 
 fn contactless_authenticate_and_sign_native<'local>(

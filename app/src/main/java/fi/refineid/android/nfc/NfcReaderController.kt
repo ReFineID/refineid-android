@@ -13,6 +13,7 @@ import android.os.Looper
 import fi.refineid.android.core.AuthenticationPinCache
 import fi.refineid.android.core.CanSessionStore
 import fi.refineid.android.core.CanSubmission
+import fi.refineid.android.core.CardPhotoStore
 import fi.refineid.android.core.CertificateHolderName
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardSessionMaterial
@@ -20,6 +21,7 @@ import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeContactlessCore
 import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.core.NativeContactlessSession
+import fi.refineid.android.core.NativeCore
 import fi.refineid.android.core.PersonCardDetails
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
@@ -439,10 +441,11 @@ internal class NfcReaderController(
             }
         if (status == NfcReaderStatus.CARD_READY && generation == probeGeneration) {
             CanSessionStore.remember(String(canBytes, Charsets.US_ASCII))
+            val photoBytes = NativeCore.readCardFacePhoto()
             val cardDetails: PersonCardDetails? =
                 if (opened is NativeContactlessOpenResult.Success) {
                     try {
-                        PersonCardDetails.fromDer(opened.certificate.copyDer())
+                        PersonCardDetails.fromDer(opened.certificate.copyDer(), photoBytes)
                     } catch (_: Exception) {
                         null
                     }
@@ -455,6 +458,9 @@ internal class NfcReaderController(
                 } else {
                     null
                 }
+            if (photoBytes != null && photoBytes.isNotEmpty()) {
+                CardPhotoStore.savePhoto(photoBytes, holderName)
+            }
             if (mintOnSuccess) {
                 primedCanStore.write(canBytes.copyOf())
                 primedCanStore.writeHolderName(holderName)
@@ -475,6 +481,8 @@ internal class NfcReaderController(
                     heldSession = true,
                 )
             activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
+            publishAsync(generation, status, holderName = holderName, cardDetails = cardDetails)
+            return
         } else {
             pin1.close()
             if (status == NfcReaderStatus.WRONG_CAN) {
@@ -531,6 +539,8 @@ internal class NfcReaderController(
         generation: Int,
         status: NfcReaderStatus,
         isPrimedOpening: Boolean = false,
+        holderName: String? = null,
+        cardDetails: PersonCardDetails? = null,
     ) {
         mainHandler.post {
             if (generation == probeGeneration) {
@@ -539,6 +549,8 @@ internal class NfcReaderController(
                         status = status,
                         isPrimed = primedCardStored,
                         isPrimedOpening = isPrimedOpening,
+                        holderName = holderName,
+                        cardDetails = cardDetails,
                     ),
                 )
             } else {

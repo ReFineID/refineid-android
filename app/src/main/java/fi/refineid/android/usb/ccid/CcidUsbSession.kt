@@ -10,6 +10,8 @@ import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSignatureVerifier
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
+import fi.refineid.android.core.CardPhotoStore
+import fi.refineid.android.core.CertificateHolderName
 import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignFailure
 import fi.refineid.android.core.NativeAuthenticationSignResult
@@ -125,6 +127,10 @@ internal class CcidUsbSession(
             contactlessSessionActive = true
             sessionMaterial.cacheAuthenticationCertificate(result.certificate)
             sessionMaterial.cachePin1Preflight(result.preflight)
+            NativeCore.readCardFacePhoto()?.let { photo ->
+                val holderName = CertificateHolderName.fromCertificate(result.certificate)
+                CardPhotoStore.savePhoto(photo, holderName)
+            }
         }
         return result
     }

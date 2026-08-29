@@ -12,6 +12,7 @@
 use std::sync::Mutex;
 
 use refineid_apdu::{CardTransport, TransportOutcome};
+use refineid_emrtd::EmrtdOps;
 use refineid_pace::{Can, PaceError, PaceSession, SmTransport, UnvalidatedCan, run_pace_with_can};
 use refineid_pkcs15::{Pkcs15Error, Pkcs15Ops};
 
@@ -80,6 +81,22 @@ pub(crate) fn contactless_close() {
     }
 }
 
+/// The latest face photo bytes extracted from EF.DG2 under secure messaging.
+static LAST_READ_FACE_PHOTO: Mutex<Option<Vec<u8>>> = Mutex::new(None);
+
+pub(crate) fn get_last_read_face_photo() -> Option<Vec<u8>> {
+    LAST_READ_FACE_PHOTO
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone())
+}
+
+pub(crate) fn set_last_read_face_photo(photo: Option<Vec<u8>>) {
+    if let Ok(mut guard) = LAST_READ_FACE_PHOTO.lock() {
+        *guard = photo;
+    }
+}
+
 /// One PACE handshake, then the PKCS#15 selection, authentication
 /// certificate read, and counter-safe PIN1 preflight inside the same
 /// secure-messaging session. This is the contactless session opener:
@@ -106,6 +123,10 @@ pub(crate) fn contactless_open<Exchange: SingleBlockExchange>(
                 .map(|preflight| (certificate, preflight))
                 .map_err(open_preflight_failure)
         });
+    if result.is_ok() {
+        let photo = read_face_photo_from_secure_channel(&mut secure);
+        set_last_read_face_photo(photo);
+    }
     (result, secure.into_inner().into_exchange())
 }
 
@@ -171,6 +192,10 @@ pub(crate) fn contactless_connect<Exchange: SingleBlockExchange>(
                 .map(|preflight| (certificate, preflight))
                 .map_err(open_preflight_failure)
         });
+    if result.is_ok() {
+        let photo = read_face_photo_from_secure_channel(&mut secure);
+        set_last_read_face_photo(photo);
+    }
     let (transport, session) = secure.into_parts();
     if result.is_ok() {
         store_held_session(session);
@@ -493,6 +518,17 @@ fn qualified_selection_failure<E>(error: Pkcs15Error<E>) -> QualifiedSignFailure
     }
 }
 
+fn read_face_photo_from_secure_channel<T: CardTransport + Pkcs15Ops + EmrtdOps>(
+    secure: &mut T,
+) -> Option<Vec<u8>> {
+    if secure.select_emrtd_application().is_err() {
+        return None;
+    }
+    let image = secure.read_face_image().ok().flatten();
+    let _ = secure.select_pkcs15_application();
+    image.map(|img| img.into_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use refineid_apdu::{StatusWord, TransportOutcome};
@@ -609,5 +645,22 @@ mod tests {
             qualified_channel_failure(SecureChannelFailure::Bridge),
             QualifiedSignFailure::Bridge
         );
+    }
+
+    #[test]
+    fn extracts_portrait_via_emrtd() {
+        let dg2 = vec![
+            0x75, 0x1A, // DG2 tag + len
+            0x00, 0x01, 0x02, // Biometric header
+            0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x11, 0x08, // SOF0 marker
+            0x01, 0x90, // Height 400
+            0x01, 0x2C, // Width 300
+            0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01, 0xFF, 0xD9,
+        ];
+        let portrait = refineid_emrtd::parse_card_face_image(&dg2).expect("portrait extracted");
+        assert_eq!(portrait.format(), refineid_emrtd::ImageFormat::Jpeg);
+        assert_eq!(portrait.width(), 300);
+        assert_eq!(portrait.height(), 400);
+        assert_eq!(&portrait.image_bytes()[..3], &[0xFF, 0xD8, 0xFF]);
     }
 }

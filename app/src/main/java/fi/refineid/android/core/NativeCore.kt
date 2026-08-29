@@ -398,6 +398,20 @@ internal object NativeCore {
         return result
     }
 
+    fun readCardFacePhoto(): ByteArray? =
+        if (!isLoaded) {
+            null
+        } else {
+            try {
+                val bytes = readCardFacePhotoNative()
+                if (bytes.isNotEmpty()) bytes else null
+            } catch (_: LinkageError) {
+                null
+            } catch (_: RuntimeException) {
+                null
+            }
+        }
+
     @JvmStatic
     private external fun validateAtrNative(atr: ByteArray): Int
 
@@ -427,6 +441,9 @@ internal object NativeCore {
         input: ByteArray,
         callback: Any,
     ): ByteArray
+
+    @JvmStatic
+    private external fun readCardFacePhotoNative(): ByteArray
 }
 
 internal object NativeCertificateReply {
