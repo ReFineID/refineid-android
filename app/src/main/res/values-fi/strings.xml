@@ -44,15 +44,7 @@
     <string name="section_identity">Henkilö</string>
     <string name="forget_identity_title">Unohdetaanko henkilöllisyys?</string>
     <string name="forget_identity">Unohda henkilöllisyys</string>
-    <string name="person_details">Henkilötiedot</string>
-    <string name="full_name">Nimi</string>
-    <string name="date_of_birth">Syntymäaika</string>
-    <string name="nationality">Kansalaisuus</string>
-    <string name="card_details">Kortin tiedot</string>
-    <string name="expires">Voimassaolo</string>
-    <string name="card_integrity">Aitous ja eheys</string>
-    <string name="card_untampered">Kortti on aito ja koskematon</string>
-    <string name="card_integrity_description">Kortin sähköinen aitous ja sirun suojaus on vahvistettu. Tiedot ovat peräisin sirun suojatulta alueelta eikä niitä ole peukaloitu.</string>
+    <string name="card_untampered">Kortti on aito ja koskematon.</string>
     <string name="copy_photo">Kopioi kuva</string>
     <string name="share_photo">Jaa kuva</string>
     <string name="photo_copied">Kuva kopioitu leikepöydälle</string>

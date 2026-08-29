@@ -31,7 +31,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -177,111 +176,32 @@ internal fun PersonScreen(
             }
         }
 
-        // Personal Details Section
-        Section(stringResource(R.string.person_details)) {
-            NavigationGroup {
-                DetailInfoRow(
-                    label = stringResource(R.string.full_name),
-                    value = details.fullName,
+        // Authenticity & Integrity Badge
+        NavigationGroup {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(ROW_ITEM_SPACING),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(ROW_ICON_SIZE),
                 )
-                if (details.dateOfBirth != null) {
-                    HorizontalDivider()
-                    DetailInfoRow(
-                        label = stringResource(R.string.date_of_birth),
-                        value = details.dateOfBirth,
-                    )
-                }
-                HorizontalDivider()
-                DetailInfoRow(
-                    label = stringResource(R.string.nationality),
-                    value = details.nationality,
+                Text(
+                    text = stringResource(R.string.card_untampered),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-            }
-        }
-
-        // Card Details Section
-        Section(stringResource(R.string.card_details)) {
-            NavigationGroup {
-                if (details.expiryDate != null) {
-                    DetailInfoRow(
-                        label = stringResource(R.string.expires),
-                        value = details.expiryDate,
-                    )
-                    HorizontalDivider()
-                }
-                DetailInfoRow(
-                    label = stringResource(R.string.signature_details_issuer),
-                    value = details.issuer ?: "Digi- ja väestötietovirasto (DVV)",
-                )
-            }
-        }
-
-        // Authenticity & Integrity Section
-        Section(stringResource(R.string.card_integrity)) {
-            NavigationGroup {
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(ROW_ITEM_SPACING),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(ROW_ICON_SIZE),
-                    )
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.card_untampered),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = stringResource(R.string.card_integrity_description),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-    }
-}
-
-@Suppress("FunctionName", "ktlint:standard:function-naming")
-@Composable
-private fun DetailInfoRow(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
