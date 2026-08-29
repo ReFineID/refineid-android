@@ -3,6 +3,7 @@ package fi.refineid.android.nfc
 import fi.refineid.android.core.NativeCardAccessFailure
 import fi.refineid.android.core.NativeCardAccessResult
 import fi.refineid.android.core.NativeCertificateReadFailure
+import fi.refineid.android.core.PersonCardDetails
 
 internal enum class NfcReaderStatus {
     NOT_AVAILABLE,
@@ -25,6 +26,8 @@ internal data class NfcReaderSnapshot(
     val isPrimedOpening: Boolean = false,
     /** The cardholder name read from the certificate or primed store. */
     val holderName: String? = null,
+    /** The detailed cardholder identity info parsed from the certificate. */
+    val cardDetails: PersonCardDetails? = null,
 )
 
 /** Coarse holder-facing status for one completed card-access probe. */

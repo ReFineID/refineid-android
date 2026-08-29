@@ -20,6 +20,7 @@ import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.core.NativeCore
+import fi.refineid.android.core.PersonCardDetails
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.keychain.nextProviderGeneration
@@ -68,6 +69,7 @@ internal data class UsbReaderSnapshot(
     val cardPresence: CardPresence? = null,
     val authenticationStatus: AuthenticationStatus = AuthenticationStatus.IDLE,
     val holderName: String? = null,
+    val cardDetails: PersonCardDetails? = null,
 )
 
 internal class UsbReaderController(
@@ -408,13 +410,15 @@ internal class UsbReaderController(
             if (result is NativeContactlessOpenResult.Success) {
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
             }
+            var cardDetails: PersonCardDetails? = null
             val holder =
                 if (result is NativeContactlessOpenResult.Success) {
                     try {
                         val cert = activeSession?.copyAuthenticationCertificate()
                         cert?.let { c ->
                             try {
-                                CertificateHolderName.fromCertificate(c)
+                                cardDetails = PersonCardDetails.fromDer(c.copyDer())
+                                cardDetails?.holderName ?: CertificateHolderName.fromCertificate(c)
                             } finally {
                                 c.close()
                             }
@@ -432,6 +436,7 @@ internal class UsbReaderController(
                             status = ReaderConnectionStatus.READY,
                             cardPresence = CardPresence.PRESENT,
                             holderName = holder,
+                            cardDetails = cardDetails,
                         )
                     }
 
@@ -602,20 +607,21 @@ internal class UsbReaderController(
             closeActiveSession()
             val result = ccidSessionOpener.open(device)
             var holder: String? = null
+            var cardDetails: PersonCardDetails? = null
             if (result is CcidSessionOpenResult.Ready) {
                 activeSession = result.session
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
-                holder =
+                try {
+                    val cert = result.session.copyAuthenticationCertificate()
                     try {
-                        val cert = result.session.copyAuthenticationCertificate()
-                        try {
-                            CertificateHolderName.fromCertificate(cert)
-                        } finally {
-                            cert.close()
-                        }
-                    } catch (_: Exception) {
-                        null
+                        cardDetails = PersonCardDetails.fromDer(cert.copyDer())
+                        holder = cardDetails?.holderName ?: CertificateHolderName.fromCertificate(cert)
+                    } finally {
+                        cert.close()
                     }
+                } catch (_: Exception) {
+                    // Fallback
+                }
             } else if (result is CcidSessionOpenResult.AccessNumberRequired) {
                 // Hold the contactless session so a CAN entry can run PACE on it.
                 // No provider generation until connect() actually opens the card.
@@ -635,6 +641,7 @@ internal class UsbReaderController(
                                     status = ReaderConnectionStatus.READY,
                                     cardPresence = CardPresence.PRESENT,
                                     holderName = holder,
+                                    cardDetails = cardDetails,
                                 )
                             }
 

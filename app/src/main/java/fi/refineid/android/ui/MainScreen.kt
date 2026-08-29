@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.Lock
@@ -71,6 +73,7 @@ import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationPinCache
 import fi.refineid.android.core.CanSessionStore
 import fi.refineid.android.core.CanSubmission
+import fi.refineid.android.core.PersonCardDetails
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.core.QualifiedCardService
 import fi.refineid.android.diagnostics.BuildDiagnostics
@@ -89,9 +92,10 @@ private enum class MainDestination {
     VERIFY,
     SIGN,
     PAIRING,
+    PERSON,
 }
 
-@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Suppress("CyclomaticComplexMethod", "FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun MainScreen(
     snapshot: UsbReaderSnapshot,
@@ -151,6 +155,12 @@ internal fun MainScreen(
         } else {
             nfcSnapshot.holderName ?: snapshot.holderName
         }
+    val effectiveDetails =
+        if (usbCardReady) {
+            snapshot.cardDetails
+        } else {
+            nfcSnapshot.cardDetails ?: snapshot.cardDetails
+        }
     val forgetIdentity: (() -> Unit)? =
         if (usbCardReady) {
             null
@@ -169,6 +179,7 @@ internal fun MainScreen(
                 signingAvailable = signingAvailable,
                 holderName = effectiveHolderName,
                 onForgetIdentity = forgetIdentity,
+                onOpenPerson = { destination = MainDestination.PERSON },
                 browserCardService =
                     if (usbCardReady) {
                         browserCardService
@@ -254,6 +265,19 @@ internal fun MainScreen(
                 }
             }
         }
+
+        MainDestination.PERSON -> {
+            val details =
+                effectiveDetails
+                    ?: PersonCardDetails.fromHolderName(effectiveHolderName ?: "")
+            SubScreen(
+                title = stringResource(R.string.section_identity),
+                tag = "PersonScreen",
+                onBack = { destination = MainDestination.HOME },
+            ) {
+                PersonScreen(details = details)
+            }
+        }
     }
 }
 
@@ -268,6 +292,7 @@ private fun HomeScreen(
     signingAvailable: Boolean,
     holderName: String?,
     onForgetIdentity: (() -> Unit)?,
+    onOpenPerson: () -> Unit,
     browserCardService: AuthenticationCardService?,
     pinCache: AuthenticationPinCache?,
     nfcStatus: NfcReaderStatus?,
@@ -362,6 +387,7 @@ private fun HomeScreen(
                 IdentitySection(
                     holderName = holderName,
                     onForget = onForgetIdentity,
+                    onOpenPerson = onOpenPerson,
                 )
             }
 
@@ -377,6 +403,7 @@ private fun HomeScreen(
 private fun IdentitySection(
     holderName: String,
     onForget: (() -> Unit)?,
+    onOpenPerson: () -> Unit,
 ) {
     var showsForgetConfirmation by remember { mutableStateOf(false) }
 
@@ -386,6 +413,7 @@ private fun IdentitySection(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .clickable(onClick = onOpenPerson)
                         .padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING)
                         .testTag(UiAutomationIds.IDENTITY_ROW),
                 verticalAlignment = Alignment.CenterVertically,
@@ -418,6 +446,13 @@ private fun IdentitySection(
                             modifier = Modifier.size(24.dp),
                         )
                     }
+                } else {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
         }
@@ -455,21 +490,6 @@ private fun IdentitySection(
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
-private fun Section(
-    title: String,
-    content: @Composable () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(SECTION_ITEM_SPACING),
-    ) {
-        SectionHeader(title)
-        content()
-    }
-}
-
-@Suppress("FunctionName", "ktlint:standard:function-naming")
-@Composable
 private fun TimestampSettingsRow(timestampAuthorityRepository: TimestampAuthorityRepository?) {
     TimestampAuthoritySettingsHarness(
         repository = timestampAuthorityRepository,
@@ -483,17 +503,6 @@ private fun TimestampSettingsRow(timestampAuthorityRepository: TimestampAuthorit
                 )
             }
         },
-    )
-}
-
-@Suppress("FunctionName", "ktlint:standard:function-naming")
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
@@ -1001,7 +1010,6 @@ private fun ReaderCanEntry(onConnect: (CanSubmission) -> Unit) {
 }
 
 private const val WEIGHT_FILL = 1F
-private val SECTION_ITEM_SPACING = 8.dp
 private val SCREEN_HORIZONTAL_PADDING = 24.dp
 private val SCREEN_VERTICAL_PADDING = 28.dp
 private val SCREEN_ITEM_SPACING = 28.dp

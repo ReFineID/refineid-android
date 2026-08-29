@@ -20,6 +20,7 @@ import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeContactlessCore
 import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.core.NativeContactlessSession
+import fi.refineid.android.core.PersonCardDetails
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.keychain.nextProviderGeneration
@@ -438,8 +439,18 @@ internal class NfcReaderController(
             }
         if (status == NfcReaderStatus.CARD_READY && generation == probeGeneration) {
             CanSessionStore.remember(String(canBytes, Charsets.US_ASCII))
-            val holderName =
+            val cardDetails: PersonCardDetails? =
                 if (opened is NativeContactlessOpenResult.Success) {
+                    try {
+                        PersonCardDetails.fromDer(opened.certificate.copyDer())
+                    } catch (_: Exception) {
+                        null
+                    }
+                } else {
+                    null
+                }
+            val holderName =
+                cardDetails?.holderName ?: if (opened is NativeContactlessOpenResult.Success) {
                     CertificateHolderName.fromCertificate(opened.certificate)
                 } else {
                     null
@@ -538,7 +549,8 @@ internal class NfcReaderController(
 
     private fun publish(snapshot: NfcReaderSnapshot) {
         val holder = if (primedCardStored) primedCanStore.readHolderName() else snapshot.holderName
-        latestSnapshot = snapshot.copy(isPrimed = primedCardStored, holderName = holder)
+        val details = snapshot.cardDetails ?: holder?.let { PersonCardDetails.fromHolderName(it) }
+        latestSnapshot = snapshot.copy(isPrimed = primedCardStored, holderName = holder, cardDetails = details)
         AppTrace.nfcSnapshotPublished(latestSnapshot.status)
         stateListeners.toList().forEach { listener -> listener(latestSnapshot) }
     }

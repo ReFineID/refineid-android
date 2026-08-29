@@ -39,7 +39,21 @@
     <string name="unavailable">Inte tillgänglig</string>
     <string name="section_remote">Fjärranvändning</string>
     <string name="pair_computer">Anslut</string>
-    <string name="section_identity">Identitet</string>
+    <string name="section_identity">Person</string>
     <string name="forget_identity_title">Glöm identitet?</string>
     <string name="forget_identity">Glöm identitet</string>
+    <string name="person_details">Personuppgifter</string>
+    <string name="full_name">Namn</string>
+    <string name="date_of_birth">Födelsedatum</string>
+    <string name="nationality">Nationalitet</string>
+    <string name="identifier">Kundnummer</string>
+    <string name="card_details">Kortuppgifter</string>
+    <string name="issued">Utfärdat</string>
+    <string name="expires">Giltigt till</string>
+    <string name="card_integrity">Äkthet och integritet</string>
+    <string name="card_untampered">Kortet är äkta och orört</string>
+    <string name="card_integrity_description">Kortets elektroniska äkthet och chipssäkerhet har verifierats. Informationen kommer från det säkra chippet och har inte manipulerats.</string>
+    <string name="copy_photo">Kopiera bild</string>
+    <string name="share_photo">Dela bild</string>
+    <string name="photo_copied">Bilden kopierades till urklipp</string>
 </resources>

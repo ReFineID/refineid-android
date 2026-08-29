@@ -151,6 +151,7 @@ internal fun SubScreen(
     }
 }
 
+internal val SECTION_ITEM_SPACING = 8.dp
 internal val GROUP_DIVIDER_INSET = 60.dp
 internal val GROUP_CORNER_RADIUS = 22.dp
 internal val GROUP_ELEVATION = 2.dp
@@ -162,3 +163,28 @@ internal const val ROW_LABEL_WEIGHT = 1f
 internal val SUBSCREEN_HORIZONTAL_PADDING = 20.dp
 internal val SUBSCREEN_VERTICAL_PADDING = 8.dp
 internal val SUBSCREEN_ITEM_SPACING = 14.dp
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+internal fun Section(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(SECTION_ITEM_SPACING),
+    ) {
+        SectionHeader(title)
+        content()
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+internal fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
