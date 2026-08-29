@@ -201,6 +201,20 @@ internal object AppTrace {
 
     fun usbContactlessConnectCompleted(opened: Boolean) = Unit
 
+    fun documentInputStarted() = Unit
+
+    fun documentInputCompleted(
+        isAccepted: Boolean,
+        documentLength: Int?,
+    ) = Unit
+
+    fun documentDestinationSelected(isAccepted: Boolean) = Unit
+
+    fun documentOutputCompleted(
+        isSuccessful: Boolean,
+        documentLength: Int,
+    ) = Unit
+
     fun browserOpened() = Unit
 
     fun browserClosed() = Unit
@@ -397,5 +411,10 @@ internal object AppTrace {
     fun cardCredentialCommandFailed(
         startedAt: Long,
         kind: CcidBlockFailureKind,
+    ) = Unit
+
+    fun uncaughtException(
+        thread: Thread,
+        throwable: Throwable,
     ) = Unit
 }

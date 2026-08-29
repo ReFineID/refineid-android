@@ -89,6 +89,16 @@ class AsicContainerTest {
         assertNull(AsicContainer.container(listOf(obj("../escape.pdf")), "<sig/>".encodeToByteArray()))
     }
 
+    @Test
+    fun asicValidatorDetectsZipHeaderAndRejectsUnsignedContainers() {
+        val archive = AsicContainer.container(listOf(obj("a.pdf")), "<sig/>".encodeToByteArray())
+        assertNotNull(archive)
+        assertTrue(AsicValidator.isAsic(archive!!))
+        assertFalse(AsicValidator.isAsic("not a zip".encodeToByteArray()))
+        val result = AsicValidator.validate(archive, emptyList())
+        assertEquals(fi.refineid.android.document.DocumentValidationResult.Unsigned, result)
+    }
+
     private class StoredEntry(
         val name: String,
         val method: Int,

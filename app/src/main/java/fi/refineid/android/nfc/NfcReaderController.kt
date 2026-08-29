@@ -11,6 +11,7 @@ import android.nfc.tech.IsoDep
 import android.os.Handler
 import android.os.Looper
 import fi.refineid.android.core.AuthenticationPinCache
+import fi.refineid.android.core.CanSessionStore
 import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardSessionMaterial
@@ -212,10 +213,11 @@ internal class NfcReaderController(
         val generation = probeGeneration
         publish(NfcReaderSnapshot(status = NfcReaderStatus.CONNECTING))
         AppTrace.nfcConnectStarted()
+        can?.let { CanSessionStore.remember(it) }
         try {
             probeExecutor.execute {
                 val mint = can != null
-                val canBytes = can?.transfer() ?: primedCanStore.read()
+                val canBytes = can?.transfer() ?: CanSessionStore.canBytes() ?: primedCanStore.read()
                 if (canBytes == null) {
                     pin1.close()
                     publishAsync(generation, NfcReaderStatus.CARD_RECOGNIZED)
@@ -347,6 +349,14 @@ internal class NfcReaderController(
             AppTrace.nfcSessionOpenFailed()
             publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
             return
+        } catch (_: SecurityException) {
+            AppTrace.nfcSessionOpenFailed()
+            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+            return
+        } catch (_: IllegalStateException) {
+            AppTrace.nfcSessionOpenFailed()
+            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+            return
         }
         val result =
             NativeContactlessCore.probeCardAccess(
@@ -357,6 +367,10 @@ internal class NfcReaderController(
             isoDep.close()
         } catch (_: IOException) {
             // The tag may already be gone; the probe result stands.
+        } catch (_: SecurityException) {
+            // The tag handle is out of date.
+        } catch (_: IllegalStateException) {
+            // Tag service unavailable.
         }
         AppTrace.nfcSessionClosed()
         // A primed card still needs PIN1 to unlock; the UI shows a
@@ -393,6 +407,18 @@ internal class NfcReaderController(
             AppTrace.nfcSessionOpenFailed()
             publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
             return
+        } catch (_: SecurityException) {
+            canBytes.fill(0)
+            pin1.close()
+            AppTrace.nfcSessionOpenFailed()
+            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+            return
+        } catch (_: IllegalStateException) {
+            canBytes.fill(0)
+            pin1.close()
+            AppTrace.nfcSessionOpenFailed()
+            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+            return
         }
         val exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep))
         val material = NativeCardSessionMaterial()
@@ -409,6 +435,7 @@ internal class NfcReaderController(
                 }
             }
         if (status == NfcReaderStatus.CARD_READY && generation == probeGeneration) {
+            CanSessionStore.remember(String(canBytes, Charsets.US_ASCII))
             if (mintOnSuccess) {
                 primedCanStore.write(canBytes.copyOf())
                 primedCardStored = true
@@ -432,6 +459,7 @@ internal class NfcReaderController(
             pin1.close()
             if (status == NfcReaderStatus.WRONG_CAN) {
                 // The access number no longer opens this card.
+                CanSessionStore.drop()
                 primedCanStore.clear()
                 primedCardStored = false
             }
@@ -443,6 +471,10 @@ internal class NfcReaderController(
                 isoDep.close()
             } catch (_: IOException) {
                 // The tag may already be gone.
+            } catch (_: SecurityException) {
+                // Tag is out of date.
+            } catch (_: IllegalStateException) {
+                // Tag service unavailable.
             }
             AppTrace.nfcSessionClosed()
         }
@@ -459,8 +491,10 @@ internal class NfcReaderController(
     fun forgetPrimedCard() {
         checkMainThread()
         AppTrace.nfcPrimedForgotten()
+        CanSessionStore.drop()
         try {
             probeExecutor.execute {
+                CanSessionStore.drop()
                 primedCanStore.clear()
                 primedCardStored = false
                 pinCache.clear()

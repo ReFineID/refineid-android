@@ -1,0 +1,77 @@
+package fi.refineid.android.rapp
+
+import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+
+internal enum class RappAuthAction {
+    BROWSER_AUTH,
+    DOCUMENT_SIGN,
+}
+
+internal data class RappAuthRequest(
+    val requestId: String,
+    val requester: String,
+    val action: RappAuthAction,
+    val onApproved: (pin: String) -> Unit,
+    val onDenied: () -> Unit,
+)
+
+/**
+ * Rendezvous between incoming RAPP proxy events, notifications, and Compose UI.
+ */
+internal class RappAuthorizationInbox(
+    private val context: Context,
+) {
+    private val notificationManager = RappNotificationManager(context)
+
+    var currentRequest by mutableStateOf<RappAuthRequest?>(null)
+        private set
+
+    fun ask(
+        requestId: String,
+        requester: String,
+        action: RappAuthAction,
+        onApproved: (pin: String) -> Unit,
+        onDenied: () -> Unit,
+    ) {
+        val req =
+            RappAuthRequest(
+                requestId = requestId,
+                requester = requester,
+                action = action,
+                onApproved = { pin ->
+                    notificationManager.dismissNotification()
+                    currentRequest = null
+                    onApproved(pin)
+                },
+                onDenied = {
+                    notificationManager.dismissNotification()
+                    currentRequest = null
+                    onDenied()
+                },
+            )
+        currentRequest = req
+        val actionDescription =
+            when (action) {
+                RappAuthAction.BROWSER_AUTH -> "Suomi.fi Authentication"
+                RappAuthAction.DOCUMENT_SIGN -> "Document Signature"
+            }
+        notificationManager.postAuthorizationNotification(requestId, requester, actionDescription)
+    }
+
+    fun cancel(requestId: String) {
+        if (currentRequest?.requestId == requestId) {
+            currentRequest?.onDenied?.invoke()
+            currentRequest = null
+            notificationManager.dismissNotification()
+        }
+    }
+
+    fun dismissAll() {
+        currentRequest?.onDenied?.invoke()
+        currentRequest = null
+        notificationManager.dismissNotification()
+    }
+}

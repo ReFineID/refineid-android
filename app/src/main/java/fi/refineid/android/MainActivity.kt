@@ -20,8 +20,13 @@ import fi.refineid.android.ui.MainScreen
 import fi.refineid.android.ui.ReFineIdTheme
 import fi.refineid.android.usb.UsbReaderController
 import fi.refineid.android.usb.UsbReaderSnapshot
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 class MainActivity : ComponentActivity() {
+    private val activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var readerSnapshot by mutableStateOf(UsbReaderSnapshot())
     private var nfcSnapshot by mutableStateOf(NfcReaderSnapshot())
     private lateinit var readerController: UsbReaderController
@@ -52,6 +57,13 @@ class MainActivity : ComponentActivity() {
         nfcReaderController = (application as ReFineIdApplication).nfcReaderController
         nfcReaderController.addStateListener(nfcStateListener)
 
+        val rappInbox = (application as ReFineIdApplication).rappAuthorizationInbox
+        val rappPairingModel =
+            fi.refineid.android.rapp.RappPairingModel(
+                context = this,
+                scope = activityScope,
+            )
+
         setContent {
             ReFineIdTheme {
                 MainScreen(
@@ -72,6 +84,8 @@ class MainActivity : ComponentActivity() {
                     onSignBeginTap = nfcReaderController.tapToSign::begin,
                     onSignEndTap = nfcReaderController.tapToSign::end,
                     pinCache = (application as ReFineIdApplication).authenticationPinCache,
+                    rappPairingModel = rappPairingModel,
+                    rappInbox = rappInbox,
                 )
             }
         }
@@ -95,6 +109,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         AppTrace.activityDestroyed()
+        activityScope.cancel()
         nfcReaderController.removeStateListener(nfcStateListener)
         readerController.removeStateListener(readerStateListener)
         super.onDestroy()

@@ -377,6 +377,10 @@ internal class UsbReaderController(
                 can.close()
                 return@execute
             }
+            can.peekDigits()?.let {
+                fi.refineid.android.core.CanSessionStore
+                    .remember(it)
+            }
             val canBytes = can.transfer()
             val result =
                 activeSession?.openContactless(canBytes) ?: run {
@@ -398,8 +402,13 @@ internal class UsbReaderController(
                     }
 
                     is NativeContactlessOpenResult.Failure -> {
+                        val status = result.kind.toContactlessConnectStatus()
+                        if (status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER) {
+                            fi.refineid.android.core.CanSessionStore
+                                .drop()
+                        }
                         UsbReaderSnapshot(
-                            status = result.kind.toContactlessConnectStatus(),
+                            status = status,
                             cardPresence = CardPresence.PRESENT,
                         )
                     }

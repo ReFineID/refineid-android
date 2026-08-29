@@ -26,7 +26,10 @@ internal class MainActivityUiAutomatorTest {
         uiAutomator {
             waitForAppToBeVisible(TARGET_PACKAGE)
             onElement { viewIdResourceName == UiAutomationIds.MAIN_SCREEN }
-            onElement { viewIdResourceName == UiAutomationIds.READER_CARD }
+            onElement {
+                viewIdResourceName == UiAutomationIds.READER_CARD ||
+                    viewIdResourceName == UiAutomationIds.NFC_CARD
+            }
         }
     }
 

@@ -41,7 +41,7 @@ internal class NfcQualifiedCardService(
                     if (generation == currentGeneration()) {
                         try {
                             activeSession()?.readQualifiedCertificate() ?: certificateUnavailable()
-                        } catch (_: IllegalStateException) {
+                        } catch (_: RuntimeException) {
                             NativeCertificateReadResult.Failure(
                                 NativeCertificateReadFailure.BRIDGE_ERROR,
                             )
@@ -49,6 +49,12 @@ internal class NfcQualifiedCardService(
                     } else {
                         certificateUnavailable()
                     }
+                if (result is NativeCertificateReadResult.Failure &&
+                    result.kind == NativeCertificateReadFailure.PACE_REJECTED
+                ) {
+                    fi.refineid.android.core.CanSessionStore
+                        .drop()
+                }
                 mainHandler.post {
                     if (generation == currentGeneration()) {
                         onResult(result)
@@ -75,7 +81,7 @@ internal class NfcQualifiedCardService(
                     if (generation == currentGeneration()) {
                         try {
                             activeSession()?.probePin2Status() ?: pin2Unavailable()
-                        } catch (_: IllegalStateException) {
+                        } catch (_: RuntimeException) {
                             NativePin2PreflightResult.Failure(
                                 NativePin2PreflightFailure.BRIDGE_ERROR,
                             )

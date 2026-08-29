@@ -125,6 +125,7 @@ android {
         targetSdk = currentAndroidApi
         versionCode = refineIdVersionCode
         versionName = refineIdVersionName
+        buildConfigField("int", "BUILD_NUMBER", "$refineIdBuildNumber")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -164,6 +165,7 @@ android {
     buildFeatures {
         aidl = true
         compose = true
+        buildConfig = true
     }
 
     packaging {

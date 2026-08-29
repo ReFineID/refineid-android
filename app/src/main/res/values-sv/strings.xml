@@ -38,4 +38,6 @@
     <string name="wrong_pin">Fel PIN</string>
     <string name="pin_locked">PIN låst</string>
     <string name="unavailable">Inte tillgänglig</string>
+    <string name="section_remote">Fjärrdator</string>
+    <string name="pair_computer">Koppla med Mac / iPad</string>
 </resources>

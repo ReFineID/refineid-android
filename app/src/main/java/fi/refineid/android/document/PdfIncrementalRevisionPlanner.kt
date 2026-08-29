@@ -2,6 +2,8 @@
 
 package fi.refineid.android.document
 
+import java.util.Locale
+
 internal data class PdfRevisionSource(
     val document: ByteArray,
     val index: PdfDocumentIndex,
@@ -10,6 +12,7 @@ internal data class PdfRevisionSource(
 
 internal data class PdfIncrementalRevisionPlan(
     val page: PdfDocumentIndex.Reference,
+    val stampPlacementRect: String,
     val mutations: Map<PdfDocumentIndex.Reference, String>,
 )
 
@@ -22,7 +25,9 @@ internal object PdfIncrementalRevisionPlanner {
         val mutations = MutationAccumulator(source)
         val catalogBody = mutations.body(source.root)
         val catalog = PdfDictionarySyntax(catalogBody)
-        val page = firstPage(source, catalog)
+        val page = lastPage(source, catalog)
+        val pageBodyBefore = mutations.body(page)
+        val stampRect = computeStampPlacement(pageBodyBefore)
         appendToNamedReferenceArray(
             owner = page,
             entryName = ANNOTATIONS_NAME,
@@ -35,10 +40,14 @@ internal object PdfIncrementalRevisionPlanner {
             source = source,
             mutations = mutations,
         )
-        return PdfIncrementalRevisionPlan(page = page, mutations = mutations.entries())
+        return PdfIncrementalRevisionPlan(
+            page = page,
+            stampPlacementRect = stampRect,
+            mutations = mutations.entries(),
+        )
     }
 
-    private fun firstPage(
+    private fun lastPage(
         source: PdfRevisionSource,
         catalog: PdfDictionarySyntax,
     ): PdfDocumentIndex.Reference {
@@ -65,9 +74,51 @@ internal object PdfIncrementalRevisionPlanner {
                 throw unreadable()
             }
             val references = references(syntax.value(kids), source) ?: throw unreadable()
-            current = references.firstOrNull() ?: throw unreadable()
+            current = references.lastOrNull() ?: throw unreadable()
         }
         throw unreadable()
+    }
+
+    private fun computeStampPlacement(
+        pageBody: String,
+        reach: Double = PdfStampRenderer.STAMP_REACH,
+    ): String {
+        val (pageWidth, _) = mediaBox(pageBody)
+        val already = stampsAlreadyOn(pageBody)
+        val margin = 20.0
+        val gap = 16.0
+        val step = reach * 2 + gap
+        val firstX = pageWidth - reach - margin
+        val firstY = reach + margin
+        val perRow = maxOf(1, ((firstX - reach) / step).toInt() + 1)
+        val centreX = firstX - (already % perRow) * step
+        val centreY = firstY + (already / perRow) * step
+        val x1 = centreX - reach
+        val y1 = centreY - reach
+        val x2 = centreX + reach
+        val y2 = centreY + reach
+        return String.format(Locale.US, "[%.2f %.2f %.2f %.2f]", x1, y1, x2, y2)
+    }
+
+    private fun mediaBox(pageBody: String): Pair<Double, Double> {
+        val syntax = PdfDictionarySyntax(pageBody)
+        val entry = syntax.entry("/MediaBox") ?: return Pair(595.28, 841.89)
+        val value = syntax.value(entry)
+        val match =
+            Regex("""\[\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s*\]""").find(value)
+                ?: return Pair(595.28, 841.89)
+        val x1 = match.groupValues[1].toDoubleOrNull() ?: 0.0
+        val y1 = match.groupValues[2].toDoubleOrNull() ?: 0.0
+        val x2 = match.groupValues[3].toDoubleOrNull() ?: 595.28
+        val y2 = match.groupValues[4].toDoubleOrNull() ?: 841.89
+        return Pair(kotlin.math.abs(x2 - x1), kotlin.math.abs(y2 - y1))
+    }
+
+    private fun stampsAlreadyOn(pageBody: String): Int {
+        val syntax = PdfDictionarySyntax(pageBody)
+        val entry = syntax.entry("/Annots") ?: return 0
+        val value = syntax.value(entry)
+        return Regex("""\d+\s+\d+\s+R""").findAll(value).count()
     }
 
     private fun appendToNamedReferenceArray(

@@ -1,8 +1,11 @@
+@file:Suppress("TooManyFunctions")
+
 package fi.refineid.android.ui
 
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -45,9 +48,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.time.Instant
+import kotlin.coroutines.resume
 
 /**
  * How a signing request reaches the card. A wired reader already holds
@@ -70,6 +75,7 @@ internal fun DocumentSigningHarness(
     cardService: QualifiedCardService?,
     tap: DocumentSignTap?,
     timestampAuthorityRepository: TimestampAuthorityRepository?,
+    onComplete: () -> Unit = {},
 ) {
     if (
         !signingAvailable ||
@@ -105,14 +111,16 @@ internal fun DocumentSigningHarness(
     DisposableEffect(session) {
         onDispose(session::close)
     }
-    val sourcePicker =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { source ->
-            source?.let(session::select)
-        }
-    val filesPicker =
+    val chooseFilesLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { sources ->
             if (sources.isNotEmpty()) {
-                session.selectMany(sources)
+                session.select(sources)
+            }
+        }
+    val addFilesLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { sources ->
+            if (sources.isNotEmpty()) {
+                session.add(sources)
             }
         }
     val pdfDestinationPicker =
@@ -127,6 +135,12 @@ internal fun DocumentSigningHarness(
         ) { destination ->
             session.saveTo(destination)
         }
+    val folderDestinationPicker =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocumentTree(),
+        ) { folderUri ->
+            session.saveAllToFolder(folderUri)
+        }
     // Signing chooses the destination only once there is a signed file to
     // save, so the save panel opens with the suggested name after the tap.
     LaunchedEffect(session.saveRequest) {
@@ -138,19 +152,26 @@ internal fun DocumentSigningHarness(
             }
         }
     }
+    LaunchedEffect(session.saveFolderRequest) {
+        if (session.saveFolderRequest) {
+            folderDestinationPicker.launch(null)
+        }
+    }
+    LaunchedEffect(session.status) {
+        if (session.status == DocumentSigningStatus.SIGNED) {
+            onComplete()
+        }
+    }
 
     DocumentSigningCard(
         hasDocument = session.hasDocument,
+        documentNames = session.documentNames,
+        canSignPdf = session.canSignPdf,
+        progressText = session.progressText,
         canRequired = tap?.canRequired == true,
         status = session.status,
-        format = session.format,
-        onSelectFormat = session::selectFormat,
-        onChooseDocument = {
-            when (session.format) {
-                SignatureFormat.PDF -> sourcePicker.launch(arrayOf(PDF_MEDIA_TYPE))
-                SignatureFormat.CONTAINER -> filesPicker.launch(arrayOf(ANY_MEDIA_TYPE))
-            }
-        },
+        onChooseDocuments = { chooseFilesLauncher.launch(arrayOf(ANY_MEDIA_TYPE)) },
+        onAddDocument = { addFilesLauncher.launch(arrayOf(ANY_MEDIA_TYPE)) },
         onSign = session::sign,
     )
 }
@@ -161,6 +182,14 @@ internal data class DocumentSaveRequest(
     val isContainer: Boolean = false,
 )
 
+private data class SelectedItem(
+    val uri: Uri,
+    val name: String,
+    val mimeType: String,
+    val isPdf: Boolean,
+)
+
+@Suppress("LargeClass")
 private class DocumentSigningHarnessSession(
     private val context: Context,
     private val contentResolver: ContentResolver,
@@ -171,108 +200,52 @@ private class DocumentSigningHarnessSession(
 ) : AutoCloseable {
     private val coordinator = QualifiedPdfSigningCoordinator(cardService)
     private val asicCoordinator = AsicSigningCoordinator(cardService)
-    private var selected by mutableStateOf<SelectedPdfDocument?>(null)
-    private var selectedFiles by mutableStateOf<List<AsicDataObject>?>(null)
+    private var selectedItems by mutableStateOf<List<SelectedItem>>(emptyList())
     private var isClosed = false
     private var signingSetupJob: Job? = null
     private var pendingArchivalSources: DebugDocumentSigningSources? = null
     private var archivalJob: Job? = null
     private var signedDocument: SignedPdfDocument? = null
+    private var signedBatchPdfs: List<Pair<String, SignedPdfDocument>>? = null
     private var signedContainer: ByteArray? = null
 
-    var status by mutableStateOf(DocumentSigningStatus.IDLE)
+    val documentNames: List<String>
+        get() = selectedItems.map { it.name }
+
+    val canSignPdf: Boolean
+        get() = selectedItems.isNotEmpty() && selectedItems.all { it.isPdf }
+
+    val hasDocument: Boolean
+        get() = selectedItems.isNotEmpty()
+
+    var progressText by mutableStateOf<String?>(null)
         private set
 
-    var format by mutableStateOf(SignatureFormat.PDF)
+    var status by mutableStateOf(DocumentSigningStatus.IDLE)
         private set
 
     var saveRequest by mutableStateOf<DocumentSaveRequest?>(null)
         private set
 
-    val hasDocument: Boolean
-        get() = if (format == SignatureFormat.PDF) selected != null else selectedFiles != null
+    var saveFolderRequest by mutableStateOf(false)
+        private set
 
-    fun select(source: Uri) {
-        if (isClosed || isWorking()) {
-            return
-        }
-        AppTrace.documentInputStarted()
-        status = DocumentSigningStatus.READING
-        scope.launch {
-            var loaded: SelectedPdfDocument? = null
-            try {
-                loaded =
-                    withContext(Dispatchers.IO) {
-                        SelectedPdfDocument.read(contentResolver, source)
-                    }
-                if (!isClosed) {
-                    selected?.close()
-                    selected = loaded
-                    loaded = null
-                    discardSigned()
-                    status = DocumentSigningStatus.IDLE
-                    AppTrace.documentInputCompleted(
-                        isAccepted = true,
-                        documentLength = selected?.length,
-                    )
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: IOException) {
-                failInput()
-            } catch (_: SecurityException) {
-                failInput()
-            } catch (_: RuntimeException) {
-                failInput()
-            } finally {
-                loaded?.close()
-            }
-        }
-    }
-
-    /** Switch the target format; a PDF and a file set are not interchangeable. */
-    fun selectFormat(next: SignatureFormat) {
-        if (isClosed || isWorking() || next == format) {
-            return
-        }
-        selected?.close()
-        selected = null
-        selectedFiles = null
-        discardSigned()
-        format = next
-        if (status != DocumentSigningStatus.IDLE) {
-            status = DocumentSigningStatus.IDLE
-        }
-    }
-
-    /** Choose the set of files a single ASiC-E signature will cover. */
-    fun selectMany(sources: List<Uri>) {
-        if (isClosed || isWorking()) {
+    fun select(sources: List<Uri>) {
+        if (isClosed || isWorking() || sources.isEmpty()) {
             return
         }
         AppTrace.documentInputStarted()
         status = DocumentSigningStatus.READING
         scope.launch {
             try {
-                val objects =
-                    withContext(Dispatchers.IO) {
-                        sources.map { source ->
-                            AsicDataObject(
-                                name = displayName(source),
-                                content = readBytes(source),
-                                mimeType = contentResolver.getType(source) ?: ANY_MEDIA_TYPE,
-                            )
-                        }
-                    }
+                val items = withContext(Dispatchers.IO) { resolveItems(sources) }
                 if (!isClosed) {
-                    selected?.close()
-                    selected = null
-                    selectedFiles = objects
+                    selectedItems = items
                     discardSigned()
                     status = DocumentSigningStatus.IDLE
                     AppTrace.documentInputCompleted(
                         isAccepted = true,
-                        documentLength = objects.sumOf { it.content.size },
+                        documentLength = null,
                     )
                 }
             } catch (cancelled: CancellationException) {
@@ -286,6 +259,45 @@ private class DocumentSigningHarnessSession(
             }
         }
     }
+
+    fun add(sources: List<Uri>) {
+        if (isClosed || isWorking() || sources.isEmpty()) {
+            return
+        }
+        AppTrace.documentInputStarted()
+        status = DocumentSigningStatus.READING
+        scope.launch {
+            try {
+                val newSources = sources.filter { uri -> selectedItems.none { it.uri == uri } }
+                val newItems = withContext(Dispatchers.IO) { resolveItems(newSources) }
+                if (!isClosed) {
+                    selectedItems = selectedItems + newItems
+                    discardSigned()
+                    status = DocumentSigningStatus.IDLE
+                    AppTrace.documentInputCompleted(
+                        isAccepted = true,
+                        documentLength = null,
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: IOException) {
+                failInput()
+            } catch (_: SecurityException) {
+                failInput()
+            } catch (_: RuntimeException) {
+                failInput()
+            }
+        }
+    }
+
+    private fun resolveItems(sources: List<Uri>): List<SelectedItem> =
+        sources.map { uri ->
+            val name = displayName(uri)
+            val mimeType = contentResolver.getType(uri) ?: ANY_MEDIA_TYPE
+            val isPdf = name.endsWith(".pdf", ignoreCase = true) || mimeType == PDF_MEDIA_TYPE
+            SelectedItem(uri = uri, name = name, mimeType = mimeType, isPdf = isPdf)
+        }
 
     private fun readBytes(source: Uri): ByteArray =
         contentResolver.openInputStream(source)?.use { it.readBytes() }
@@ -296,6 +308,7 @@ private class DocumentSigningHarnessSession(
      * contactless card first waits for the tap behind a hold prompt.
      */
     fun sign(
+        targetFormat: SignatureFormat,
         pin2: Pin2Submission,
         can: CanSubmission?,
     ) {
@@ -305,8 +318,8 @@ private class DocumentSigningHarnessSession(
             return
         }
         withOpenCard(pin2, can) { granted ->
-            when (format) {
-                SignatureFormat.PDF -> prepare(granted)
+            when (targetFormat) {
+                SignatureFormat.PDF -> preparePdf(granted)
                 SignatureFormat.CONTAINER -> prepareContainer(granted)
             }
         }
@@ -323,7 +336,9 @@ private class DocumentSigningHarnessSession(
             run(pin2)
             return
         }
-        val canBytes = can?.transfer()
+        val canBytes =
+            can?.transfer() ?: fi.refineid.android.core.CanSessionStore
+                .canBytes()
         status = DocumentSigningStatus.HOLD_CARD
         activeTap.begin(
             canBytes,
@@ -344,16 +359,38 @@ private class DocumentSigningHarnessSession(
     }
 
     private fun prepareContainer(pin2: Pin2Submission) {
-        val files = selectedFiles
-        if (isClosed || files == null) {
+        val items = selectedItems
+        if (isClosed || items.isEmpty()) {
             pin2.close()
             tap()?.end?.invoke()
             return
         }
         status = DocumentSigningStatus.SIGNING
-        asicCoordinator.sign(files, pin2) { result ->
-            tap()?.end?.invoke()
-            containerSigningCompleted(result)
+        scope.launch {
+            try {
+                val objects =
+                    withContext(Dispatchers.IO) {
+                        items.map { item ->
+                            AsicDataObject(
+                                name = item.name,
+                                content = readBytes(item.uri),
+                                mimeType = item.mimeType,
+                            )
+                        }
+                    }
+                asicCoordinator.sign(objects, pin2) { result ->
+                    tap()?.end?.invoke()
+                    containerSigningCompleted(result)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                pin2.close()
+                tap()?.end?.invoke()
+                if (!isClosed) {
+                    status = DocumentSigningStatus.ERROR
+                }
+            }
         }
     }
 
@@ -375,8 +412,8 @@ private class DocumentSigningHarnessSession(
     }
 
     private fun containerName(): String {
-        val files = selectedFiles
-        val original = if (files != null && files.size == 1) files[0].name else DEFAULT_CONTAINER_NAME
+        val items = selectedItems
+        val original = if (items.size == 1) items[0].name else DEFAULT_CONTAINER_NAME
         val phrase =
             context.getString(
                 R.string.signed_at,
@@ -389,19 +426,27 @@ private class DocumentSigningHarnessSession(
         )
     }
 
-    private fun prepare(pin2: Pin2Submission) {
-        val input = selected
-        if (isClosed || input == null) {
+    private fun preparePdf(pin2: Pin2Submission) {
+        val items = selectedItems
+        if (isClosed || items.isEmpty()) {
             pin2.close()
             tap()?.end?.invoke()
             return
         }
         status = DocumentSigningStatus.SIGNING
-        val suggestedName = suggestedName(input.source)
+        val total = items.size
+        val pinBytes = pin2.consume { it.copyOf() }
         val running =
             scope.launch {
-                var ownedPin2: Pin2Submission? = pin2
+                var loadedPdfs: List<SelectedPdfDocument>? = null
                 try {
+                    val pdfs =
+                        withContext(Dispatchers.IO) {
+                            items.map { item ->
+                                SelectedPdfDocument.read(contentResolver, item.uri)
+                            }
+                        }
+                    loadedPdfs = pdfs
                     val sources =
                         withContext(Dispatchers.IO) {
                             DebugDocumentSigningSources.create(
@@ -412,31 +457,61 @@ private class DocumentSigningHarnessSession(
                     var sourcesTransferred = false
                     try {
                         pendingArchivalSources = sources
-                        input.useBytes { bytes ->
-                            coordinator.prepare(
-                                document = bytes,
-                                claim =
-                                    PdfSignatureClaim(
-                                        signedAt = Instant.now(),
-                                        reason = null,
-                                        location = null,
-                                    ),
-                                pin2 = checkNotNull(ownedPin2),
-                                onResult = { result ->
+                        val preparedList = mutableListOf<Pair<String, PreparedQualifiedPdfSignature>>()
+                        var preparationFailed = false
+
+                        for ((index, input) in pdfs.withIndex()) {
+                            if (total > 1) {
+                                progressText = context.getString(R.string.signing_progress, index + 1, total)
+                            }
+                            val docPin =
+                                Pin2Submission.from(
+                                    String(pinBytes.map { it.toInt().toChar() }.toCharArray()),
+                                )
+                            val prepResult =
+                                suspendCancellableCoroutine { cont ->
+                                    input.useBytes { bytes ->
+                                        coordinator.prepare(
+                                            document = bytes,
+                                            claim =
+                                                PdfSignatureClaim(
+                                                    signedAt = Instant.now(),
+                                                    reason = null,
+                                                    location = null,
+                                                ),
+                                            pin2 = docPin,
+                                            onResult = { res -> cont.resume(res) },
+                                        )
+                                    }
+                                }
+                            when (prepResult) {
+                                is QualifiedPdfPreparationResult.Failure -> {
                                     tap()?.end?.invoke()
+                                    preparationFailed = true
+                                    preparedList.forEach { it.second.close() }
                                     if (pendingArchivalSources === sources) {
                                         pendingArchivalSources = null
                                     }
-                                    preparationCompleted(
-                                        result = result,
-                                        suggestedName = suggestedName,
-                                        archivalSources = sources,
-                                    )
-                                },
-                            )
+                                    sources.close()
+                                    status = prepResult.kind.status()
+                                    break
+                                }
+
+                                is QualifiedPdfPreparationResult.Success -> {
+                                    preparedList.add(suggestedName(input.source) to prepResult.prepared)
+                                }
+                            }
                         }
-                        ownedPin2 = null
-                        sourcesTransferred = true
+
+                        if (!preparationFailed) {
+                            tap()?.end?.invoke()
+                            if (pendingArchivalSources === sources) {
+                                pendingArchivalSources = null
+                            }
+                            sourcesTransferred = true
+                            status = DocumentSigningStatus.FINALIZING
+                            completeBatchArchival(preparedList, sources)
+                        }
                     } finally {
                         if (!sourcesTransferred) {
                             pendingArchivalSources = null
@@ -456,10 +531,76 @@ private class DocumentSigningHarnessSession(
                         status = DocumentSigningStatus.ERROR
                     }
                 } finally {
-                    ownedPin2?.close()
+                    pinBytes.fill(0)
+                    loadedPdfs?.forEach { it.close() }
                 }
             }
         signingSetupJob = running
+    }
+
+    private fun completeBatchArchival(
+        preparedList: List<Pair<String, PreparedQualifiedPdfSignature>>,
+        archivalSources: DebugDocumentSigningSources,
+    ) {
+        val total = preparedList.size
+        val running =
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                val completedDocs = mutableListOf<Pair<String, SignedPdfDocument>>()
+                var failed = false
+                try {
+                    for ((index, item) in preparedList.withIndex()) {
+                        val (suggestedName, prepared) = item
+                        if (total > 1) {
+                            progressText = context.getString(R.string.finalizing_progress, index + 1, total)
+                        }
+                        val result =
+                            runInterruptible(Dispatchers.IO) {
+                                QualifiedPdfArchivalCompletion.complete(
+                                    prepared = prepared,
+                                    timestampSource = archivalSources.timestamp,
+                                    validationSource = archivalSources.validation,
+                                )
+                            }
+                        when (result) {
+                            is QualifiedPdfArchivalResult.Failure -> {
+                                failed = true
+                                status = result.kind.status()
+                                break
+                            }
+
+                            is QualifiedPdfArchivalResult.Success -> {
+                                completedDocs.add(suggestedName to result.document)
+                            }
+                        }
+                    }
+                    if (!failed) {
+                        if (completedDocs.size == 1) {
+                            val (name, doc) = completedDocs[0]
+                            signedDocument = doc
+                            saveRequest = DocumentSaveRequest(suggestedName = name, isContainer = false)
+                        } else {
+                            signedBatchPdfs = completedDocs
+                            saveFolderRequest = true
+                        }
+                    } else {
+                        completedDocs.forEach { it.second.close() }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (interrupted: InterruptedException) {
+                    throw CancellationException("archival signing was interrupted").also { cancellation ->
+                        cancellation.initCause(interrupted)
+                    }
+                } catch (_: RuntimeException) {
+                    if (!isClosed) {
+                        status = DocumentSigningStatus.ERROR
+                    }
+                } finally {
+                    archivalSources.close()
+                    preparedList.forEach { it.second.close() }
+                }
+            }
+        archivalJob = running
     }
 
     fun saveTo(destination: Uri?) {
@@ -490,9 +631,66 @@ private class DocumentSigningHarnessSession(
                 }
             if (!isClosed) {
                 if (saved) {
-                    selected?.close()
-                    selected = null
-                    selectedFiles = null
+                    selectedItems = emptyList()
+                    status = DocumentSigningStatus.SIGNED
+                } else {
+                    status = DocumentSigningStatus.ERROR
+                }
+            }
+        }
+    }
+
+    fun saveAllToFolder(folderUri: Uri?) {
+        saveFolderRequest = false
+        val batch = signedBatchPdfs
+        if (folderUri == null || batch.isNullOrEmpty()) {
+            discardSigned()
+            if (!isClosed && status != DocumentSigningStatus.IDLE) {
+                status = DocumentSigningStatus.IDLE
+            }
+            return
+        }
+        signedBatchPdfs = null
+        status = DocumentSigningStatus.SAVING
+        scope.launch {
+            var allSaved = true
+            val total = batch.size
+            try {
+                withContext(Dispatchers.IO) {
+                    val parentUri =
+                        DocumentsContract.buildDocumentUriUsingTree(
+                            folderUri,
+                            DocumentsContract.getTreeDocumentId(folderUri),
+                        )
+                    for ((index, item) in batch.withIndex()) {
+                        val (name, signedDoc) = item
+                        progressText = context.getString(R.string.saving_progress, index + 1, total)
+                        val newFileUri =
+                            DocumentsContract.createDocument(
+                                contentResolver,
+                                parentUri,
+                                PDF_MEDIA_TYPE,
+                                name,
+                            )
+                        if (newFileUri != null) {
+                            save(signedDoc, newFileUri)
+                        } else {
+                            allSaved = false
+                        }
+                    }
+                }
+            } catch (_: IOException) {
+                allSaved = false
+            } catch (_: SecurityException) {
+                allSaved = false
+            } catch (_: RuntimeException) {
+                allSaved = false
+            } finally {
+                batch.forEach { it.second.close() }
+            }
+            if (!isClosed) {
+                if (allSaved) {
+                    selectedItems = emptyList()
                     status = DocumentSigningStatus.SIGNED
                 } else {
                     status = DocumentSigningStatus.ERROR
@@ -528,93 +726,12 @@ private class DocumentSigningHarnessSession(
             return
         }
         isClosed = true
-        selected?.close()
-        selected = null
-        selectedFiles = null
+        selectedItems = emptyList()
         signingSetupJob?.cancel()
         pendingArchivalSources?.close()
         pendingArchivalSources = null
         archivalJob?.cancel()
         discardSigned()
-    }
-
-    private fun preparationCompleted(
-        result: QualifiedPdfPreparationResult,
-        suggestedName: String,
-        archivalSources: DebugDocumentSigningSources,
-    ) {
-        if (isClosed) {
-            result.closePreparedSignature()
-            archivalSources.close()
-            return
-        }
-        when (result) {
-            is QualifiedPdfPreparationResult.Failure -> {
-                archivalSources.close()
-                status = result.kind.status()
-            }
-
-            is QualifiedPdfPreparationResult.Success -> {
-                completeArchival(result.prepared, suggestedName, archivalSources)
-            }
-        }
-    }
-
-    private fun completeArchival(
-        prepared: PreparedQualifiedPdfSignature,
-        suggestedName: String,
-        archivalSources: DebugDocumentSigningSources,
-    ) {
-        val running =
-            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                try {
-                    val result =
-                        runInterruptible(Dispatchers.IO) {
-                            QualifiedPdfArchivalCompletion.complete(
-                                prepared = prepared,
-                                timestampSource = archivalSources.timestamp,
-                                validationSource = archivalSources.validation,
-                            )
-                        }
-                    archivalCompleted(result, suggestedName)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (interrupted: InterruptedException) {
-                    throw CancellationException("archival signing was interrupted").also { cancellation ->
-                        cancellation.initCause(interrupted)
-                    }
-                } catch (_: RuntimeException) {
-                    if (!isClosed) {
-                        status = DocumentSigningStatus.ERROR
-                    }
-                } finally {
-                    archivalSources.close()
-                }
-            }
-        archivalJob = running
-        running.invokeOnCompletion { prepared.close() }
-    }
-
-    private fun archivalCompleted(
-        result: QualifiedPdfArchivalResult,
-        suggestedName: String,
-    ) {
-        if (isClosed) {
-            result.closeDocument()
-            return
-        }
-        when (result) {
-            is QualifiedPdfArchivalResult.Failure -> {
-                status = result.kind.status()
-            }
-
-            is QualifiedPdfArchivalResult.Success -> {
-                // The card work is done; choose where the signed file lands.
-                discardSigned()
-                signedDocument = result.document
-                saveRequest = DocumentSaveRequest(suggestedName = suggestedName)
-            }
-        }
     }
 
     private suspend fun save(
@@ -678,15 +795,20 @@ private class DocumentSigningHarnessSession(
 
     private fun discardSigned() {
         saveRequest = null
+        saveFolderRequest = false
         signedDocument?.close()
         signedDocument = null
+        signedBatchPdfs?.forEach { it.second.close() }
+        signedBatchPdfs = null
         signedContainer = null
+        progressText = null
     }
 
     private fun isWorking(): Boolean =
         status == DocumentSigningStatus.READING ||
             status == DocumentSigningStatus.HOLD_CARD ||
             status == DocumentSigningStatus.SIGNING ||
+            status == DocumentSigningStatus.FINALIZING ||
             status == DocumentSigningStatus.SAVING
 
     private fun QualifiedPdfPreparationResult.closePreparedSignature() {

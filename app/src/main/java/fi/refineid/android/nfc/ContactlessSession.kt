@@ -63,6 +63,10 @@ internal class ContactlessSession(
             isoDep.close()
         } catch (_: IOException) {
             // The replaced handle is expected to be gone already.
+        } catch (_: SecurityException) {
+            // The replaced handle is out of date.
+        } catch (_: IllegalStateException) {
+            // Tag service unavailable.
         }
         // The field cycled, so the card dropped its half of the secure
         // channel; the next operation must re-run PACE on the fresh handle.
@@ -284,6 +288,12 @@ internal class ContactlessSession(
         } catch (_: IOException) {
             AppTrace.nfcSessionOpenFailed()
             false
+        } catch (_: SecurityException) {
+            AppTrace.nfcSessionOpenFailed()
+            false
+        } catch (_: IllegalStateException) {
+            AppTrace.nfcSessionOpenFailed()
+            false
         }
 
     private fun closeIsoDep() {
@@ -291,6 +301,10 @@ internal class ContactlessSession(
             isoDep.close()
         } catch (_: IOException) {
             // The tag may already be gone; the operation result stands.
+        } catch (_: SecurityException) {
+            // The tag handle is out of date.
+        } catch (_: IllegalStateException) {
+            // Tag service unavailable.
         }
         AppTrace.nfcSessionClosed()
     }
@@ -311,6 +325,10 @@ internal class ContactlessSession(
             isoDep.close()
         } catch (_: IOException) {
             // Closing a lost tag is a no-op.
+        } catch (_: SecurityException) {
+            // Tag handle out of date.
+        } catch (_: IllegalStateException) {
+            // Tag service unavailable.
         }
     }
 

@@ -11,6 +11,7 @@
 
     <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
     <!-- Product images sign this APK with the platform key; see ADR 0027. -->
     <uses-permission
@@ -28,6 +29,7 @@
         android:supportsRtl="true"
         android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.ReFineID"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:usesCleartextTraffic="false">
         <activity
             android:name=".keychain.ExternalKeyPinActivity"

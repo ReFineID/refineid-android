@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name" translatable="false">ReFineID</string>
+    <string name="app_name" translatable="false">RefineID</string>
     <string name="section_card" tools:ignore="DuplicateStrings">Card</string>
     <string name="section_browser" tools:ignore="DuplicateStrings">Browser</string>
     <string name="section_document">Document</string>
@@ -42,4 +42,6 @@
     <string name="wrong_pin">Wrong PIN</string>
     <string name="pin_locked">PIN locked</string>
     <string name="unavailable">Unavailable</string>
+    <string name="section_remote">Remote computer</string>
+    <string name="pair_computer">Pair with Mac / iPad</string>
 </resources>

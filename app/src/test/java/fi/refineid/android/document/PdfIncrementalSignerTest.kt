@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 
 class PdfIncrementalSignerTest {
     @Test
-    fun appendsAnInvisibleSignatureFieldAndPreservesTheOriginalRevision() {
+    fun appendsASignatureFieldWithVisibleStampAndPreservesTheOriginalRevision() {
         val original =
             PdfTestDocuments.minimalClassic(
                 trailerExtra = IDENTIFIER_TRAILER_ENTRY,
@@ -31,13 +31,14 @@ class PdfIncrementalSignerTest {
         val index = PdfDocumentIndex.parse(prepared)
         val signature = reference(EXPECTED_FIRST_SIGNATURE_OBJECT_NUMBER)
         val field = reference(EXPECTED_FIRST_FIELD_OBJECT_NUMBER)
+        val appearance = reference(EXPECTED_FIRST_APPEARANCE_OBJECT_NUMBER)
 
         assertEquals(PdfFormat.SIGNATURE_CAPACITY_BYTES, placeholder.capacity)
         assertArrayEquals(
             original.document,
             prepared.copyOfRange(FIRST_DOCUMENT_OFFSET, original.document.size),
         )
-        assertEquals(EXPECTED_FIRST_FIELD_OBJECT_NUMBER, index.highestObjectNumber)
+        assertEquals(EXPECTED_FIRST_APPEARANCE_OBJECT_NUMBER, index.highestObjectNumber)
         assertEquals(IDENTIFIER_VALUE, dictionaryValue(index.trailer, IDENTIFIER_NAME))
         assertEquals(
             listOf(field),
@@ -58,6 +59,11 @@ class PdfIncrementalSignerTest {
         assertEquals(SIGNATURE_TYPE, nameValue(signatureSyntax, TYPE_NAME))
         assertEquals(CADES_SUBFILTER, nameValue(signatureSyntax, SUBFILTER_NAME))
 
+        val appearanceBody = checkNotNull(index.body(appearance, prepared))
+        assertTrue(appearanceBody.contains("/Type /XObject"))
+        assertTrue(appearanceBody.contains("/Subtype /Form"))
+        assertTrue(appearanceBody.contains("0.7765 0.1569 0.1569 RG"))
+
         val fieldSyntax = PdfDictionarySyntax(checkNotNull(index.body(field, prepared)))
         assertEquals(SIGNATURE_FIELD_TYPE, nameValue(fieldSyntax, FIELD_TYPE_NAME))
         assertEquals(signature, PdfValueParser.reference(value(fieldSyntax, VALUE_NAME)))
@@ -66,7 +72,7 @@ class PdfIncrementalSignerTest {
             PdfValueParser.reference(value(fieldSyntax, PAGE_NAME)),
         )
         assertEquals(EXPECTED_FIRST_FIELD_NAME, value(fieldSyntax, FIELD_NAME))
-        assertEquals(INVISIBLE_RECTANGLE, value(fieldSyntax, RECTANGLE_NAME))
+        assertTrue(value(fieldSyntax, "AP").contains("6 0 R"))
     }
 
     @Test
@@ -441,10 +447,11 @@ class PdfIncrementalSignerTest {
         const val IDENTIFIER_TRAILER_ENTRY = " /ID $IDENTIFIER_VALUE"
         const val EXPECTED_FIRST_SIGNATURE_OBJECT_NUMBER = 4
         const val EXPECTED_FIRST_FIELD_OBJECT_NUMBER = 5
-        const val EXPECTED_SECOND_FIELD_OBJECT_NUMBER = 7
+        const val EXPECTED_FIRST_APPEARANCE_OBJECT_NUMBER = 6
+        const val EXPECTED_SECOND_FIELD_OBJECT_NUMBER = 8
         const val EXPECTED_INDIRECT_FIXTURE_FIELD_OBJECT_NUMBER = 9
         const val EXPECTED_FIRST_FIELD_NAME = "(Signature4)"
-        const val EXPECTED_SECOND_FIELD_NAME = "(Signature6)"
+        const val EXPECTED_SECOND_FIELD_NAME = "(Signature7)"
         const val INVISIBLE_RECTANGLE = "[0 0 0 0]"
         const val EXPECTED_DEFAULT_SIGNATURE_FLAGS = "3"
         const val EXPECTED_MERGED_SIGNATURE_FLAGS = "7"

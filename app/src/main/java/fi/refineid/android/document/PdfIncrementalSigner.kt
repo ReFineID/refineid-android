@@ -29,7 +29,7 @@ internal sealed interface PdfSignatureRevision {
     }
 }
 
-/** Appends one invisible PAdES signature or document-timestamp revision. */
+/** Appends one PAdES signature with visible stamp mark or document-timestamp revision. */
 internal object PdfIncrementalSigner {
     fun prepare(
         document: ByteArray,
@@ -42,6 +42,7 @@ internal object PdfIncrementalSigner {
         val declaredSize =
             PdfDocumentIndex.integer(PdfFormat.SIZE_KEY, index.trailer)
                 ?: throw unreadable()
+        val hasVisibleStamp = revision is PdfSignatureRevision.Signature
         val signatureNumber =
             maxOf(
                 declaredSize,
@@ -54,6 +55,15 @@ internal object PdfIncrementalSigner {
                 number = increment(signature.number),
                 generation = NEW_OBJECT_GENERATION,
             )
+        val appearance =
+            if (hasVisibleStamp) {
+                PdfDocumentIndex.Reference(
+                    number = increment(field.number),
+                    generation = NEW_OBJECT_GENERATION,
+                )
+            } else {
+                null
+            }
         val source = PdfRevisionSource(document = document, index = index, root = root)
         val plan = PdfIncrementalRevisionPlanner.plan(source = source, field = field)
         val capacity = revision.contentsCapacity
@@ -63,14 +73,27 @@ internal object PdfIncrementalSigner {
         val offsets = mutableMapOf<PdfDocumentIndex.Reference, Int>()
         offsets[signature] = output.size
         val holes = appendSignatureObject(output, revision, signature, capacity)
+        if (appearance != null) {
+            offsets[appearance] = output.size
+            output.writeLatin1(appearanceStreamObject(appearance, PdfStampRenderer.generateStampOperators()))
+        }
         offsets[field] = output.size
-        output.writeLatin1(widget(field = field, signature = signature, page = plan.page))
+        output.writeLatin1(
+            widget(
+                field = field,
+                signature = signature,
+                page = plan.page,
+                appearance = appearance,
+                rect = if (hasVisibleStamp) plan.stampPlacementRect else "[0 0 0 0]",
+            ),
+        )
         for ((reference, body) in plan.mutations.entries.sortedBy { entry -> entry.key.number }) {
             offsets[reference] = output.size
             output.writeLatin1(indirectObject(reference, body))
         }
         val xrefOffset = output.size
-        val finalSize = increment(field.number)
+        val highestAllocated = appearance?.number ?: field.number
+        val finalSize = increment(highestAllocated)
         output.write(
             crossReferenceSection(
                 offsets = offsets,
@@ -151,18 +174,42 @@ internal object PdfIncrementalSigner {
             }
         }
 
+    private fun appearanceStreamObject(
+        appearance: PdfDocumentIndex.Reference,
+        operators: String,
+    ): String {
+        val reach = PdfStampRenderer.STAMP_REACH
+        val reachStr = String.format(Locale.US, "%.2f", reach)
+        val bbox = "[-$reachStr -$reachStr $reachStr $reachStr]"
+        val fontResources =
+            "<< /Font << /F1 << /Type /Font /Subtype /Type1 " +
+                "/BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >> >> >>"
+        val body = operators.toByteArray(Charsets.ISO_8859_1)
+        return buildString {
+            append(appearance.encodedObjectHeader())
+            append("<< /Type /XObject /Subtype /Form /BBox $bbox /Resources $fontResources /Length ${body.size} >>\n")
+            append("stream\n")
+            append(operators)
+            append("\nendstream\n${PdfFormat.END_OBJECT_KEYWORD}\n")
+        }
+    }
+
     private fun widget(
         field: PdfDocumentIndex.Reference,
         signature: PdfDocumentIndex.Reference,
         page: PdfDocumentIndex.Reference,
-    ): String =
-        indirectObject(
+        appearance: PdfDocumentIndex.Reference? = null,
+        rect: String = "[0 0 0 0]",
+    ): String {
+        val apEntry = appearance?.let { " /AP << /N ${it.encodedIndirectReference()} >>" } ?: ""
+        return indirectObject(
             reference = field,
             body =
                 "<< /Type /Annot /Subtype /Widget /FT /Sig " +
                     "/T (Signature${signature.number}) /V ${signature.encodedIndirectReference()} " +
-                    "/P ${page.encodedIndirectReference()} /Rect [0 0 0 0] /F $SIGNATURE_WIDGET_FLAGS >>",
+                    "/P ${page.encodedIndirectReference()} /Rect $rect /F $SIGNATURE_WIDGET_FLAGS$apEntry >>",
         )
+    }
 
     private fun indirectObject(
         reference: PdfDocumentIndex.Reference,

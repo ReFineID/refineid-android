@@ -18,6 +18,11 @@ internal class CanSubmission private constructor(
             }
         }
 
+    fun peekDigits(): String? =
+        synchronized(this) {
+            ownedBytes?.let { String(it, Charsets.US_ASCII) }
+        }
+
     override fun close() {
         synchronized(this) {
             ownedBytes?.fill(0)

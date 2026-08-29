@@ -438,7 +438,7 @@ private fun BrowserControlsBar(
  * card, so the holder presents it, enters the basic code — and the
  * access number when no card is saved — and the held handshake resumes.
  */
-@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Suppress("FunctionName", "ktlint:standard:function-naming", "LongMethod")
 @Composable
 private fun BrowserCardUnlockDialog(
     status: NfcReaderStatus?,
@@ -447,11 +447,11 @@ private fun BrowserCardUnlockDialog(
     onUnlock: (CanSubmission?, Pin1Submission) -> Unit,
     onCancel: () -> Unit,
 ) {
-    val canState = remember { TextFieldState() }
+    val initialCan = remember { fi.refineid.android.core.CanSessionStore.currentCan ?: "" }
+    val canState = remember { TextFieldState(initialCan) }
     val pinState = remember { TextFieldState() }
-    DisposableEffect(canState, pinState) {
+    DisposableEffect(pinState) {
         onDispose {
-            canState.clearText()
             pinState.clearText()
         }
     }
@@ -459,13 +459,33 @@ private fun BrowserCardUnlockDialog(
         status == NfcReaderStatus.CARD_RECOGNIZED ||
             status == NfcReaderStatus.WRONG_CAN ||
             status == NfcReaderStatus.TRANSPORT_ERROR
-    val canReady = primed || CanSubmission.isComplete(canState.text)
+    val hasRememberedCan = primed || fi.refineid.android.core.CanSessionStore.hasCan
+    val canReady = hasRememberedCan || CanSubmission.isComplete(canState.text)
     val pinReady = Pin1Submission.isComplete(pinState.text)
     val submit = {
         if (cardEntryReady && canReady && pinReady && !isWaiting) {
-            val can = if (primed) null else CanSubmission.from(canState.text)
+            val can =
+                when {
+                    primed -> {
+                        null
+                    }
+
+                    CanSubmission.isComplete(canState.text) -> {
+                        fi.refineid.android.core.CanSessionStore
+                            .remember(canState.text)
+                        CanSubmission.from(canState.text)
+                    }
+
+                    fi.refineid.android.core.CanSessionStore.hasCan -> {
+                        fi.refineid.android.core.CanSessionStore.currentCan
+                            ?.let { CanSubmission.from(it) }
+                    }
+
+                    else -> {
+                        null
+                    }
+                }
             val pin1 = Pin1Submission.from(pinState.text)
-            canState.clearText()
             pinState.clearText()
             onUnlock(can, pin1)
         }
@@ -500,7 +520,7 @@ private fun BrowserCardUnlockDialog(
                         enabled = !isWaiting,
                         label = { Text(stringResource(R.string.can)) },
                         inputTransformation = CanInputTransformation,
-                        textObfuscationMode = TextObfuscationMode.Hidden,
+                        textObfuscationMode = TextObfuscationMode.Visible,
                         keyboardOptions =
                             KeyboardOptions(
                                 autoCorrectEnabled = false,

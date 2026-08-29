@@ -10,7 +10,14 @@ internal class IsoDepCardChannel(
     private val isoDep: IsoDep,
 ) : NfcCardChannel {
     override val maximumTransceiveLength: Int
-        get() = isoDep.maxTransceiveLength
+        get() =
+            try {
+                isoDep.maxTransceiveLength
+            } catch (_: SecurityException) {
+                0
+            } catch (_: IllegalStateException) {
+                0
+            }
 
     override fun transceive(command: ByteArray): NfcTransceiveResult =
         try {
@@ -21,5 +28,11 @@ internal class IsoDepCardChannel(
         } catch (_: IOException) {
             AppTrace.nfcTransceiveFailed()
             NfcTransceiveResult.TransceiveFailed
+        } catch (_: SecurityException) {
+            AppTrace.nfcTagLost()
+            NfcTransceiveResult.CardLost
+        } catch (_: IllegalStateException) {
+            AppTrace.nfcTagLost()
+            NfcTransceiveResult.CardLost
         }
 }

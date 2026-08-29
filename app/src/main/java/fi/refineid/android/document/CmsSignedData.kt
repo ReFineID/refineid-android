@@ -22,12 +22,15 @@ internal class CmsSignedData private constructor(
     val signedAttributesForVerification: ByteArray,
     val signatureBytes: ByteArray,
     val hasSignatureTimestamp: Boolean,
+    val isDocumentTimestamp: Boolean = false,
 ) {
     fun signerCertificate(): X509Certificate? =
         certificates.firstOrNull { certificate ->
             certificate.serialNumber == signerSerial &&
                 certificate.issuerX500Principal == signerIssuer
         } ?: certificates.singleOrNull()
+
+    fun allCertificates(): List<X509Certificate> = certificates
 
     companion object {
         fun parse(cms: ByteArray): CmsSignedData? =
@@ -50,6 +53,33 @@ internal class CmsSignedData private constructor(
             sd.next() ?: return null // digestAlgorithms
 
             val remaining = generateSequence { sd.next() }.toList()
+            val encapContentInfo = remaining.firstOrNull { it.tag == DerValues.TAG_SEQUENCE }
+            var isDocumentTimestamp = false
+            var tstMessageDigest: ByteArray? = null
+            var tstDigestJcaName: String? = null
+            if (encapContentInfo != null) {
+                val eci = sd.children(encapContentInfo)
+                val contentTypeElem = eci.next()
+                if (contentTypeElem != null && oidOf(sd.content(contentTypeElem)) == ID_CT_TST_INFO) {
+                    isDocumentTimestamp = true
+                    val eContent = eci.next()
+                    if (eContent != null) {
+                        val contentBytes = sd.content(eContent)
+                        val contentReader = DerReader(contentBytes)
+                        val contentElem = contentReader.next()
+                        val tstBytes =
+                            if (contentElem?.tag == DerValues.TAG_OCTET_STRING) {
+                                contentReader.content(contentElem)
+                            } else {
+                                contentBytes
+                            }
+                        val (digest, jca) = parseTstMessageImprint(tstBytes)
+                        tstMessageDigest = digest
+                        tstDigestJcaName = jca
+                    }
+                }
+            }
+
             val certificatesElement =
                 remaining.firstOrNull { it.tag == DerValues.TAG_CONTEXT_0_CONSTRUCTED }
             val signerInfos =
@@ -62,8 +92,41 @@ internal class CmsSignedData private constructor(
 
             val signerInfoReader = sd.children(signerInfos)
             val signerInfo = signerInfoReader.next() ?: return null
-            return parseSignerInfo(signerInfoReader.children(signerInfo), certificates)
+            return parseSignerInfo(
+                si = signerInfoReader.children(signerInfo),
+                certificates = certificates,
+                isDocumentTimestamp = isDocumentTimestamp,
+                tstMessageDigest = tstMessageDigest,
+                tstDigestJcaName = tstDigestJcaName,
+            )
         }
+
+        private fun parseTstMessageImprint(tstBytes: ByteArray): Pair<ByteArray?, String?> =
+            try {
+                val reader = DerReader(tstBytes)
+                val seq = reader.next()
+                if (seq != null) {
+                    val children = reader.children(seq)
+                    children.next() // version
+                    children.next() // policy
+                    val msgImprint = children.next()
+                    if (msgImprint != null) {
+                        val miChildren = reader.children(msgImprint)
+                        val hashAlgo = miChildren.next()
+                        val hashAlgoOid = hashAlgo?.let { firstOid(reader.children(it)) }
+                        val hashedMessage = miChildren.next()
+                        val digest = hashedMessage?.let { reader.content(it) }
+                        val jcaName = hashAlgoOid?.let(::digestJcaName)
+                        digest to jcaName
+                    } else {
+                        null to null
+                    }
+                } else {
+                    null to null
+                }
+            } catch (_: RuntimeException) {
+                null to null
+            }
 
         private fun parseCertificates(reader: DerReader): List<X509Certificate> {
             val factory = CertificateFactory.getInstance("X.509")
@@ -78,6 +141,9 @@ internal class CmsSignedData private constructor(
         private fun parseSignerInfo(
             si: DerReader,
             certificates: List<X509Certificate>,
+            isDocumentTimestamp: Boolean,
+            tstMessageDigest: ByteArray?,
+            tstDigestJcaName: String?,
         ): CmsSignedData? {
             si.next() ?: return null // version
             val sid = si.next() ?: return null // issuerAndSerialNumber
@@ -92,18 +158,30 @@ internal class CmsSignedData private constructor(
 
             val (issuer, serial) = parseSignerIdentifier(si.children(sid), sid) ?: return null
             val digestOid = firstOid(si.children(digestAlgorithm)) ?: return null
-            val digestJcaName = digestJcaName(digestOid) ?: return null
+            val standardDigestJcaName = digestJcaName(digestOid) ?: return null
             val signatureOid = firstOid(si.children(signatureAlgorithm)) ?: return null
 
             val attributes = parseSignedAttributes(si.children(signedAttributes))
+            val effectiveMessageDigest =
+                if (isDocumentTimestamp && tstMessageDigest != null) {
+                    tstMessageDigest
+                } else {
+                    attributes.messageDigest
+                }
+            val effectiveDigestJcaName =
+                if (isDocumentTimestamp && tstDigestJcaName != null) {
+                    tstDigestJcaName
+                } else {
+                    standardDigestJcaName
+                }
 
             return CmsSignedData(
                 certificates = certificates,
                 signerIssuer = issuer,
                 signerSerial = serial,
-                digestJcaName = digestJcaName,
+                digestJcaName = effectiveDigestJcaName,
                 signatureJcaName = signatureJcaName(signatureOid, digestOid),
-                messageDigest = attributes.messageDigest,
+                messageDigest = effectiveMessageDigest,
                 signingTime = attributes.signingTime,
                 signedAttributesForVerification =
                     DerEncoder.retagged(si.raw(signedAttributes), DerValues.TAG_SET),
@@ -112,6 +190,7 @@ internal class CmsSignedData private constructor(
                     unsignedAttributes?.let { element ->
                         containsSignatureTimestamp(si.children(element))
                     } ?: false,
+                isDocumentTimestamp = isDocumentTimestamp,
             )
         }
 
@@ -234,6 +313,7 @@ internal class CmsSignedData private constructor(
         private const val SIGNING_TIME = "1.2.840.113549.1.9.5"
         private const val SHA256 = "2.16.840.1.101.3.4.2.1"
         private const val RSA_ENCRYPTION = "1.2.840.113549.1.1.1"
+        private const val ID_CT_TST_INFO = "1.2.840.113549.1.9.16.1.4"
         private const val OID_FIRST_ARC_SCALE = 40
         private const val OID_ARC_SHIFT = 7
         private const val OID_ARC_MASK = 0x7F

@@ -1,5 +1,7 @@
 // Copyright 2026 ReFineID contributors. Licensed under the Apache License, Version 2.0.
 
+@file:Suppress("LongMethod", "TooGenericExceptionCaught")
+
 package fi.refineid.android.ui
 
 import androidx.compose.foundation.layout.Arrangement

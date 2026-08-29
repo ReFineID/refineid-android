@@ -28,10 +28,16 @@ internal class DocumentSigningCardTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    @Before
+    fun setUp() {
+        fi.refineid.android.core.CanSessionStore
+            .drop()
+    }
+
     @Test
     fun emptyCardOffersOnlyPdfSelection() {
         var chooseCount = NO_ACTIONS
-        show(onChooseDocument = { chooseCount += ACTION_COUNT_STEP })
+        show(onChooseDocuments = { chooseCount += ACTION_COUNT_STEP })
 
         composeRule
             .onNodeWithTag(UiAutomationIds.DOCUMENT_CHOOSE_ACTION)
@@ -49,6 +55,18 @@ internal class DocumentSigningCardTest {
     @Test
     fun selectedPdfPromptsForPin2WithoutAccessNumberWhenPrimed() {
         show(hasDocument = true)
+
+        composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_SELECTED_STATUS).assertIsDisplayed()
+        composeRule.onNodeWithTag(UiAutomationIds.PIN2_FIELD).assertIsDisplayed()
+        composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_CAN_FIELD).assertDoesNotExist()
+        composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_SIGN_ACTION).assertIsNotEnabled()
+    }
+
+    @Test
+    fun selectedPdfPromptsForPin2WithoutAccessNumberWhenCanIsRememberedInSession() {
+        fi.refineid.android.core.CanSessionStore
+            .remember(SYNTHETIC_CAN)
+        show(hasDocument = true, canRequired = true)
 
         composeRule.onNodeWithTag(UiAutomationIds.DOCUMENT_SELECTED_STATUS).assertIsDisplayed()
         composeRule.onNodeWithTag(UiAutomationIds.PIN2_FIELD).assertIsDisplayed()
@@ -78,7 +96,7 @@ internal class DocumentSigningCardTest {
         var submittedCan: CanSubmission? = null
         show(
             hasDocument = true,
-            onSign = { submission, can ->
+            onSign = { _, submission, can ->
                 submissionCount += ACTION_COUNT_STEP
                 submittedBytes = submission.consume { bytes -> bytes.copyOf() }
                 submittedCan = can
@@ -165,8 +183,9 @@ internal class DocumentSigningCardTest {
         hasDocument: Boolean = false,
         canRequired: Boolean = false,
         status: DocumentSigningStatus = DocumentSigningStatus.IDLE,
-        onChooseDocument: () -> Unit = {},
-        onSign: (Pin2Submission, CanSubmission?) -> Unit = { pin2, can ->
+        onChooseDocuments: () -> Unit = {},
+        onAddDocument: () -> Unit = {},
+        onSign: (SignatureFormat, Pin2Submission, CanSubmission?) -> Unit = { _, pin2, can ->
             pin2.close()
             can?.close()
         },
@@ -175,11 +194,12 @@ internal class DocumentSigningCardTest {
             ReFineIdTheme {
                 DocumentSigningCard(
                     hasDocument = hasDocument,
+                    documentNames = if (hasDocument) listOf("test_document.pdf") else emptyList(),
+                    canSignPdf = true,
                     canRequired = canRequired,
                     status = status,
-                    format = SignatureFormat.PDF,
-                    onSelectFormat = {},
-                    onChooseDocument = onChooseDocument,
+                    onChooseDocuments = onChooseDocuments,
+                    onAddDocument = onAddDocument,
                     onSign = onSign,
                 )
             }

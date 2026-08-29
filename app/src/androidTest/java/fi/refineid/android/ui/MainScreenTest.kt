@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -47,19 +48,21 @@ internal class MainScreenTest {
             },
         )
 
-        val pinField = composeRule.onNodeWithTag(UiAutomationIds.PIN1_FIELD)
+        val pinField = composeRule.onNodeWithTag(UiAutomationIds.PIN1_FIELD).performScrollTo()
         assertTrue(
             "PIN1 field must carry password semantics",
             pinField.fetchSemanticsNode().config.contains(SemanticsProperties.Password),
         )
         composeRule
             .onNodeWithTag(UiAutomationIds.AUTHENTICATION_ACTION)
+            .performScrollTo()
             .assertIsNotEnabled()
         composeRule.onNodeWithTag(UiAutomationIds.BROWSER_ACTION).assertDoesNotExist()
 
         pinField.performTextInput(SYNTHETIC_PIN1)
         composeRule
             .onNodeWithTag(UiAutomationIds.AUTHENTICATION_ACTION)
+            .performScrollTo()
             .assertIsEnabled()
             .performClick()
 
@@ -71,6 +74,7 @@ internal class MainScreenTest {
             }
             composeRule
                 .onNodeWithTag(UiAutomationIds.AUTHENTICATION_ACTION)
+                .performScrollTo()
                 .assertIsNotEnabled()
         } finally {
             expectedBytes.fill(CLEARED_BYTE)
@@ -82,9 +86,11 @@ internal class MainScreenTest {
     fun pinFieldRejectsNonDecimalAndOverlengthInput() {
         show(snapshot = READY_WITH_CARD)
 
-        val pinField = composeRule.onNodeWithTag(UiAutomationIds.PIN1_FIELD)
+        val pinField = composeRule.onNodeWithTag(UiAutomationIds.PIN1_FIELD).performScrollTo()
         val authenticationAction =
-            composeRule.onNodeWithTag(UiAutomationIds.AUTHENTICATION_ACTION)
+            composeRule
+                .onNodeWithTag(UiAutomationIds.AUTHENTICATION_ACTION)
+                .performScrollTo()
 
         pinField.performTextInput(NON_DECIMAL_PIN1)
         authenticationAction.assertIsNotEnabled()
@@ -101,12 +107,17 @@ internal class MainScreenTest {
                 ),
         )
 
-        composeRule.onNodeWithTag(UiAutomationIds.PIN1_FIELD).assertIsNotEnabled()
+        composeRule
+            .onNodeWithTag(UiAutomationIds.PIN1_FIELD)
+            .performScrollTo()
+            .assertIsNotEnabled()
         composeRule
             .onNodeWithTag(UiAutomationIds.AUTHENTICATION_ACTION)
+            .performScrollTo()
             .assertIsNotEnabled()
         composeRule
             .onNodeWithTag(UiAutomationIds.AUTHENTICATION_STATUS)
+            .performScrollTo()
             .assertTextEquals(
                 InstrumentationRegistry
                     .getInstrumentation()
@@ -128,6 +139,7 @@ internal class MainScreenTest {
 
         composeRule
             .onNodeWithTag(UiAutomationIds.READER_ACTION)
+            .performScrollTo()
             .assertIsDisplayed()
             .performClick()
         composeRule.runOnIdle {
@@ -147,6 +159,7 @@ internal class MainScreenTest {
 
         composeRule
             .onNodeWithTag(UiAutomationIds.READER_CARD)
+            .performScrollTo()
             .assertIsDisplayed()
         composeRule
             .onNodeWithTag(UiAutomationIds.AUTHENTICATION_CARD)
@@ -162,6 +175,7 @@ internal class MainScreenTest {
 
         composeRule
             .onNodeWithTag(UiAutomationIds.BROWSER_ACTION)
+            .performScrollTo()
             .assertIsDisplayed()
             .assertIsEnabled()
     }

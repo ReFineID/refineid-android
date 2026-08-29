@@ -25,9 +25,19 @@ class ReFineIdApplication : Application() {
         private set
     internal lateinit var timestampAuthorityStore: TimestampAuthorityStore
         private set
+    internal lateinit var rappAuthorizationInbox: fi.refineid.android.rapp.RappAuthorizationInbox
+        private set
+    internal lateinit var rappPairCatalog: fi.refineid.android.rapp.RappPairCatalog
+        private set
 
     override fun onCreate() {
         super.onCreate()
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            fi.refineid.android.diagnostics.AppTrace
+                .uncaughtException(thread, throwable)
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
         readerController = UsbReaderController(this)
         nfcReaderController =
             NfcReaderController(
@@ -36,6 +46,12 @@ class ReFineIdApplication : Application() {
                 pinCache = authenticationPinCache,
             )
         timestampAuthorityStore = TimestampAuthorityStore(this)
+        rappAuthorizationInbox =
+            fi.refineid.android.rapp
+                .RappAuthorizationInbox(this)
+        rappPairCatalog =
+            fi.refineid.android.rapp
+                .RappPairCatalog(this)
         pinPromptBroker =
             ExternalKeyPinPromptBroker(
                 context = this,

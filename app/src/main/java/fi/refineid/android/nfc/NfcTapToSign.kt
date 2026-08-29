@@ -122,13 +122,21 @@ internal class NfcTapToSign(
             session.adopt(isoDep)
             return
         }
-        val number = can ?: primedCan() ?: return
+        val number =
+            can ?: fi.refineid.android.core.CanSessionStore
+                .canBytes() ?: primedCan() ?: return
         try {
             if (!isoDep.isConnected) {
                 isoDep.connect()
                 isoDep.timeout = TRANSCEIVE_TIMEOUT_MILLISECONDS
             }
         } catch (_: IOException) {
+            AppTrace.nfcSessionOpenFailed()
+            return
+        } catch (_: SecurityException) {
+            AppTrace.nfcSessionOpenFailed()
+            return
+        } catch (_: IllegalStateException) {
             AppTrace.nfcSessionOpenFailed()
             return
         }

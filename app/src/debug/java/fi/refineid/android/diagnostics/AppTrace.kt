@@ -921,6 +921,17 @@ internal object AppTrace {
     private fun hexStatus(value: Int): String =
         value.and(UNSIGNED_SHORT_MASK).toString(HEX_RADIX).padStart(STATUS_HEX_DIGITS, '0')
 
+    fun uncaughtException(
+        thread: Thread,
+        throwable: Throwable,
+    ) {
+        try {
+            Log.e(TAG, "FATAL EXCEPTION in thread " + thread.name, throwable)
+        } catch (_: RuntimeException) {
+            // Local JVM tests
+        }
+    }
+
     private fun debug(message: String) {
         try {
             Log.d(TAG, message)
@@ -929,7 +940,7 @@ internal object AppTrace {
         }
     }
 
-    private const val TAG = "ReFineID"
+    private const val TAG = "RefineID"
     private const val HEX_RADIX = 16
     private const val BYTE_HEX_DIGITS = 2
     private const val STATUS_HEX_DIGITS = 4
