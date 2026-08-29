@@ -2,6 +2,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.StringReader
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import java.util.Properties
 import java.util.zip.ZipFile
 
@@ -42,38 +44,64 @@ detekt {
 val versionPropertiesFile = rootProject.layout.projectDirectory.file("version.properties")
 val versionProperties =
     Properties().apply {
-        load(
-            StringReader(
-                providers.fileContents(versionPropertiesFile).asText.get(),
-            ),
-        )
+        if (versionPropertiesFile.asFile.exists()) {
+            load(
+                StringReader(
+                    providers.fileContents(versionPropertiesFile).asText.getOrElse(""),
+                ),
+            )
+        }
     }
+val liveUtcDate = ZonedDateTime.now(ZoneOffset.UTC)
+val defaultLiveVersionName = "${liveUtcDate.year % 100}.${liveUtcDate.monthValue}.${liveUtcDate.dayOfMonth}"
+val defaultLiveBuildNumber = (liveUtcDate.hour * buildNumberHourScale + liveUtcDate.minute / 10).toString()
+
+val useAutoVersion =
+    providers.gradleProperty("autoVersion").map { it.toBoolean() }.getOrElse(false)
+
 val refineIdVersionName =
-    requireNotNull(versionProperties.getProperty("versionName")) {
-        "version.properties is missing versionName"
-    }.trim()
+    (
+        providers.gradleProperty("versionName").orNull
+            ?: providers.environmentVariable("VERSION_NAME").orNull
+            ?: if (useAutoVersion) {
+                defaultLiveVersionName
+            } else {
+                versionProperties.getProperty("versionName")
+                    ?: defaultLiveVersionName
+            }
+    ).trim()
+
 val calendarVersionPattern =
     Regex("""([0-9]{2})\.([1-9]|1[0-2])\.([1-9]|[12][0-9]|3[01])""")
 val calendarVersionMatch =
     requireNotNull(calendarVersionPattern.matchEntire(refineIdVersionName)) {
-        "versionName must use YY.M.D without zero padding"
+        "versionName must use YY.M.D without zero padding (got '$refineIdVersionName')"
     }
 val versionYear = calendarVersionMatch.groupValues[1].toInt()
 val versionMonth = calendarVersionMatch.groupValues[2].toInt()
 val versionDay = calendarVersionMatch.groupValues[3].toInt()
 val calendarVersionDate =
     LocalDate.of(calendarYearBase + versionYear, versionMonth, versionDay)
+
+val rawBuildNumber =
+    providers.gradleProperty("buildNumber").orNull
+        ?: providers.environmentVariable("BUILD_NUMBER").orNull
+        ?: if (useAutoVersion) {
+            defaultLiveBuildNumber
+        } else {
+            versionProperties.getProperty("buildNumber")
+                ?: defaultLiveBuildNumber
+        }
+
 val refineIdBuildNumber =
-    requireNotNull(versionProperties.getProperty("buildNumber")) {
-        "version.properties is missing buildNumber"
-    }.trim().toIntOrNull()
-        ?: error("buildNumber must be an integer")
+    rawBuildNumber.trim().toIntOrNull()
+        ?: error("buildNumber must be an integer (got '$rawBuildNumber')")
 
 require(
     refineIdBuildNumber in 0..maximumBuildNumber &&
         refineIdBuildNumber % buildNumberHourScale in 0..maximumTenMinuteBucket,
 ) {
-    "buildNumber must be a UTC ten-minute bucket (H * 10 + M / 10)"
+    "buildNumber must be a UTC ten-minute bucket (H * 10 + M / 10) (got $refineIdBuildNumber)"
 }
 
 val refineIdVersionCode =
