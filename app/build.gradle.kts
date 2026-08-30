@@ -16,6 +16,7 @@ val rappCrateDirectory =
 val rappGeneratedKotlin = rappCrateDirectory.dir("generated")
 val minimumAndroidApi = 33
 val currentAndroidApi = 37
+val javaToolchainVersion = 25
 val calendarYearBase = 2000
 val maximumUtcHour = 23
 val buildNumberHourScale = 10
@@ -237,6 +238,7 @@ android {
 }
 
 kotlin {
+    jvmToolchain(javaToolchainVersion)
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
         allWarningsAsErrors.set(true)
