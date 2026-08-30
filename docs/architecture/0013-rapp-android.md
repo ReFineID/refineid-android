@@ -64,7 +64,7 @@ through JNA, which the application did not previously need, so `jna` with the
 From the crate directory, with the NDK available:
 
 ```sh
-cargo ndk -t arm64-v8a -t x86_64 -o jniLibs build --release
+cargo ndk -t arm64-v8a -t x86_64 -o jniLibs build --release --locked
 cargo run --bin refineid-uniffi-bindgen-kotlin -- \
     generate --library jniLibs/arm64-v8a/librefineid_rapp.so \
     --language kotlin --out-dir generated --no-format
