@@ -22,6 +22,7 @@ import fi.refineid.android.core.NativeContactlessCore
 import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.core.NativeContactlessSession
 import fi.refineid.android.core.NativeCore
+import fi.refineid.android.core.NativeVerification
 import fi.refineid.android.core.PersonCardDetails
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
@@ -442,10 +443,17 @@ internal class NfcReaderController(
         if (status == NfcReaderStatus.CARD_READY && generation == probeGeneration) {
             CanSessionStore.remember(String(canBytes, Charsets.US_ASCII))
             val photoBytes = NativeCore.readCardFacePhoto()
+            val documentNumber = NativeCore.readCardDocumentNumber()
+            val tamperProofVerified = NativeVerification.readCardVerificationPassed()
             val cardDetails: PersonCardDetails? =
                 if (opened is NativeContactlessOpenResult.Success) {
                     try {
-                        PersonCardDetails.fromDer(opened.certificate.copyDer(), photoBytes)
+                        PersonCardDetails.fromDer(
+                            opened.certificate.copyDer(),
+                            photoBytes,
+                            documentNumber,
+                            tamperProofVerified,
+                        )
                     } catch (_: Exception) {
                         null
                     }
@@ -459,7 +467,7 @@ internal class NfcReaderController(
                     null
                 }
             if (photoBytes != null && photoBytes.isNotEmpty()) {
-                CardPhotoStore.savePhoto(photoBytes, holderName)
+                CardPhotoStore.savePhoto(photoBytes, holderName, documentNumber)
             }
             if (mintOnSuccess) {
                 primedCanStore.write(canBytes.copyOf())
