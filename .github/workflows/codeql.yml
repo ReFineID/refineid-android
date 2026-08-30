@@ -49,6 +49,13 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Cache Android NDK
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk
+          key: ndk-${{ runner.os }}-${{ hashFiles('refineid-android/app/build.gradle.kts') }}
+
       - name: Install the pinned Android SDK platform and NDK
         working-directory: refineid-android
         run: |
@@ -58,12 +65,24 @@ jobs:
           yes | "${sdkmanager}" --licenses > /dev/null || true
           "${sdkmanager}" "platforms;android-${platform_api}" ||
             "${sdkmanager}" "platforms;android-${platform_api}.0"
-          "${sdkmanager}" "ndk;${ndk_version}"
+          if [ ! -d "${ANDROID_HOME}/ndk/${ndk_version}" ]; then
+            "${sdkmanager}" "ndk;${ndk_version}"
+          fi
 
-      - name: Install the Rust Android targets and cargo-ndk
-        run: |
-          rustup target add aarch64-linux-android x86_64-linux-android
-          cargo install cargo-ndk
+      - name: Install the Rust Android targets
+        run: rustup target add aarch64-linux-android x86_64-linux-android
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            refineid-android
+            refineid-core
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
