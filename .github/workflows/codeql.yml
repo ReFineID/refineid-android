@@ -69,6 +69,8 @@ jobs:
           if [ ! -d "${ANDROID_HOME}/ndk/${ndk_version}" ]; then
             "${sdkmanager}" "ndk;${ndk_version}"
           fi
+          echo "ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/${ndk_version}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${ndk_version}" >> "$GITHUB_ENV"
 
       - name: Install the Rust Android targets
         run: rustup target add aarch64-linux-android x86_64-linux-android
