@@ -67,6 +67,7 @@ jobs:
         with:
           languages: java-kotlin
           build-mode: manual
+          source-root: refineid-android
 
       - name: Build
         working-directory: refineid-android
