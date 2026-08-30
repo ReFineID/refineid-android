@@ -13,10 +13,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import uniffi.refineid_lib_core.RappBridgeActionKind
-import uniffi.refineid_lib_core.RappOperationBridge
-import uniffi.refineid_lib_core.RappOperationDescriptor
-import uniffi.refineid_lib_core.RappOperationKind
+import uniffi.refineid_rapp.RappBridgeActionKind
+import uniffi.refineid_rapp.RappOperationBridge
+import uniffi.refineid_rapp.RappOperationDescriptor
+import uniffi.refineid_rapp.RappOperationKind
 
 /**
  * Handles incoming RAPP protocol requests from a paired Mac, coordinates user approvals,
@@ -49,8 +49,7 @@ internal class RappPhoneProxyDispatcher(
             is StreamRelayEvent.Frame -> {
                 val bridge = operationBridge ?: return
                 try {
-                    val nowMs = System.currentTimeMillis().toULong()
-                    val action = bridge.receiveFrame(event.data, nowMs)
+                    val action = bridge.receiveFrame(event.data, RappClock.monotonicMs())
                     handleBridgeAction(action, bridge)
                 } catch (_: Exception) {
                 }
@@ -67,7 +66,7 @@ internal class RappPhoneProxyDispatcher(
     }
 
     private fun handleBridgeAction(
-        action: uniffi.refineid_lib_core.RappBridgeAction,
+        action: uniffi.refineid_rapp.RappBridgeAction,
         bridge: RappOperationBridge,
     ) {
         val opId = action.operationId ?: return
@@ -132,7 +131,7 @@ internal class RappPhoneProxyDispatcher(
 
                     else -> {
                         try {
-                            val resp = bridge.approve(opId, System.currentTimeMillis().toULong())
+                            val resp = bridge.approve(opId, RappClock.monotonicMs())
                             handleBridgeAction(resp, bridge)
                         } catch (_: Exception) {
                         }
@@ -160,7 +159,7 @@ internal class RappPhoneProxyDispatcher(
             val service = authCardService()
             if (service == null) {
                 try {
-                    val resp = bridge.credentialRejected(opId)
+                    val resp = bridge.credentialRejected(opId, RappClock.monotonicMs())
                     handleBridgeAction(resp, bridge)
                 } catch (_: Exception) {
                 }
@@ -183,7 +182,7 @@ internal class RappPhoneProxyDispatcher(
 
                 else -> {
                     try {
-                        val resp = bridge.credentialRejected(opId)
+                        val resp = bridge.credentialRejected(opId, RappClock.monotonicMs())
                         handleBridgeAction(resp, bridge)
                     } catch (_: Exception) {
                     }
@@ -201,7 +200,7 @@ internal class RappPhoneProxyDispatcher(
         scope.launch(Dispatchers.IO) {
             // Document signing execution
             try {
-                val resp = bridge.credentialRejected(opId)
+                val resp = bridge.credentialRejected(opId, RappClock.monotonicMs())
                 handleBridgeAction(resp, bridge)
             } catch (_: Exception) {
             }

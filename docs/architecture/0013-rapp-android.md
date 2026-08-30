@@ -17,11 +17,17 @@ what turns a proven pair of devices into a cross-platform one.
 
 ## The protocol is not implemented here
 
-`refineid-lib-core` in the shared Rust repository is the authority for RAPP
-framing, state transitions, role legality, failure policy, and cryptography.
-Nothing in Kotlin decides protocol. The same crate backs the Apple binding, so
-a Kotlin peer and a Swift peer cannot drift apart in the ways two hand-written
-implementations always eventually do.
+`refineid-rapp` in the refineid-core repository (`crates/rapp`) is the
+original protocol engine for RAPP framing, state transitions, role legality,
+failure policy, and cryptography, and it is what Android links; nothing in
+Kotlin decides protocol. The only RAPP combinations proven live so far are in
+the Apple-native implementation (iPhone attaching a Mac, and iPad), built on
+Apple platform transports and Swift protocol code. The Rust engine has not
+been proven live between independent peers: treat the Apple implementation as
+the behavioural reference, and expect the Rust engine to be simplified
+against live-proven behaviour rather than treated as normative. It remains
+the shared engine for platforms without a native implementation - Android
+now, Linux as an intended future target.
 
 Change the protocol in Rust first, make its tests pass, regenerate this
 binding, and only then adapt the Android integration.
@@ -31,17 +37,17 @@ binding, and only then adapt the Android integration.
 `native/refineid-rapp-android/` is a thin crate whose only job is to produce a
 shared object for Android:
 
-- It depends on `refineid-lib-core` with the `bindings` feature and re-exports
+- It depends on `refineid-rapp` with the `bindings` feature and re-exports
   it, which links that crate's UniFFI scaffolding into a `cdylib`. The library
   crate itself builds as `rlib` and `staticlib` for the Apple binding and
   cannot produce a `.so` for Android on its own.
-- The shared object must be named `librefineid_lib_core.so`, because the
+- The shared object must be named `librefineid_rapp.so`, because the
   generated binding loads its Rust side by the scaffolding crate's name. That
-  is why this wrapper sets `[lib] name = "refineid_lib_core"`.
+  is why this wrapper sets `[lib] name = "refineid_rapp"`.
 - `src/bin/refineid-uniffi-bindgen-kotlin.rs` generates the binding, mirroring
   the Apple repository's Swift generator.
-- `generated/uniffi/refineid_lib_core/refineid_lib_core.kt` is the generated
-  binding, about 6,400 lines, in package `uniffi.refineid_lib_core`. It is
+- `generated/uniffi/refineid_rapp/refineid_rapp.kt` is the generated
+  binding, in package `uniffi.refineid_rapp`. It is
   committed so a build does not depend on regenerating it, and it must be
   regenerated and committed together with the Rust revision that defines its
   ABI.
@@ -60,21 +66,20 @@ From the crate directory, with the NDK available:
 ```sh
 cargo ndk -t arm64-v8a -t x86_64 -o jniLibs build --release
 cargo run --bin refineid-uniffi-bindgen-kotlin -- \
-    generate --library jniLibs/arm64-v8a/librefineid_lib_core.so \
+    generate --library jniLibs/arm64-v8a/librefineid_rapp.so \
     --language kotlin --out-dir generated --no-format
 ```
 
-The crate currently depends on `refineid-lib-core` by relative path, because
-the RAPP source is not published yet. That is a temporary arrangement and is
-the same assumption the Apple generator makes. Replace it with a pinned git
-revision as soon as the crate is pushed, so an Android build stops depending
-on one developer's directory layout.
+The crate depends on `refineid-rapp` from the refineid-core repository using
+the same pattern as the pinned core crates: a git dependency on
+`refineid-core` `main` with a `[patch]` to the sibling `refineid-core`
+checkout for local development.
 
 ## Measured so far
 
-- `refineid-lib-core` compiles for `aarch64-linux-android` and
+- `refineid-rapp` compiles for `aarch64-linux-android` and
   `x86_64-linux-android` with the pinned 1.97 toolchain.
-- The wrapper produces `librefineid_lib_core.so` for both ABIs.
+- The wrapper produces `librefineid_rapp.so` for both ABIs.
 - The Kotlin binding generates from the built library and exposes the RAPP
   surface: `RappPairingBridge`, `RappSessionBridge`, `RappOperationBridge`,
   `RappPairVault`, `RappOperationVault`, and the operation, pairing and

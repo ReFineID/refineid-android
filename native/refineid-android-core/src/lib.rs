@@ -249,6 +249,26 @@ const _: NativeMethod = jni::native_method! {
 };
 
 const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCore",
+    static extern fn read_card_document_number_native() -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeVerification",
+    static extern fn read_card_verification_native() -> jint,
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeVerification",
+    static extern fn add_csca_anchor_native(anchor_der: [jbyte]) -> jint,
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeVerification",
+    static extern fn clear_csca_anchors_native() -> jint,
+};
+
+const _: NativeMethod = jni::native_method! {
     java_type = "fi.refineid.android.core.NativeContactlessCore",
     static extern fn probe_card_access_native(
         exchange_level: jint,
@@ -580,6 +600,7 @@ fn contactless_close_native<'local>(
     _class: JClass<'local>,
 ) -> Result<jint, jni::errors::Error> {
     contactless::set_last_read_face_photo(None);
+    contactless::set_last_read_document_number(None);
     contactless_close();
     Ok(CONTACTLESS_SESSION_CLOSED)
 }
@@ -593,6 +614,44 @@ fn read_card_face_photo_native<'local>(
         Some(bytes) => env.byte_array_from_slice(&bytes),
         None => env.new_byte_array(0),
     }
+}
+
+fn read_card_document_number_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let document_number = contactless::get_last_read_document_number();
+    match document_number {
+        Some(text) => env.byte_array_from_slice(text.as_bytes()),
+        None => env.new_byte_array(0),
+    }
+}
+
+fn read_card_verification_native<'local>(
+    _env: &mut Env<'local>,
+    _class: JClass<'local>,
+) -> Result<jint, jni::errors::Error> {
+    Ok(contactless::get_last_read_verification())
+}
+
+/// Installed count is returned so the platform can assert its anchor
+/// assets actually arrived.
+fn add_csca_anchor_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    anchor_der: JByteArray<'local>,
+) -> Result<jint, jni::errors::Error> {
+    let bytes = env.convert_byte_array(&anchor_der)?;
+    contactless::add_csca_anchor(bytes);
+    Ok(1)
+}
+
+fn clear_csca_anchors_native<'local>(
+    _env: &mut Env<'local>,
+    _class: JClass<'local>,
+) -> Result<jint, jni::errors::Error> {
+    contactless::clear_csca_anchors();
+    Ok(0)
 }
 
 fn contactless_authenticate_and_sign_native<'local>(

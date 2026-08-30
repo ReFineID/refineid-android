@@ -788,6 +788,16 @@ internal object AppTrace {
         debug("ccid:card-state " + state)
     }
 
+    fun ccidCommandFailed(
+        errorCode: Int,
+        cardStatus: CcidCardStatus,
+    ) {
+        debug(
+            "ccid:command-failed error=" + errorCode +
+                " card=" + cardStatus,
+        )
+    }
+
     fun ccidAtrResult(
         length: Int,
         validation: AtrValidation,

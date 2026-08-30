@@ -48,6 +48,7 @@ import androidx.compose.material3.SecureTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,6 +86,7 @@ import fi.refineid.android.settings.TimestampAuthorityRepository
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
 import fi.refineid.android.usb.UsbReaderSnapshot
+import kotlinx.coroutines.delay
 
 /** The screens the grouped home navigates to, one at a time. */
 private enum class MainDestination {
@@ -168,6 +170,8 @@ internal fun MainScreen(
             {
                 onForgetPrimedCard()
                 CanSessionStore.drop()
+                fi.refineid.android.core.CardPhotoStore
+                    .clear()
                 pinCache?.clear()
                 rappPairingModel?.reset()
             }
@@ -195,6 +199,15 @@ internal fun MainScreen(
                     },
                 nfcPrimed = nfcSnapshot.isPrimed,
                 onNfcConnect = onNfcConnect,
+                // A present wired card reads over its open session; the
+                // contactless path primes NFC for the next tap otherwise.
+                onReadCard = { can, pin1 ->
+                    if (snapshot.cardPresence == CardPresence.PRESENT && can != null) {
+                        onReaderConnect(can)
+                    } else {
+                        onNfcConnect(can, pin1)
+                    }
+                },
                 timestampAuthorityRepository = timestampAuthorityRepository,
                 onOpenVerify = { verifyPicker.launch(arrayOf("*/*")) },
                 onOpenSign = { destination = MainDestination.SIGN },
@@ -298,6 +311,7 @@ private fun HomeScreen(
     nfcStatus: NfcReaderStatus?,
     nfcPrimed: Boolean,
     onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
+    onReadCard: (CanSubmission?, Pin1Submission) -> Unit,
     timestampAuthorityRepository: TimestampAuthorityRepository?,
     onOpenVerify: () -> Unit,
     onOpenSign: () -> Unit,
@@ -387,7 +401,7 @@ private fun HomeScreen(
                 holderName = holderName,
                 onForget = onForgetIdentity,
                 onOpenPerson = onOpenPerson,
-                onNfcConnect = onNfcConnect,
+                onReadCard = onReadCard,
             )
 
             if (BuildDiagnostics.TIMESTAMP_SETTINGS_ENABLED) {
@@ -403,10 +417,25 @@ private fun IdentitySection(
     holderName: String?,
     onForget: (() -> Unit)?,
     onOpenPerson: () -> Unit,
-    onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
+    onReadCard: (CanSubmission?, Pin1Submission) -> Unit,
 ) {
     var showsForgetConfirmation by remember { mutableStateOf(false) }
     var showsNfcReadDialog by remember { mutableStateOf(false) }
+    var readNavigationPending by remember { mutableStateOf(false) }
+
+    // Open the person page only after a requested read actually produced
+    // an identity; a read that never completes must not fabricate one.
+    LaunchedEffect(readNavigationPending, holderName) {
+        if (readNavigationPending) {
+            if (holderName != null) {
+                readNavigationPending = false
+                onOpenPerson()
+            } else {
+                delay(READ_NAVIGATION_TIMEOUT_MILLISECONDS)
+                readNavigationPending = false
+            }
+        }
+    }
 
     Section(stringResource(R.string.section_identity)) {
         NavigationGroup {
@@ -415,7 +444,17 @@ private fun IdentitySection(
                     Modifier
                         .fillMaxWidth()
                         .clickable {
-                            if (fi.refineid.android.core.CanSessionStore.hasCan && holderName != null) {
+                            // The person page opens directly once the photo is
+                            // cached or a stored access number can fetch it;
+                            // otherwise ask for the access number first.
+                            val personPageComplete =
+                                holderName != null &&
+                                    (
+                                        fi.refineid.android.core.CanSessionStore.hasCan ||
+                                            fi.refineid.android.core.CardPhotoStore
+                                                .getPhoto(holderName) != null
+                                    )
+                            if (personPageComplete) {
                                 onOpenPerson()
                             } else {
                                 showsNfcReadDialog = true
@@ -501,8 +540,10 @@ private fun IdentitySection(
     if (showsNfcReadDialog) {
         ReadCardNfcDialog(
             onDismiss = { showsNfcReadDialog = false },
-            onConnect = onNfcConnect,
-            onOpenPerson = onOpenPerson,
+            onConnect = { can, pin1 ->
+                readNavigationPending = true
+                onReadCard(can, pin1)
+            },
         )
     }
 }
@@ -512,7 +553,6 @@ private fun IdentitySection(
 private fun ReadCardNfcDialog(
     onDismiss: () -> Unit,
     onConnect: (CanSubmission?, Pin1Submission) -> Unit,
-    onOpenPerson: () -> Unit,
 ) {
     val initialCan = remember { fi.refineid.android.core.CanSessionStore.currentCan ?: "" }
     val canState = remember { TextFieldState(initialCan) }
@@ -532,7 +572,6 @@ private fun ReadCardNfcDialog(
                 }
             onConnect(can, pin1)
             onDismiss()
-            onOpenPerson()
         }
         Unit
     }
@@ -1124,6 +1163,9 @@ private fun ReaderCanEntry(onConnect: (CanSubmission) -> Unit) {
 }
 
 private const val WEIGHT_FILL = 1F
+
+/** How long a requested card read may take before its navigation intent lapses. */
+private const val READ_NAVIGATION_TIMEOUT_MILLISECONDS = 30_000L
 private val SCREEN_HORIZONTAL_PADDING = 24.dp
 private val SCREEN_VERTICAL_PADDING = 28.dp
 private val SCREEN_ITEM_SPACING = 28.dp

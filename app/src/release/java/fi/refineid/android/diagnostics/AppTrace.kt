@@ -353,6 +353,11 @@ internal object AppTrace {
 
     fun ccidCardState(state: CcidCardStatus) = Unit
 
+    fun ccidCommandFailed(
+        errorCode: Int,
+        cardStatus: CcidCardStatus,
+    ) = Unit
+
     fun ccidAtrResult(
         length: Int,
         validation: AtrValidation,

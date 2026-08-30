@@ -412,6 +412,21 @@ internal object NativeCore {
             }
         }
 
+    /** The MRZ document number read alongside the face photo, if any. */
+    fun readCardDocumentNumber(): String? =
+        if (!isLoaded) {
+            null
+        } else {
+            try {
+                val bytes = readCardDocumentNumberNative()
+                if (bytes.isNotEmpty()) String(bytes, Charsets.UTF_8) else null
+            } catch (_: LinkageError) {
+                null
+            } catch (_: RuntimeException) {
+                null
+            }
+        }
+
     @JvmStatic
     private external fun validateAtrNative(atr: ByteArray): Int
 
@@ -444,6 +459,9 @@ internal object NativeCore {
 
     @JvmStatic
     private external fun readCardFacePhotoNative(): ByteArray
+
+    @JvmStatic
+    private external fun readCardDocumentNumberNative(): ByteArray
 }
 
 internal object NativeCertificateReply {

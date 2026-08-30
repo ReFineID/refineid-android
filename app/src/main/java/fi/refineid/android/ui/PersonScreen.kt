@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
 import fi.refineid.android.R
+import fi.refineid.android.core.CardPhotoStore
 import fi.refineid.android.core.PersonCardDetails
 import java.io.File
 import java.io.FileOutputStream
@@ -141,8 +142,7 @@ internal fun PersonScreen(
                 ) {
                     OutlinedButton(
                         onClick = {
-                            val bitmapToCopy = photoBitmap ?: createPlaceholderBadge(details.fullName)
-                            copyPhotoToClipboard(context, bitmapToCopy)
+                            copyPhotoToClipboard(context, details, photoBitmap)
                         },
                         colors = ButtonDefaults.outlinedButtonColors(),
                     ) {
@@ -159,8 +159,7 @@ internal fun PersonScreen(
 
                     OutlinedButton(
                         onClick = {
-                            val bitmapToShare = photoBitmap ?: createPlaceholderBadge(details.fullName)
-                            sharePhoto(context, bitmapToShare)
+                            sharePhoto(context, details, photoBitmap)
                         },
                         colors = ButtonDefaults.outlinedButtonColors(),
                     ) {
@@ -176,28 +175,31 @@ internal fun PersonScreen(
             }
         }
 
-        // Authenticity & Integrity Badge
-        NavigationGroup {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(ROW_ITEM_SPACING),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.CheckCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(ROW_ICON_SIZE),
-                )
-                Text(
-                    text = stringResource(R.string.card_untampered),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+        // Authenticity badge: shown only when a document-integrity
+        // verification actually ran for this read.
+        if (details.isTamperProofVerified) {
+            NavigationGroup {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(ROW_ITEM_SPACING),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(ROW_ICON_SIZE),
+                    )
+                    Text(
+                        text = stringResource(R.string.card_untampered),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
 
@@ -207,12 +209,13 @@ internal fun PersonScreen(
 
 private fun copyPhotoToClipboard(
     context: Context,
-    bitmap: Bitmap,
+    details: PersonCardDetails,
+    photoBitmap: Bitmap?,
 ) {
     try {
-        val uri = saveBitmapToCache(context, bitmap)
+        val export = savePhotoToShareCache(context, details, photoBitmap)
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newUri(context.contentResolver, "Card Photo", uri)
+        val clip = ClipData.newUri(context.contentResolver, export.fileName, export.uri)
         clipboard.setPrimaryClip(clip)
         Toast.makeText(context, context.getString(R.string.photo_copied), Toast.LENGTH_SHORT).show()
     } catch (_: Exception) {
@@ -222,14 +225,15 @@ private fun copyPhotoToClipboard(
 
 private fun sharePhoto(
     context: Context,
-    bitmap: Bitmap,
+    details: PersonCardDetails,
+    photoBitmap: Bitmap?,
 ) {
     try {
-        val uri = saveBitmapToCache(context, bitmap)
+        val export = savePhotoToShareCache(context, details, photoBitmap)
         val shareIntent =
             Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"
-                putExtra(Intent.EXTRA_STREAM, uri)
+                type = export.mimeType
+                putExtra(Intent.EXTRA_STREAM, export.uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
         context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.share_photo)))
@@ -238,16 +242,39 @@ private fun sharePhoto(
     }
 }
 
-private fun saveBitmapToCache(
+private class PhotoExport(
+    val uri: Uri,
+    val fileName: String,
+    val mimeType: String,
+)
+
+// The exported file keeps the card's own image bytes and carries the
+// holder identity and printed card number in its name; only the
+// placeholder badge is re-encoded.
+private fun savePhotoToShareCache(
     context: Context,
-    bitmap: Bitmap,
-): Uri {
+    details: PersonCardDetails,
+    photoBitmap: Bitmap?,
+): PhotoExport {
     val imagesFolder = File(context.cacheDir, "images").apply { mkdirs() }
-    val file = File(imagesFolder, "card_photo.png")
-    FileOutputStream(file).use { out ->
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-    }
-    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val photoBytes = details.photoBytes ?: CardPhotoStore.getPhoto(details.holderName)
+    val (file, mimeType) =
+        if (photoBytes != null) {
+            val name = CardPhotoStore.exportFileName(details.holderName)
+            File(imagesFolder, name).apply { writeBytes(photoBytes) } to "image/jpeg"
+        } else {
+            val bitmap = photoBitmap ?: createPlaceholderBadge(details.fullName)
+            val file = File(imagesFolder, "card_photo.png")
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, out)
+            }
+            file to "image/png"
+        }
+    return PhotoExport(
+        uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file),
+        fileName = file.name,
+        mimeType = mimeType,
+    )
 }
 
 private fun createPlaceholderBadge(name: String): Bitmap {
@@ -286,6 +313,7 @@ private const val BADGE_TEXT_SIZE = 32f
 private const val BADGE_TEXT_X = 150f
 private const val BADGE_TEXT_Y = 200f
 private const val BADGE_MAX_NAME_CHARS = 16
+private const val PNG_QUALITY = 100
 
 private val CopyIcon: ImageVector by lazy {
     ImageVector

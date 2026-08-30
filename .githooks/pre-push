@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Copyright 2026 Petri Koistinen. Licensed under the Apache License, Version 2.0.
+#
+# Mandatory pre-push gate; enabled per clone by Scripts/install-hooks.sh.
+# Bypassing it (--no-verify or otherwise) is prohibited for every
+# contributor, human or AI agent alike.
+
+set -euo pipefail
+exec "$(git rev-parse --show-toplevel)/Scripts/verify-push.sh"

@@ -26,6 +26,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd307490d624467aa6f74b0eabb77633d1f758a7b25f12bceb0b22e08d9726f6"
 
 [[package]]
+name = "base64ct"
+version = "1.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
+
+[[package]]
 name = "block-buffer"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -164,6 +170,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "der"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a69dedd701da44b0536442edf09c81a64b0ab97a7a4a5e3d1971f00027cbc63d"
+dependencies = [
+ "const-oid",
+ "der_derive",
+ "flagset",
+ "zeroize",
+]
+
+[[package]]
+name = "der_derive"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59600e2c2d636fde9b65e99cc6445ac770c63d3628195ff39932b8d6d7409903"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "digest"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -174,6 +203,12 @@ dependencies = [
  "crypto-common",
  "ctutils",
 ]
+
+[[package]]
+name = "flagset"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7ac824320a75a52197e8f2d787f6a38b6718bb6897a35142d749af3c0e8f4fe"
 
 [[package]]
 name = "getrandom"
@@ -339,18 +374,18 @@ dependencies = [
 
 [[package]]
 name = "refineid-apdu"
-version = "26.8.29"
+version = "26.8.30"
 dependencies = [
  "zeroize",
 ]
 
 [[package]]
 name = "refineid-atr"
-version = "26.8.29"
+version = "26.8.30"
 
 [[package]]
 name = "refineid-auth"
-version = "26.8.29"
+version = "26.8.30"
 dependencies = [
  "hmac",
  "refineid-apdu",
@@ -360,26 +395,42 @@ dependencies = [
 
 [[package]]
 name = "refineid-ber"
-version = "26.8.29"
+version = "26.8.30"
+
+[[package]]
+name = "refineid-cms"
+version = "26.8.30"
+dependencies = [
+ "const-oid",
+ "crypto-bigint",
+ "refineid-ber",
+ "refineid-digest",
+ "sha1",
+ "sha2",
+ "spki",
+ "x509-cert",
+]
 
 [[package]]
 name = "refineid-digest"
-version = "26.8.29"
+version = "26.8.30"
 dependencies = [
+ "sha1",
  "sha2",
 ]
 
 [[package]]
 name = "refineid-emrtd"
-version = "26.8.29"
+version = "26.8.30"
 dependencies = [
  "refineid-apdu",
  "refineid-ber",
+ "refineid-cms",
 ]
 
 [[package]]
 name = "refineid-pace"
-version = "26.8.29"
+version = "26.8.30"
 dependencies = [
  "aes",
  "cbc",
@@ -395,7 +446,7 @@ dependencies = [
 
 [[package]]
 name = "refineid-pkcs15"
-version = "26.8.29"
+version = "26.8.30"
 dependencies = [
  "refineid-apdu",
  "refineid-ber",
@@ -404,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "refineid-sign"
-version = "26.8.29"
+version = "26.8.30"
 dependencies = [
  "refineid-apdu",
  "zeroize",
@@ -412,7 +463,7 @@ dependencies = [
 
 [[package]]
 name = "refineid-x509"
-version = "26.8.29"
+version = "26.8.30"
 dependencies = [
  "refineid-ber",
 ]
@@ -481,6 +532,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha1"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aacc4cc499359472b4abe1bf11d0b12e688af9a805fa5e3016f9a386dc2d0214"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest",
+]
+
+[[package]]
 name = "sha2"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -506,6 +568,16 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
+name = "spki"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d9efca8738c78ee9484207732f728b1ef517bbb1833d6fc0879ca898a522f6f"
+dependencies = [
+ "base64ct",
+ "der",
+]
 
 [[package]]
 name = "subtle"
@@ -599,6 +671,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
 dependencies = [
  "windows-link",
+]
+
+[[package]]
+name = "x509-cert"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "105ef4642d9cb137ef83d623d0e4bf08b8adf69e9918ca904a174adb6d3d038b"
+dependencies = [
+ "const-oid",
+ "der",
+ "spki",
 ]
 
 [[package]]

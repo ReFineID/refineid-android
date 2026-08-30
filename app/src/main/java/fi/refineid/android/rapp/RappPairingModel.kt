@@ -11,8 +11,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import uniffi.refineid_lib_core.RappPairingBridge
-import uniffi.refineid_lib_core.RappTransportCandidate
+import uniffi.refineid_rapp.RappPairingBridge
+import uniffi.refineid_rapp.RappTransportCandidate
 
 internal sealed interface PairingPhase {
     data object Idle : PairingPhase
@@ -74,6 +74,7 @@ internal class RappPairingModel(
             )
 
         try {
+            val startedAtMonotonicMs = RappClock.monotonicMs()
             val bridge =
                 RappPairingBridge.createRequesterOffer(
                     offerId = offerId,
@@ -81,9 +82,10 @@ internal class RappPairingModel(
                     profiles = profiles,
                     transports = candidates,
                     offerTtlMs = RappPairingCode.DEFAULT_LIFETIME_MS.toULong(),
+                    startedAtMonotonicMs = startedAtMonotonicMs,
                 )
             pairingBridge = bridge
-            val offerUri = bridge.offerUri()
+            val offerUri = bridge.offerUri(nowMonotonicMs = startedAtMonotonicMs)
             val rendezvousName = StreamRendezvousName.name(sharingOfferUri = offerUri)
 
             phase = PairingPhase.Offering(code = code, secondsRemaining = 180)
@@ -108,7 +110,7 @@ internal class RappPairingModel(
             is StreamRelayEvent.Connected -> {
                 phase = PairingPhase.Connecting("Exchanging security handshake...")
                 try {
-                    val frame = bridge.writeHandshakeFrame()
+                    val frame = bridge.writeHandshakeFrame(RappClock.monotonicMs())
                     if (frame.isNotEmpty()) {
                         listener?.send(frame)
                     }
@@ -119,9 +121,10 @@ internal class RappPairingModel(
 
             is StreamRelayEvent.Frame -> {
                 try {
-                    bridge.readHandshakeFrame(event.data)
-                    if (bridge.handshakeComplete()) {
-                        val nowMs = System.currentTimeMillis().toULong()
+                    val nowMonotonicMs = RappClock.monotonicMs()
+                    bridge.readHandshakeFrame(event.data, nowMonotonicMs)
+                    if (bridge.handshakeComplete(nowMonotonicMs)) {
+                        val nowMs = RappClock.wallMs()
                         val hello = bridge.receiveHello(event.data, nowMs)
                         val conf =
                             bridge.sendConfirmation(
@@ -144,7 +147,7 @@ internal class RappPairingModel(
                         )
                         phase = PairingPhase.Paired(peer)
                     } else {
-                        val response = bridge.writeHandshakeFrame()
+                        val response = bridge.writeHandshakeFrame(nowMonotonicMs)
                         if (response.isNotEmpty()) {
                             listener?.send(response)
                         }
@@ -194,6 +197,7 @@ internal class RappPairingModel(
             )
 
         try {
+            val startedAtMonotonicMs = RappClock.monotonicMs()
             val bridge =
                 RappPairingBridge.createRequesterOffer(
                     offerId = offerId,
@@ -201,9 +205,10 @@ internal class RappPairingModel(
                     profiles = profiles,
                     transports = candidates,
                     offerTtlMs = RappPairingCode.DEFAULT_LIFETIME_MS.toULong(),
+                    startedAtMonotonicMs = startedAtMonotonicMs,
                 )
             pairingBridge = bridge
-            val offerUri = bridge.offerUri()
+            val offerUri = bridge.offerUri(nowMonotonicMs = startedAtMonotonicMs)
             val rendezvousName = StreamRendezvousName.name(sharingOfferUri = offerUri)
 
             val relayBrowser =
@@ -225,7 +230,7 @@ internal class RappPairingModel(
             is StreamRelayEvent.Connected -> {
                 phase = PairingPhase.Connecting("Connected! Verifying credentials...")
                 try {
-                    val frame = bridge.writeHandshakeFrame()
+                    val frame = bridge.writeHandshakeFrame(RappClock.monotonicMs())
                     if (frame.isNotEmpty()) {
                         browser?.send(frame)
                     }
@@ -236,9 +241,10 @@ internal class RappPairingModel(
 
             is StreamRelayEvent.Frame -> {
                 try {
-                    bridge.readHandshakeFrame(event.data)
-                    if (bridge.handshakeComplete()) {
-                        val nowMs = System.currentTimeMillis().toULong()
+                    val nowMonotonicMs = RappClock.monotonicMs()
+                    bridge.readHandshakeFrame(event.data, nowMonotonicMs)
+                    if (bridge.handshakeComplete(nowMonotonicMs)) {
+                        val nowMs = RappClock.wallMs()
                         val hello = bridge.sendHello(displayName = "Samsung Galaxy", platform = "Android")
                         browser?.send(hello)
                         val record = bridge.finishPairing(nowMs)
@@ -257,7 +263,7 @@ internal class RappPairingModel(
                         )
                         phase = PairingPhase.Paired(peer)
                     } else {
-                        val response = bridge.writeHandshakeFrame()
+                        val response = bridge.writeHandshakeFrame(nowMonotonicMs)
                         if (response.isNotEmpty()) {
                             browser?.send(response)
                         }

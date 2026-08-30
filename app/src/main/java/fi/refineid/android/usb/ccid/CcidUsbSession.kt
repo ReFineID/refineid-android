@@ -129,7 +129,7 @@ internal class CcidUsbSession(
             sessionMaterial.cachePin1Preflight(result.preflight)
             NativeCore.readCardFacePhoto()?.let { photo ->
                 val holderName = CertificateHolderName.fromCertificate(result.certificate)
-                CardPhotoStore.savePhoto(photo, holderName)
+                CardPhotoStore.savePhoto(photo, holderName, NativeCore.readCardDocumentNumber())
             }
         }
         return result
@@ -651,20 +651,45 @@ internal class CcidUsbSessionOpener(
     private val validateAtr: (ByteArray) -> AtrValidation,
 ) {
     fun open(device: UsbDevice): CcidSessionOpenResult {
-        val endpoints =
-            CcidUsbEndpointFinder.find(device)
-                ?: run {
-                    AppTrace.ccidEndpointsMissing()
-                    return CcidSessionOpenResult.TransportError
-                }
-        val connection =
-            usbManager.openDevice(device)
-                ?: run {
-                    AppTrace.ccidOpenFailed()
-                    return CcidSessionOpenResult.TransportError
+        val candidates = CcidUsbEndpointFinder.findAll(device)
+        if (candidates.isEmpty()) {
+            AppTrace.ccidEndpointsMissing()
+            return CcidSessionOpenResult.TransportError
+        }
+
+        // Probe every CCID interface until one holds a card: a dual reader
+        // lists the contactless PICC before the contact ICC slot, and an
+        // empty SAM slot also reports no card. A usable session or a card
+        // error ends the scan; an interface without a card does not.
+        var firstFailure: CcidSessionOpenResult? = null
+        for (endpoints in candidates) {
+            val connection =
+                usbManager.openDevice(device)
+                    ?: run {
+                        AppTrace.ccidOpenFailed()
+                        return firstFailure ?: CcidSessionOpenResult.TransportError
+                    }
+            when (val attempt = connection.openClaimed(endpoints)) {
+                is CcidSessionOpenResult.Ready,
+                is CcidSessionOpenResult.AccessNumberRequired,
+                -> {
+                    return attempt
                 }
 
-        return connection.openClaimed(endpoints)
+                CcidSessionOpenResult.NoCard -> {
+                    // This interface has no card; probe the next one.
+                }
+
+                CcidSessionOpenResult.CardError,
+                CcidSessionOpenResult.TransportError,
+                -> {
+                    if (firstFailure == null) {
+                        firstFailure = attempt
+                    }
+                }
+            }
+        }
+        return firstFailure ?: CcidSessionOpenResult.NoCard
     }
 
     private fun UsbDeviceConnection.openClaimed(endpoints: CcidUsbEndpoints): CcidSessionOpenResult {

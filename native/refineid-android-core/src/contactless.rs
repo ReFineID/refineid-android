@@ -12,7 +12,9 @@
 use std::sync::Mutex;
 
 use refineid_apdu::{CardTransport, TransportOutcome};
-use refineid_emrtd::EmrtdOps;
+use refineid_emrtd::{
+    CscaAnchor, CscaAnchors, EmrtdOps, ParsedMrzTd1, authenticate_document, parse_card_face_image,
+};
 use refineid_pace::{Can, PaceError, PaceSession, SmTransport, UnvalidatedCan, run_pace_with_can};
 use refineid_pkcs15::{Pkcs15Error, Pkcs15Ops};
 
@@ -84,6 +86,69 @@ pub(crate) fn contactless_close() {
 /// The latest face photo bytes extracted from EF.DG2 under secure messaging.
 static LAST_READ_FACE_PHOTO: Mutex<Option<Vec<u8>>> = Mutex::new(None);
 
+/// The latest MRZ document number extracted from EF.DG1 under secure
+/// messaging; the printed card number that makes exported photo file
+/// names globally unique.
+static LAST_READ_DOCUMENT_NUMBER: Mutex<Option<String>> = Mutex::new(None);
+
+/// Passive authentication was not attempted for the last read (no
+/// eMRTD files, or no trust anchors installed).
+pub(crate) const VERIFICATION_NOT_PERFORMED: i32 = 0;
+/// Passive authentication ran and the document verified: SOD
+/// signature, DG1 and DG2 hashes, and the DSC-to-CSCA chain.
+pub(crate) const VERIFICATION_PASSED: i32 = 1;
+/// Passive authentication ran and the document did not verify.
+pub(crate) const VERIFICATION_FAILED: i32 = 2;
+
+/// The latest passive-authentication verdict, one of the
+/// `VERIFICATION_*` codes above.
+static LAST_READ_VERIFICATION: Mutex<i32> = Mutex::new(VERIFICATION_NOT_PERFORMED);
+
+/// Trusted CSCA anchor certificates (DER), installed by the platform
+/// at startup and consumed by every subsequent card read. Raw bytes
+/// are stored and parsed per read, so an unparsable anchor surfaces at
+/// verification time instead of poisoning installation.
+static CSCA_ANCHOR_DERS: Mutex<Vec<Vec<u8>>> = Mutex::new(Vec::new());
+
+pub(crate) fn get_last_read_verification() -> i32 {
+    LAST_READ_VERIFICATION
+        .lock()
+        .map_or(VERIFICATION_NOT_PERFORMED, |guard| *guard)
+}
+
+pub(crate) fn set_last_read_verification(verdict: i32) {
+    if let Ok(mut guard) = LAST_READ_VERIFICATION.lock() {
+        *guard = verdict;
+    }
+}
+
+pub(crate) fn add_csca_anchor(anchor_der: Vec<u8>) {
+    if let Ok(mut guard) = CSCA_ANCHOR_DERS.lock() {
+        guard.push(anchor_der);
+    }
+}
+
+pub(crate) fn clear_csca_anchors() {
+    if let Ok(mut guard) = CSCA_ANCHOR_DERS.lock() {
+        guard.clear();
+    }
+}
+
+/// Parse the installed anchor DERs into a verification-ready set.
+/// `None` when no anchors are installed or none parse.
+fn installed_csca_anchors() -> Option<CscaAnchors> {
+    let ders = CSCA_ANCHOR_DERS.lock().ok()?;
+    let anchors: Vec<CscaAnchor> = ders
+        .iter()
+        .filter_map(|der| CscaAnchor::from_der(der).ok())
+        .collect();
+    if anchors.is_empty() {
+        None
+    } else {
+        Some(CscaAnchors::new(anchors))
+    }
+}
+
 pub(crate) fn get_last_read_face_photo() -> Option<Vec<u8>> {
     LAST_READ_FACE_PHOTO
         .lock()
@@ -94,6 +159,19 @@ pub(crate) fn get_last_read_face_photo() -> Option<Vec<u8>> {
 pub(crate) fn set_last_read_face_photo(photo: Option<Vec<u8>>) {
     if let Ok(mut guard) = LAST_READ_FACE_PHOTO.lock() {
         *guard = photo;
+    }
+}
+
+pub(crate) fn get_last_read_document_number() -> Option<String> {
+    LAST_READ_DOCUMENT_NUMBER
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone())
+}
+
+pub(crate) fn set_last_read_document_number(document_number: Option<String>) {
+    if let Ok(mut guard) = LAST_READ_DOCUMENT_NUMBER.lock() {
+        *guard = document_number;
     }
 }
 
@@ -521,12 +599,32 @@ fn qualified_selection_failure<E>(error: Pkcs15Error<E>) -> QualifiedSignFailure
 fn read_face_photo_from_secure_channel<T: CardTransport + Pkcs15Ops + EmrtdOps>(
     secure: &mut T,
 ) -> Option<Vec<u8>> {
+    set_last_read_verification(VERIFICATION_NOT_PERFORMED);
     if secure.select_emrtd_application().is_err() {
+        set_last_read_document_number(None);
         return None;
     }
-    let image = secure.read_face_image().ok().flatten();
+    let files = secure.read_passive_authentication_files().ok();
     let _ = secure.select_pkcs15_application();
-    image.map(|img| img.into_bytes())
+    let Some(files) = files else {
+        set_last_read_document_number(None);
+        return None;
+    };
+    let mrz = ParsedMrzTd1::parse(files.mrz.as_bytes());
+    set_last_read_document_number(mrz.map(|parsed| parsed.document_number));
+    // Passive authentication: the DSC comes from the card's own SOD,
+    // the CSCA anchor from the platform-installed set. Without anchors
+    // the verdict stays "not performed" -- never a fabricated pass.
+    if let Some(anchors) = installed_csca_anchors() {
+        let verdict =
+            authenticate_document(&files.security_object, &files.mrz, &files.face, &anchors);
+        set_last_read_verification(if verdict.is_ok() {
+            VERIFICATION_PASSED
+        } else {
+            VERIFICATION_FAILED
+        });
+    }
+    parse_card_face_image(files.face.as_bytes()).map(|image| image.into_bytes())
 }
 
 #[cfg(test)]
