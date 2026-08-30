@@ -308,6 +308,7 @@ fun registerRappBuild(
             "-o",
             output.get().asFile.absolutePath,
             "build",
+            "--locked",
         )
     if (release) {
         arguments.add("--release")

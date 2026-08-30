@@ -657,10 +657,12 @@ internal class CcidUsbSessionOpener(
             return CcidSessionOpenResult.TransportError
         }
 
-        // Probe every CCID interface until one holds a card: a dual reader
-        // lists the contactless PICC before the contact ICC slot, and an
-        // empty SAM slot also reports no card. A usable session or a card
-        // error ends the scan; an interface without a card does not.
+        // Probe every CCID interface until one yields a usable session: a
+        // dual reader lists the contactless PICC before the contact ICC
+        // slot, and an empty SAM slot also reports no card. Errors do not
+        // end the scan -- a foreign object resting on the contactless pad
+        // must never mask a properly inserted card -- but the first error
+        // is retained and reported when no interface opens.
         var firstFailure: CcidSessionOpenResult? = null
         for (endpoints in candidates) {
             val connection =
