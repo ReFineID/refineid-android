@@ -12,7 +12,6 @@ import java.util.Locale
 
 internal object CardPhotoStore {
     private val photos = mutableMapOf<String, ByteArray>()
-    private var defaultPhoto: ByteArray? = null
     private var storageDirectory: File? = null
 
     /**
@@ -25,10 +24,14 @@ internal object CardPhotoStore {
         storageDirectory = directory
     }
 
+    /**
+     * The cached photo for exactly this holder, or null. There is no
+     * fallback across holders: a photo may only ever be shown next to
+     * the identity it was read with.
+     */
     @Synchronized
-    fun getPhoto(holderKey: String? = null): ByteArray? =
+    fun getPhoto(holderKey: String?): ByteArray? =
         holderKey?.let { key -> photos[key] ?: loadPersisted(key)?.also { photos[key] = it } }
-            ?: defaultPhoto
 
     @Synchronized
     fun savePhoto(
@@ -36,7 +39,6 @@ internal object CardPhotoStore {
         holderKey: String? = null,
         documentNumber: String? = null,
     ) {
-        defaultPhoto = photoBytes
         if (holderKey != null) {
             photos[holderKey] = photoBytes
             persist(holderKey, documentNumber, photoBytes)
@@ -57,7 +59,6 @@ internal object CardPhotoStore {
     @Synchronized
     fun clear() {
         photos.clear()
-        defaultPhoto = null
         storageDirectory?.listFiles()?.forEach { file -> file.delete() }
     }
 
@@ -84,12 +85,23 @@ internal object CardPhotoStore {
             null
         }
 
+    // A cache hit requires the whole holder key: either the bare stem
+    // (no document number was known) or the stem followed by a space and
+    // the document-number suffix. A prefix alone never matches, so one
+    // holder's photo can never surface for another whose name merely
+    // starts the same way.
     private fun persistedFile(holderKey: String): File? {
         val directory = storageDirectory ?: return null
-        val prefix = sanitize(holderKey)
+        val stem = sanitize(holderKey)
         return directory
             .listFiles()
-            ?.firstOrNull { file -> file.isFile && file.name.startsWith(prefix) }
+            ?.firstOrNull { file ->
+                file.isFile &&
+                    (
+                        file.name == stem + PHOTO_FILE_EXTENSION ||
+                            file.name.startsWith("$stem ")
+                    )
+            }
     }
 
     // File names stay inside the app-private cache; path separators and
@@ -119,9 +131,9 @@ internal data class PersonCardDetails(
     val issuer: String? = null,
     val signatureAlgorithm: String? = null,
     /**
-     * True only when a document-integrity verification actually ran for
-     * this read. Nothing on Android performs one yet, so the authenticity
-     * badge stays hidden until a real verification sets this.
+     * True only when ICAO 9303 passive authentication actually ran and
+     * passed for this read; the authenticity badge is gated on it and
+     * never shown for an unverified read.
      */
     val isTamperProofVerified: Boolean = false,
     val photoBytes: ByteArray? = null,
@@ -240,7 +252,7 @@ internal data class PersonCardDetails(
                         null
                     }
 
-                val effectivePhoto = photoBytes ?: CardPhotoStore.getPhoto(formattedName)
+                val effectivePhoto = photoBytes ?: CardPhotoStore.getPhoto(cn)
 
                 PersonCardDetails(
                     holderName = cn,
@@ -273,7 +285,7 @@ internal data class PersonCardDetails(
                 }
             val formattedName = if (nameTokens.isNotEmpty()) nameTokens.joinToString(" ") else holderName
 
-            val effectivePhoto = CardPhotoStore.getPhoto(formattedName)
+            val effectivePhoto = CardPhotoStore.getPhoto(holderName)
 
             return PersonCardDetails(
                 holderName = holderName,

@@ -201,8 +201,11 @@ internal fun MainScreen(
                 onNfcConnect = onNfcConnect,
                 // A present wired card reads over its open session; the
                 // contactless path primes NFC for the next tap otherwise.
+                // The wired branch consumes no PIN, so the optional PIN1
+                // buffer is zeroized instead of being left for GC.
                 onReadCard = { can, pin1 ->
                     if (snapshot.cardPresence == CardPresence.PRESENT && can != null) {
+                        pin1.close()
                         onReaderConnect(can)
                     } else {
                         onNfcConnect(can, pin1)
@@ -423,11 +426,17 @@ private fun IdentitySection(
     var showsNfcReadDialog by remember { mutableStateOf(false) }
     var readNavigationPending by remember { mutableStateOf(false) }
 
-    // Open the person page only after a requested read actually produced
-    // an identity; a read that never completes must not fabricate one.
+    // Open the person page only after the requested read actually
+    // completed: completion is the photo landing in the store for the
+    // shown holder, which only a successful PACE read produces. A
+    // pre-existing or restored holder name alone never navigates.
     LaunchedEffect(readNavigationPending, holderName) {
         if (readNavigationPending) {
-            if (holderName != null) {
+            if (
+                holderName != null &&
+                fi.refineid.android.core.CardPhotoStore
+                    .getPhoto(holderName) != null
+            ) {
                 readNavigationPending = false
                 onOpenPerson()
             } else {

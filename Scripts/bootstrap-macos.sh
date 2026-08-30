@@ -71,16 +71,18 @@ if [[ ! -f local.properties ]]; then
   echo "Wrote local.properties with sdk.dir=${sdk_root}"
 fi
 
+# Homebrew's rustup is keg-only; neither it nor its cargo and rustc
+# proxies are linked into the default Homebrew bin directory, so the
+# PATH must carry the keg before the first rustup invocation.
+rustup_bin="$(brew --prefix rustup)/bin"
+export PATH="${rustup_bin}:${HOME}/.cargo/bin:${PATH}"
+
 if ! rustup show active-toolchain >/dev/null 2>&1; then
   rustup toolchain install stable
   rustup default stable
 fi
 rustup target add "${rust_android_targets[@]}"
 
-# Homebrew's rustup is keg-only; its cargo and rustc proxies are not linked
-# into the default Homebrew bin directory.
-rustup_bin="$(brew --prefix rustup)/bin"
-export PATH="${rustup_bin}:${HOME}/.cargo/bin:${PATH}"
 command -v cargo-ndk >/dev/null || cargo install cargo-ndk
 
 Scripts/install-hooks.sh
