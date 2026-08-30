@@ -75,6 +75,7 @@ These rules apply to the entire repository. Less is more; terse is better.
   ready. Subject and body only: no AI attribution, co-author, sign-off, or
   review trailers.
 - Never put a git worktree under `/tmp`; keep worktrees beside the repository.
+- Never poll background commands or set rapid check timers (e.g. 10s-30s). When running builds, tests, or async tasks, execute asynchronously and wait strictly for system completion notifications.
 - When stuck, research with fellow AI available.
 
 ## Licensing
