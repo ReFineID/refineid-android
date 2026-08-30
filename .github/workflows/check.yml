@@ -73,7 +73,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            refineid-android
+            refineid-android/native/refineid-android-core
+            refineid-android/native/refineid-rapp-android
             refineid-core
 
       - name: Run the full quality floor
