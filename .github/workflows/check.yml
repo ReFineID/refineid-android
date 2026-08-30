@@ -22,28 +22,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out refineid-android
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: refineid-android
 
       - name: Check out the sibling refineid-core
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ReFineID/refineid-core
           path: refineid-core
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Cache Android NDK
         id: cache-ndk
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /usr/local/lib/android/sdk/ndk
           key: ndk-${{ runner.os }}-${{ hashFiles('refineid-android/app/build.gradle.kts') }}
