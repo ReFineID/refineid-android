@@ -13,7 +13,15 @@ internal data class CcidUsbEndpoints(
 )
 
 internal object CcidUsbEndpointFinder {
-    fun find(device: UsbDevice): CcidUsbEndpoints? {
+    /**
+     * Every CCID-class interface with a bulk pair, in descriptor order. A
+     * multi-slot reader exposes one CCID interface per slot (a dual reader
+     * typically lists the contactless PICC first, then the contact ICC,
+     * then a SAM), so a session opener must probe each interface for a
+     * card instead of assuming the first one owns the only slot.
+     */
+    fun findAll(device: UsbDevice): List<CcidUsbEndpoints> {
+        val candidates = mutableListOf<CcidUsbEndpoints>()
         repeat(device.interfaceCount) { interfaceIndex ->
             val usbInterface = device.getInterface(interfaceIndex)
             if (usbInterface.interfaceClass != UsbConstants.USB_CLASS_CSCID) {
@@ -32,16 +40,20 @@ internal object CcidUsbEndpointFinder {
                 }
             }
 
-            if (bulkIn != null && bulkOut != null) {
-                return CcidUsbEndpoints(
-                    usbInterface = usbInterface,
-                    bulkIn = requireNotNull(bulkIn),
-                    bulkOut = requireNotNull(bulkOut),
+            val foundIn = bulkIn
+            val foundOut = bulkOut
+            if (foundIn != null && foundOut != null) {
+                candidates.add(
+                    CcidUsbEndpoints(
+                        usbInterface = usbInterface,
+                        bulkIn = foundIn,
+                        bulkOut = foundOut,
+                    ),
                 )
             }
         }
 
-        return null
+        return candidates
     }
 }
 

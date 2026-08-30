@@ -21,6 +21,7 @@ import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.core.NativeCore
+import fi.refineid.android.core.NativeVerification
 import fi.refineid.android.core.PersonCardDetails
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
@@ -372,17 +373,23 @@ internal class UsbReaderController(
      * prompt for retry.
      */
     fun connect(can: CanSubmission) {
-        if (
-            !isStarted ||
-            (
-                latestSnapshot.status != ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED &&
-                    latestSnapshot.status != ReaderConnectionStatus.WRONG_ACCESS_NUMBER
-            )
-        ) {
+        val cardAwaitsAccessNumber =
+            latestSnapshot.status == ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED ||
+                latestSnapshot.status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER
+        // A plain contact session is already open without PACE; the access
+        // number re-opens it under PACE so the eMRTD face photo can be read.
+        val cardIsOpenWithoutPace =
+            latestSnapshot.status == ReaderConnectionStatus.READY &&
+                latestSnapshot.cardPresence == CardPresence.PRESENT
+        if (!isStarted || (!cardAwaitsAccessNumber && !cardIsOpenWithoutPace)) {
             can.close()
             AppTrace.usbContactlessConnectIgnored()
             return
         }
+        // An identity already read on this session stays valid even when
+        // the PACE pass fails; only a card change may replace it.
+        val previousHolderName = latestSnapshot.holderName
+        val previousCardDetails = latestSnapshot.cardDetails
         val generation = probeGeneration
         publish(
             UsbReaderSnapshot(
@@ -412,6 +419,8 @@ internal class UsbReaderController(
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
             }
             val photoBytes = NativeCore.readCardFacePhoto()
+            val documentNumber = NativeCore.readCardDocumentNumber()
+            val tamperProofVerified = NativeVerification.readCardVerificationPassed()
             var cardDetails: PersonCardDetails? = null
             val holder =
                 if (result is NativeContactlessOpenResult.Success) {
@@ -419,7 +428,13 @@ internal class UsbReaderController(
                         val cert = activeSession?.copyAuthenticationCertificate()
                         cert?.let { c ->
                             try {
-                                cardDetails = PersonCardDetails.fromDer(c.copyDer(), photoBytes)
+                                cardDetails =
+                                    PersonCardDetails.fromDer(
+                                        c.copyDer(),
+                                        photoBytes,
+                                        documentNumber,
+                                        tamperProofVerified,
+                                    )
                                 cardDetails?.holderName ?: CertificateHolderName.fromCertificate(c)
                             } finally {
                                 c.close()
@@ -432,7 +447,7 @@ internal class UsbReaderController(
                     null
                 }
             if (photoBytes != null && photoBytes.isNotEmpty()) {
-                CardPhotoStore.savePhoto(photoBytes, holder)
+                CardPhotoStore.savePhoto(photoBytes, holder, documentNumber)
             }
             val snapshot =
                 when (result) {
@@ -454,6 +469,8 @@ internal class UsbReaderController(
                         UsbReaderSnapshot(
                             status = status,
                             cardPresence = CardPresence.PRESENT,
+                            holderName = previousHolderName,
+                            cardDetails = previousCardDetails,
                         )
                     }
                 }
@@ -677,6 +694,21 @@ internal class UsbReaderController(
                             }
                         },
                     )
+                    if (result is CcidSessionOpenResult.Ready) {
+                        // A plain contact read never opens the eMRTD
+                        // application: the face photo sits behind PACE. When
+                        // the holder has already trusted this session with
+                        // the card access number, fetch the photo once.
+                        val storedCan =
+                            fi.refineid.android.core.CanSessionStore.currentCan
+                        if (
+                            storedCan != null &&
+                            holder != null &&
+                            CardPhotoStore.getPhoto(holder) == null
+                        ) {
+                            connect(CanSubmission.from(storedCan))
+                        }
+                    }
                 } else {
                     AppTrace.usbSessionOpenResultDiscarded()
                 }

@@ -9,25 +9,26 @@ publish = false
 
 # UniFFI's Kotlin binding loads the protocol through a JNI shared object, so
 # this crate exists to produce one. The protocol itself is not implemented
-# here and must not be: refineid-lib-core in the shared Rust repository is the
+# here and must not be: refineid-rapp in the shared Rust repository is the
 # authority for RAPP framing, transitions, roles, failure policy, and
 # cryptography. This crate links that crate's UniFFI scaffolding into a
 # cdylib, which is the one thing the library crate cannot produce for Android
 # on its own while its own crate-type is rlib and staticlib.
 # The generated Kotlin binding loads its Rust side by the scaffolding crate's
-# own name, so the shared object must be librefineid_lib_core.so even though
+# own name, so the shared object must be librefineid_rapp.so even though
 # this wrapper crate is what produces it.
 [lib]
-name = "refineid_lib_core"
+name = "refineid_rapp"
 crate-type = ["cdylib"]
 
 [dependencies]
-# Path dependency while the RAPP source is unpublished. It is deliberately
-# relative to the sibling checkout, the same assumption the Apple binding
-# generator makes. Replace it with a pinned git revision as soon as the crate
-# is pushed, so an Android build stops depending on one developer's layout.
-refineid-lib-core = { path = "../../../ReFineID/crates/refineid-lib-core", features = ["bindings"] }
+refineid-rapp = { git = "https://github.com/ReFineID/refineid-core.git", branch = "main", features = ["bindings"] }
 uniffi = "0.32"
+
+# The same sibling-checkout pattern the refineid-android-core crate uses
+# for the other refineid-core crates.
+[patch."https://github.com/ReFineID/refineid-core.git"]
+refineid-rapp = { path = "../../../refineid-core/crates/rapp" }
 
 [[bin]]
 name = "refineid-uniffi-bindgen-kotlin"

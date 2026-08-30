@@ -38,16 +38,23 @@ val aospProviderContractPatch =
         "0005-Bind-statically-trusted-external-key-provider.patch"
 val repositoryShellScripts =
     listOf(
+        ".githooks/pre-commit",
+        ".githooks/pre-push",
         "Scripts/apply-aosp-patches.sh",
         "Scripts/audit-aosp-patches.sh",
+        "Scripts/bootstrap-macos.sh",
         "Scripts/build-aosp-flame.sh",
         "Scripts/build-release-apk.sh",
         "Scripts/configure-aosp-host-compat.sh",
+        "Scripts/gradle-environment.sh",
+        "Scripts/install-hooks.sh",
         "Scripts/release-play-store.sh",
         "Scripts/stamp-version.sh",
         "Scripts/stage-aosp-prebuilt.sh",
         aospProviderContractVerifier,
         "Scripts/verify-aosp-flame-device.sh",
+        "Scripts/verify-commit.sh",
+        "Scripts/verify-push.sh",
     )
 
 val rustFormatCheck =

@@ -377,6 +377,10 @@ internal class CcidBlockTransport(
             }
 
             is CcidCommandFailure -> {
+                AppTrace.ccidCommandFailed(
+                    errorCode = response.errorCode,
+                    cardStatus = response.cardStatus,
+                )
                 if (response.cardStatus == CcidCardStatus.ACTIVE) {
                     failure(CcidBlockFailureKind.READER)
                 } else {

@@ -61,6 +61,16 @@ These rules apply to the entire repository. Less is more; terse is better.
 - Keep the toolchain strict: warnings are errors everywhere (Kotlin extra
   warnings, full Android lint, detekt, ktlint via Spotless, Clippy, rustfmt,
   ShellCheck). `./gradlew check` runs all of it.
+- The quality gates are mandatory git hooks, not suggestions. Run
+  `Scripts/install-hooks.sh` once per clone (`Scripts/bootstrap-macos.sh`
+  does it); pre-commit runs the fast gates, pre-push runs the full
+  `./gradlew check`. Never commit or push with `--no-verify`, never disable,
+  weaken, or work around a gate to land a change, and never leave the hooks
+  uninstalled. This binds every contributor, human and AI agent alike: fix
+  the finding, or raise the policy question openly instead of dodging it.
+  GitHub Actions reruns the same `./gradlew check` floor on every push and
+  pull request; a red check on the remote is a defect to fix immediately,
+  not a status to explain away.
 - Commit often when the build and lint are clean. Push when a feature is
   ready. Subject and body only: no AI attribution, co-author, sign-off, or
   review trailers.

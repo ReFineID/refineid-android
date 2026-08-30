@@ -291,6 +291,7 @@ fun registerRappBuild(
     description = "Build the shared RAPP core for Android ABIs."
     workingDir(rappCrateDirectory)
     inputs.file(rappCrateDirectory.file("Cargo.toml"))
+    inputs.file(rappCrateDirectory.file("Cargo.lock"))
     inputs.dir(rappCrateDirectory.dir("src"))
     outputs.dir(output)
     environment("ANDROID_NDK_HOME", androidNdkDirectory.get().asFile.absolutePath)
@@ -378,8 +379,8 @@ val buildRustRelease =
 
 tasks.configureEach {
     when (name) {
-        "mergeDebugJniLibFolders" -> dependsOn(buildRustDebug)
-        "mergeReleaseJniLibFolders" -> dependsOn(buildRustRelease)
+        "mergeDebugJniLibFolders" -> dependsOn(buildRustDebug, buildRappDebug)
+        "mergeReleaseJniLibFolders" -> dependsOn(buildRustRelease, buildRappRelease)
     }
 }
 

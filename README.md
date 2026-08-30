@@ -133,10 +133,15 @@ Apache-2.0.
 
 ## Local build
 
-Install JDK 26, Android SDK platform 37, NDK 28.2.13676358, Rust 1.97,
-the aarch64-linux-android and x86_64-linux-android Rust targets, cargo-ndk, and
-ShellCheck 0.11. Then set JAVA_HOME and ANDROID_SDK_ROOT. Build and run checks
-with:
+Install the latest JDK, the latest Rust with the aarch64-linux-android and
+x86_64-linux-android targets, cargo-ndk, the latest ShellCheck, and the
+Android SDK platform and NDK versions the Gradle build pins in
+`app/build.gradle.kts`. Then set JAVA_HOME and ANDROID_SDK_ROOT. On macOS with
+Homebrew, `Scripts/bootstrap-macos.sh` installs all of the above and reports
+the environment exports. Run `Scripts/install-hooks.sh` once per clone (the
+bootstrap does it) to enable the mandatory git hooks: pre-commit runs the
+fast quality gates, pre-push runs the full `./gradlew check`, and bypassing
+them is prohibited. Build and run checks with:
 
     ./gradlew check
     ./gradlew assembleDebug
@@ -149,6 +154,17 @@ To build and sign a production release APK using a connected hardware identity c
 To spin up and interact with an Android Virtual Device:
 
     android emulator start medium_phone
+
+To deploy on a development phone, enable USB debugging, authorize the host on
+first connect, and run `./gradlew installDebug`. For cable-free deployment
+afterwards, switch the connected phone's adbd to TCP and connect over Wi-Fi:
+
+    adb tcpip 5555
+    adb shell ip -f inet addr show wlan0   # note the phone address
+    adb connect <phone-address>:5555
+
+The TCP listener survives until reboot or a USB-debugging toggle; re-run the
+two commands over the cable to restore it.
 
 Machine-specific SDK paths belong in the ignored local.properties file.
 
