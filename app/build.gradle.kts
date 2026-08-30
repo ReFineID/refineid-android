@@ -209,6 +209,7 @@ android {
                 // The USB host requirement is deliberate; the product targets
                 // physical Pixels, not ChromeOS.
                 "UnsupportedChromeOsHardware",
+                "ChromeOsAbiSupport",
             )
     }
 
