@@ -1,0 +1,102 @@
+# Copyright 2026 Petri Koistinen. Licensed under the Apache License, Version 2.0.
+#
+# CodeQL analysis for Java/Kotlin. The build requires cargo-ndk and the Rust
+# Android cross-compilation targets, as well as a sibling checkout of
+# refineid-core, so this workflow provides those steps explicitly rather than
+# relying on autobuild.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (java-kotlin)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    steps:
+      - name: Check out refineid-android
+        uses: actions/checkout@v4
+        with:
+          path: refineid-android
+
+      - name: Check out the sibling refineid-core
+        uses: actions/checkout@v4
+        with:
+          repository: ReFineID/refineid-core
+          path: refineid-core
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Android NDK
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk
+          key: ndk-${{ runner.os }}-${{ hashFiles('refineid-android/app/build.gradle.kts') }}
+
+      - name: Install the pinned Android SDK platform and NDK
+        working-directory: refineid-android
+        run: |
+          ndk_version=$(sed -n 's/^ *ndkVersion = "\(.*\)"$/\1/p' app/build.gradle.kts)
+          platform_api=$(sed -n 's/^val currentAndroidApi = \([0-9]*\)$/\1/p' app/build.gradle.kts)
+          sdkmanager="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          yes | "${sdkmanager}" --licenses > /dev/null || true
+          "${sdkmanager}" "platforms;android-${platform_api}" ||
+            "${sdkmanager}" "platforms;android-${platform_api}.0"
+          if [ ! -d "${ANDROID_HOME}/ndk/${ndk_version}" ]; then
+            "${sdkmanager}" "ndk;${ndk_version}"
+          fi
+
+      - name: Install the Rust Android targets
+        run: rustup target add aarch64-linux-android x86_64-linux-android
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            refineid-android
+            refineid-core
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          source-root: refineid-android
+
+      - name: Build
+        working-directory: refineid-android
+        run: ./gradlew assemble
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:java-kotlin
