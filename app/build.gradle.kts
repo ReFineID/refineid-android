@@ -147,7 +147,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            abiFilters += setOf("arm64-v8a", "x86_64")
+            abiFilters += setOf("arm64-v8a")
         }
     }
 
@@ -301,8 +301,6 @@ fun registerRappBuild(
             "ndk",
             "-t",
             "arm64-v8a",
-            "-t",
-            "x86_64",
             "-P",
             minimumAndroidApi,
             "-o",
@@ -337,8 +335,6 @@ val buildRustDebug =
             "ndk",
             "-t",
             "arm64-v8a",
-            "-t",
-            "x86_64",
             "-P",
             minimumAndroidApi,
             "-o",
@@ -366,8 +362,6 @@ val buildRustRelease =
             "ndk",
             "-t",
             "arm64-v8a",
-            "-t",
-            "x86_64",
             "-P",
             minimumAndroidApi,
             "-o",

@@ -63,8 +63,8 @@ jobs:
           echo "ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/${ndk_version}" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${ndk_version}" >> "$GITHUB_ENV"
 
-      - name: Install the Rust Android targets
-        run: rustup target add aarch64-linux-android x86_64-linux-android
+      - name: Install the Rust Android target
+        run: rustup target add aarch64-linux-android
 
       - name: Install cargo-ndk
         uses: taiki-e/install-action@v2

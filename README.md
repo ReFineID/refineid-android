@@ -133,8 +133,8 @@ Apache-2.0.
 
 ## Local build
 
-Install the latest JDK, the latest Rust with the aarch64-linux-android and
-x86_64-linux-android targets, cargo-ndk, the latest ShellCheck, and the
+Install the latest JDK, the latest Rust with the aarch64-linux-android
+target, cargo-ndk, the latest ShellCheck, and the
 Android SDK platform and NDK versions the Gradle build pins in
 `app/build.gradle.kts`. Then set JAVA_HOME and ANDROID_SDK_ROOT. On macOS with
 Homebrew, `Scripts/bootstrap-macos.sh` installs all of the above and reports
