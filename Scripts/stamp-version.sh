@@ -50,10 +50,11 @@ awk -v version="$version" -v build="$build" '
 mv "$temporary" "$properties"
 trap - EXIT
 
-if ! grep -q "^versionName=${version}$" "$properties" ||
-  ! grep -q "^buildNumber=${build}$" "$properties"; then
-  echo "stamp did not take in ${properties}" >&2
-  exit 1
-fi
+for manifest in native/refineid-android-core/Cargo.toml native/refineid-rapp-android/Cargo.toml; do
+  if [ -f "$manifest" ]; then
+    sed -i.bak "s|^version = \".*\"|version = \"${version}\"|" "$manifest"
+    rm -f "$manifest.bak"
+  fi
+done
 
 echo "stamped ${version} (${build}), versionCode ${version_code}"
