@@ -208,33 +208,28 @@ internal class NfcReaderController(
         pin1: Pin1Submission? = null,
     ) {
         checkMainThread()
-        if (
-            latestSnapshot.status != NfcReaderStatus.CARD_RECOGNIZED &&
-            latestSnapshot.status != NfcReaderStatus.WRONG_CAN &&
-            latestSnapshot.status != NfcReaderStatus.TRANSPORT_ERROR
-        ) {
-            can?.close()
+        can?.let { CanSessionStore.remember(it) }
+        val generation = probeGeneration
+        val canBytes = can?.transfer() ?: CanSessionStore.canBytes() ?: primedCanStore.read()
+        if (canBytes == null) {
             pin1?.close()
-            AppTrace.nfcConnectIgnored()
             return
         }
-        val generation = probeGeneration
+        val isoDep = latestIsoDep
+        if (isoDep == null) {
+            canBytes.fill(0)
+            pin1?.close()
+            return
+        }
         publish(NfcReaderSnapshot(status = NfcReaderStatus.CONNECTING))
         AppTrace.nfcConnectStarted()
-        can?.let { CanSessionStore.remember(it) }
         try {
             probeExecutor.execute {
                 val mint = can != null
-                val canBytes = can?.transfer() ?: CanSessionStore.canBytes() ?: primedCanStore.read()
-                if (canBytes == null) {
-                    pin1?.close()
-                    publishAsync(generation, NfcReaderStatus.CARD_RECOGNIZED)
-                    return@execute
-                }
                 openSessionBytes(canBytes, generation, mintOnSuccess = mint, pin1 = pin1)
             }
         } catch (_: RejectedExecutionException) {
-            can?.close()
+            canBytes.fill(0)
             pin1?.close()
         }
     }
@@ -610,8 +605,7 @@ internal class NfcReaderController(
         const val READER_MODE_FLAGS =
             NfcAdapter.FLAG_READER_NFC_A or
                 NfcAdapter.FLAG_READER_NFC_B or
-                NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK or
-                NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS
+                NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK
 
         /** Bound on one contactless exchange, PACE cryptography included. */
         const val TRANSCEIVE_TIMEOUT_MILLISECONDS = 15_000
