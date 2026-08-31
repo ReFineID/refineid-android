@@ -41,6 +41,9 @@ if [[ ! -f "${pkcs11_lib}" ]]; then
   fi
 fi
 
+# Strip any existing signatures so the bundle has a single clean signature
+zip -d "${bundle_path}" "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.DSA" "META-INF/*.EC" "META-INF/MANIFEST.MF" >/dev/null 2>&1 || true
+
 pkcs11_cfg="$(mktemp /tmp/refineid_bundle_pkcs11.XXXXXX.cfg)"
 trap 'rm -f "${pkcs11_cfg}"' EXIT
 cat << EOF > "${pkcs11_cfg}"
