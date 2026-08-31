@@ -54,6 +54,7 @@ for manifest in native/refineid-android-core/Cargo.toml native/refineid-rapp-and
   if [ -f "$manifest" ]; then
     sed -i.bak "s|^version = \".*\"|version = \"${version}\"|" "$manifest"
     rm -f "$manifest.bak"
+    cargo check --manifest-path "$manifest" --quiet
   fi
 done
 
