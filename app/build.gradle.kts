@@ -118,24 +118,24 @@ val playProperties =
         null
     }
 
+val keystorePropertiesFile = rootProject.layout.projectDirectory.file("keystore.properties")
+val keystoreProperties =
+    if (keystorePropertiesFile.asFile.exists()) {
+        Properties().apply {
+            load(
+                StringReader(
+                    providers.fileContents(keystorePropertiesFile).asText.get(),
+                ),
+            )
+        }
+    } else {
+        null
+    }
+
 android {
     namespace = "fi.refineid.android"
     compileSdk = currentAndroidApi
     ndkVersion = "28.2.13676358"
-
-    val keystorePropertiesFile = rootProject.layout.projectDirectory.file("keystore.properties")
-    val keystoreProperties =
-        if (keystorePropertiesFile.asFile.exists()) {
-            Properties().apply {
-                load(
-                    StringReader(
-                        providers.fileContents(keystorePropertiesFile).asText.get(),
-                    ),
-                )
-            }
-        } else {
-            null
-        }
 
     defaultConfig {
         applicationId = "fi.refineid.android"
@@ -386,7 +386,13 @@ tasks.configureEach {
 }
 
 val releaseApk =
-    layout.buildDirectory.file("outputs/apk/release/app-release-unsigned.apk")
+    layout.buildDirectory.file(
+        if (keystoreProperties != null) {
+            "outputs/apk/release/app-release.apk"
+        } else {
+            "outputs/apk/release/app-release-unsigned.apk"
+        },
+    )
 val releaseMergedManifest =
     layout.buildDirectory.file(
         "intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml",
