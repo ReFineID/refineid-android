@@ -16,6 +16,7 @@ import fi.refineid.android.core.CanSessionStore
 import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.CardPhotoStore
 import fi.refineid.android.core.CertificateHolderName
+import fi.refineid.android.core.NativeCardAccessResult
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardSessionMaterial
 import fi.refineid.android.core.NativeCertificateReadFailure
@@ -209,6 +210,7 @@ internal class NfcReaderController(
     ) {
         checkMainThread()
         can?.let { CanSessionStore.remember(it) }
+        pin1?.copyBytes()?.let(pinCache::recordVerified)
         val generation = probeGeneration
         val canBytes = can?.transfer() ?: CanSessionStore.canBytes() ?: primedCanStore.read()
         if (canBytes == null) {
@@ -219,6 +221,7 @@ internal class NfcReaderController(
         if (isoDep == null) {
             canBytes.fill(0)
             pin1?.close()
+            refreshReaderMode()
             return
         }
         publish(NfcReaderSnapshot(status = NfcReaderStatus.CONNECTING))
@@ -239,15 +242,11 @@ internal class NfcReaderController(
         val activity = attachedActivity ?: return
         val nfcAdapter = adapter ?: return
         if (nfcAdapter.isEnabled) {
-            val extras =
-                Bundle().apply {
-                    putInt(NfcAdapter.EXTRA_READER_PRESENCE_CHECK_DELAY, PRESENCE_CHECK_DELAY_MILLISECONDS)
-                }
             nfcAdapter.enableReaderMode(
                 activity,
                 readerCallback,
                 READER_MODE_FLAGS,
-                extras,
+                null,
             )
             AppTrace.nfcReaderModeChanged(isEnabled = true)
             if (latestSnapshot.status != NfcReaderStatus.CARD_READY) {
@@ -318,6 +317,7 @@ internal class NfcReaderController(
                         generation = generation,
                         mintOnSuccess = false,
                         pin1 = null,
+                        isoDepTarget = isoDep,
                     )
                 }
             } catch (_: RejectedExecutionException) {
@@ -389,16 +389,18 @@ internal class NfcReaderController(
                 exchangeLevel = NativeCardExchangeLevel.APDU,
                 exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
             )
-        try {
-            isoDep.close()
-        } catch (_: IOException) {
-            // The tag may already be gone; the probe result stands.
-        } catch (_: SecurityException) {
-            // The tag handle is out of date.
-        } catch (_: IllegalStateException) {
-            // Tag service unavailable.
+        if (result !is NativeCardAccessResult.Success) {
+            try {
+                isoDep.close()
+            } catch (_: IOException) {
+                // The tag may already be gone; the probe result stands.
+            } catch (_: SecurityException) {
+                // The tag handle is out of date.
+            } catch (_: IllegalStateException) {
+                // Tag service unavailable.
+            }
+            AppTrace.nfcSessionClosed()
         }
-        AppTrace.nfcSessionClosed()
         // A primed card still needs PIN1 to unlock; the UI shows a
         // PIN-only prompt on this recognized state.
         publishAsync(generation, result.toReaderStatus())
@@ -413,9 +415,10 @@ internal class NfcReaderController(
         generation: Int,
         mintOnSuccess: Boolean,
         pin1: Pin1Submission?,
+        isoDepTarget: IsoDep? = latestIsoDep,
     ) {
         closeActiveSession()
-        val isoDep = latestIsoDep
+        val isoDep = isoDepTarget ?: latestIsoDep
         if (isoDep == null || generation != probeGeneration) {
             canBytes.fill(0)
             pin1?.close()
