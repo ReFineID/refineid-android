@@ -1,0 +1,8 @@
+RefineID mahdollistaa suomalaisen henkilökortin ja Digi- ja väestötietoviraston (DVV) kansalaisvarmenteiden käytön suoraan Android-laitteella joko lähiluvulla (NFC) tai erillisellä USB-kortinlukijalla.
+
+Tärkeimmät ominaisuudet:
+• Vahva sähköinen tunnistautuminen (PIN1) verkkopalveluihin
+• Lainvoimainen qualified-tason sähköinen allekirjoitus (PIN2 / QES)
+• Asiakirjojen varmenteiden ja virallisen passikuvan tarkastus kortilta
+• Tuki sekä langattomalle NFC-lähiluvulle että langallisille USB CCID -lukijoille
+• Täysin laitteella suoritettava salaus ja tiukka tietosuoja – henkilökohtaisia tietoja ei lähetetä ulkopuolisille palvelimille
