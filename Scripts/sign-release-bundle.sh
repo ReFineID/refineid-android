@@ -4,8 +4,8 @@
 # Signs an Android App Bundle (.aab) with the developer's hardware identity card
 # Qualified Signing Key (PIN 2) via the PKCS#11 provider.
 #
-# Security: The PIN 2 is never stored, hardcoded, or saved to disk. It is entered
-# interactively via terminal prompt, environment variable (PIN2), or hardware reader pinpad.
+# Security: The PIN 2 is never stored or persisted. It is entered interactively
+# via terminal prompt, environment variable (PIN2), or hardware reader pinpad.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -41,22 +41,6 @@ if [[ ! -f "${pkcs11_lib}" ]]; then
   fi
 fi
 
-# Prompt securely for PIN 2 if not provided via environment variable
-pin_arg=""
-if [[ -n "${PIN2:-}" ]]; then
-  pin_arg="pass:${PIN2}"
-elif [[ -t 0 ]]; then
-  read -s -r -p "Enter Identity Card PIN 2 (Qualified Signature): " user_pin
-  echo ""
-  if [[ -n "${user_pin}" ]]; then
-    pin_arg="pass:${user_pin}"
-  else
-    pin_arg="pass:"
-  fi
-else
-  pin_arg="pass:"
-fi
-
 pkcs11_cfg="$(mktemp /tmp/refineid_bundle_pkcs11.XXXXXX.cfg)"
 trap 'rm -f "${pkcs11_cfg}"' EXIT
 cat << EOF > "${pkcs11_cfg}"
@@ -65,7 +49,34 @@ library = ${pkcs11_lib}
 slotListIndex = 0
 EOF
 
-echo "Signing ${bundle_path} with hardware identity card (PIN 2)..."
+echo "Discovering alias from hardware identity card..."
+alias_name=$("${JAVA_HOME}/bin/keytool" \
+  -keystore NONE \
+  -storetype PKCS11 \
+  -providerClass sun.security.pkcs11.SunPKCS11 \
+  -providerArg "${pkcs11_cfg}" \
+  -protected \
+  -list 2>/dev/null | grep -E "PrivateKeyEntry|trustedCertEntry" | cut -d',' -f1 || true)
+
+if [[ -z "${alias_name}" ]]; then
+  echo "Error: No signing key found on the hardware card." >&2
+  exit 1
+fi
+
+echo "Signing ${bundle_path} with alias: ${alias_name}..."
+
+# Prompt securely for PIN 2 if not provided via environment variable
+if [[ -n "${PIN2:-}" ]]; then
+  _PASS="${PIN2}"
+elif [[ -t 0 ]]; then
+  read -s -r -p "Enter Identity Card PIN 2 (Qualified Signature): " user_pin
+  echo ""
+  _PASS="${user_pin}"
+else
+  _PASS=""
+fi
+
+export _TEMP_PIN_PASS="${_PASS}"
 
 jarsigner_cmd=(
   "${JAVA_HOME}/bin/jarsigner"
@@ -73,20 +84,15 @@ jarsigner_cmd=(
   -storetype PKCS11
   -providerClass sun.security.pkcs11.SunPKCS11
   -providerArg "${pkcs11_cfg}"
-  -storepass:env _TEMP_PIN_PASS
-  -sigalg SHA256withRSA
-  -digestalg SHA-256
-  "${bundle_path}"
 )
 
-# Export pass temporarily in memory for jarsigner execution only
-if [[ "${pin_arg}" == pass:* ]]; then
-  export _TEMP_PIN_PASS="${pin_arg#pass:}"
+if [[ -n "${_TEMP_PIN_PASS}" ]]; then
+  jarsigner_cmd+=(-storepass:env _TEMP_PIN_PASS)
 else
-  export _TEMP_PIN_PASS=""
+  jarsigner_cmd+=(-protected)
 fi
 
-"${jarsigner_cmd[@]}" "Sign" 2>/dev/null || "${jarsigner_cmd[@]}" "1"
+"${jarsigner_cmd[@]}" "${bundle_path}" "${alias_name}"
 
 unset _TEMP_PIN_PASS
 
