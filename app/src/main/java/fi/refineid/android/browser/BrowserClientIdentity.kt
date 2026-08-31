@@ -70,10 +70,16 @@ internal class BrowserClientIdentity private constructor(
             val issuer =
                 issuerCandidates.firstOrNull { candidate ->
                     candidate.isIssuerOf(leaf)
-                } ?: return null
+                }
+            val chain =
+                if (issuer != null) {
+                    arrayOf(leaf, issuer)
+                } else {
+                    arrayOf(leaf)
+                }
             return BrowserClientIdentity(
                 privateKey = CardBackedPrivateKey(keyAlgorithm, operation),
-                chain = arrayOf(leaf, issuer),
+                chain = chain,
             )
         }
 
@@ -155,7 +161,7 @@ internal object BrowserClientCertificateMatcher {
         keyTypes: Array<out String>?,
         principals: Array<out Principal>?,
     ): Boolean {
-        if (keyTypes.isNullOrEmpty() || keyTypes.none { requested -> requested == keyAlgorithm }) {
+        if (!keyTypes.isNullOrEmpty() && keyTypes.none { requested -> matchesKeyAlgorithm(requested, keyAlgorithm) }) {
             return false
         }
         if (principals.isNullOrEmpty()) {
@@ -164,5 +170,23 @@ internal object BrowserClientCertificateMatcher {
         return principals.any { principal ->
             principal is X500Principal && principal in acceptedIssuerNames
         }
+    }
+
+    private fun matchesKeyAlgorithm(
+        requested: String,
+        keyAlgorithm: String,
+    ): Boolean {
+        if (requested.equals(keyAlgorithm, ignoreCase = true)) {
+            return true
+        }
+        if (keyAlgorithm.equals("EC", ignoreCase = true)) {
+            return requested.startsWith("EC", ignoreCase = true) ||
+                requested.contains("ECDSA", ignoreCase = true)
+        }
+        if (keyAlgorithm.equals("RSA", ignoreCase = true)) {
+            return requested.startsWith("RSA", ignoreCase = true) ||
+                requested.contains("RSA", ignoreCase = true)
+        }
+        return false
     }
 }

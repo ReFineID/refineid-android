@@ -342,7 +342,7 @@ internal class ContactlessSession(
 
     private companion object {
         /** Bound on one contactless exchange, PACE cryptography included. */
-        const val TRANSCEIVE_TIMEOUT_MILLISECONDS = 4_000
+        const val TRANSCEIVE_TIMEOUT_MILLISECONDS = 15_000
     }
 }
 

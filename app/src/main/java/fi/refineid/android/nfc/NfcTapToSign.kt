@@ -166,7 +166,7 @@ internal class NfcTapToSign(
 
     private companion object {
         /** Bound on one contactless exchange, PACE cryptography included. */
-        const val TRANSCEIVE_TIMEOUT_MILLISECONDS = 4_000
+        const val TRANSCEIVE_TIMEOUT_MILLISECONDS = 15_000
 
         /** How long a tap-to-sign waits for the holder to present the card. */
         const val SIGNATURE_TAP_TIMEOUT_MILLISECONDS = 25_000L

@@ -202,8 +202,7 @@ pub(crate) fn contactless_open<Exchange: SingleBlockExchange>(
                 .map_err(open_preflight_failure)
         });
     if result.is_ok() {
-        let photo = read_face_photo_from_secure_channel(&mut secure);
-        set_last_read_face_photo(photo);
+        read_minimal_emrtd_data_from_secure_channel(&mut secure);
     }
     (result, secure.into_inner().into_exchange())
 }
@@ -271,8 +270,7 @@ pub(crate) fn contactless_connect<Exchange: SingleBlockExchange>(
                 .map_err(open_preflight_failure)
         });
     if result.is_ok() {
-        let photo = read_face_photo_from_secure_channel(&mut secure);
-        set_last_read_face_photo(photo);
+        read_minimal_emrtd_data_from_secure_channel(&mut secure);
     }
     let (transport, session) = secure.into_parts();
     if result.is_ok() {
@@ -596,6 +594,24 @@ fn qualified_selection_failure<E>(error: Pkcs15Error<E>) -> QualifiedSignFailure
     }
 }
 
+fn read_minimal_emrtd_data_from_secure_channel<T: CardTransport + Pkcs15Ops + EmrtdOps>(
+    secure: &mut T,
+) {
+    set_last_read_face_photo(None);
+    set_last_read_verification(VERIFICATION_NOT_PERFORMED);
+    if secure.select_emrtd_application().is_ok() {
+        if let Ok(Some(mrz)) = secure.read_mrz_td1() {
+            set_last_read_document_number(Some(mrz.document_number));
+        } else {
+            set_last_read_document_number(None);
+        }
+        let _ = secure.select_pkcs15_application();
+    } else {
+        set_last_read_document_number(None);
+    }
+}
+
+#[allow(dead_code)]
 fn read_face_photo_from_secure_channel<T: CardTransport + Pkcs15Ops + EmrtdOps>(
     secure: &mut T,
 ) -> Option<Vec<u8>> {

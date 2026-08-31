@@ -109,7 +109,7 @@ internal fun MainScreen(
     timestampAuthorityRepository: TimestampAuthorityRepository? = null,
     nfcSnapshot: NfcReaderSnapshot = NfcReaderSnapshot(),
     onOpenNfcSettings: () -> Unit = {},
-    onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit = { _, _ -> },
+    onNfcConnect: (CanSubmission?, Pin1Submission?) -> Unit = { _, _ -> },
     onForgetPrimedCard: () -> Unit = {},
     nfcCardService: AuthenticationCardService? = null,
     onSignBeginTap: (ByteArray?, () -> Unit, () -> Unit) -> Unit = { _, _, _ -> },
@@ -205,7 +205,7 @@ internal fun MainScreen(
                 // buffer is zeroized instead of being left for GC.
                 onReadCard = { can, pin1 ->
                     if (snapshot.cardPresence == CardPresence.PRESENT && can != null) {
-                        pin1.close()
+                        pin1?.close()
                         onReaderConnect(can)
                     } else {
                         onNfcConnect(can, pin1)
@@ -313,8 +313,8 @@ private fun HomeScreen(
     pinCache: AuthenticationPinCache?,
     nfcStatus: NfcReaderStatus?,
     nfcPrimed: Boolean,
-    onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
-    onReadCard: (CanSubmission?, Pin1Submission) -> Unit,
+    onNfcConnect: (CanSubmission?, Pin1Submission?) -> Unit,
+    onReadCard: (CanSubmission?, Pin1Submission?) -> Unit,
     timestampAuthorityRepository: TimestampAuthorityRepository?,
     onOpenVerify: () -> Unit,
     onOpenSign: () -> Unit,
@@ -375,7 +375,7 @@ private fun HomeScreen(
                     pinCache = pinCache,
                     nfcStatus = nfcStatus,
                     nfcPrimed = nfcPrimed,
-                    onNfcConnect = onNfcConnect,
+                    onNfcConnect = { can, pin1 -> onNfcConnect(can, pin1) },
                     launcher = { onOpen ->
                         NavigationGroup {
                             NavigationRow(
@@ -420,23 +420,18 @@ private fun IdentitySection(
     holderName: String?,
     onForget: (() -> Unit)?,
     onOpenPerson: () -> Unit,
-    onReadCard: (CanSubmission?, Pin1Submission) -> Unit,
+    onReadCard: (CanSubmission?, Pin1Submission?) -> Unit,
 ) {
     var showsForgetConfirmation by remember { mutableStateOf(false) }
     var showsNfcReadDialog by remember { mutableStateOf(false) }
     var readNavigationPending by remember { mutableStateOf(false) }
 
     // Open the person page only after the requested read actually
-    // completed: completion is the photo landing in the store for the
-    // shown holder, which only a successful PACE read produces. A
-    // pre-existing or restored holder name alone never navigates.
+    // completed: completion is the holder name arriving from a successful
+    // PACE read. A pre-existing or restored holder name alone never navigates.
     LaunchedEffect(readNavigationPending, holderName) {
         if (readNavigationPending) {
-            if (
-                holderName != null &&
-                fi.refineid.android.core.CardPhotoStore
-                    .getPhoto(holderName) != null
-            ) {
+            if (holderName != null) {
                 readNavigationPending = false
                 onOpenPerson()
             } else {
@@ -453,16 +448,7 @@ private fun IdentitySection(
                     Modifier
                         .fillMaxWidth()
                         .clickable {
-                            // The person page opens directly once the photo is
-                            // cached or a stored access number can fetch it;
-                            // otherwise ask for the access number first.
-                            val personPageComplete =
-                                holderName != null &&
-                                    (
-                                        fi.refineid.android.core.CanSessionStore.hasCan ||
-                                            fi.refineid.android.core.CardPhotoStore
-                                                .getPhoto(holderName) != null
-                                    )
+                            val personPageComplete = holderName != null
                             if (personPageComplete) {
                                 onOpenPerson()
                             } else {
@@ -561,7 +547,7 @@ private fun IdentitySection(
 @Composable
 private fun ReadCardNfcDialog(
     onDismiss: () -> Unit,
-    onConnect: (CanSubmission?, Pin1Submission) -> Unit,
+    onConnect: (CanSubmission?, Pin1Submission?) -> Unit,
 ) {
     val initialCan = remember { fi.refineid.android.core.CanSessionStore.currentCan ?: "" }
     val canState = remember { TextFieldState(initialCan) }
@@ -577,7 +563,7 @@ private fun ReadCardNfcDialog(
                 if (Pin1Submission.isComplete(pinState.text)) {
                     Pin1Submission.from(pinState.text)
                 } else {
-                    Pin1Submission.from("0000")
+                    null
                 }
             onConnect(can, pin1)
             onDismiss()

@@ -61,9 +61,13 @@ internal class LiveBrowserHandshakeUiAutomatorTest {
                 ) {
                     pressBack()
                 }
-                onElementOrNull(CLEANUP_TIMEOUT_MILLISECONDS) {
-                    viewIdResourceName == UiAutomationIds.BROWSER_CLOSE_ACTION
-                }?.click()
+                if (
+                    onElementOrNull(CLEANUP_TIMEOUT_MILLISECONDS) {
+                        viewIdResourceName == UiAutomationIds.BROWSER_URL_FIELD
+                    } != null
+                ) {
+                    pressBack()
+                }
             }
         }
     }
