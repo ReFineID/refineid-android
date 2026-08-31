@@ -50,7 +50,7 @@ internal object UiAutomationIds {
     const val BROWSER_BACK_ACTION = "browserBackAction"
     const val BROWSER_FORWARD_ACTION = "browserForwardAction"
     const val BROWSER_RELOAD_ACTION = "browserReloadAction"
-    const val BROWSER_CLOSE_ACTION = "browserCloseAction"
+
     const val BROWSER_PIN1_FIELD = "browserPin1Field"
     const val BROWSER_UNLOCK_CAN_FIELD = "browserUnlockCanField"
     const val BROWSER_UNLOCK_PIN1_FIELD = "browserUnlockPin1Field"

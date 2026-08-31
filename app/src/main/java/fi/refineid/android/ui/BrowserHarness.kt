@@ -229,7 +229,6 @@ private fun BrowserDialog(
         BrowserDialogContent(
             webViewClient = webViewClient,
             signatureStatus = signatureStatus,
-            onClose = onClose,
         )
     }
     pinRequest?.let { request ->
@@ -259,7 +258,6 @@ private fun BrowserDialog(
 private fun BrowserDialogContent(
     webViewClient: WebViewClient?,
     signatureStatus: BrowserSignatureStatus,
-    onClose: () -> Unit,
 ) {
     Surface(
         modifier =
@@ -300,7 +298,6 @@ private fun BrowserDialogContent(
                 onBack = { liveWebView?.takeIf { it.canGoBack() }?.goBack() },
                 onForward = { liveWebView?.takeIf { it.canGoForward() }?.goForward() },
                 onReload = { liveWebView?.reload() },
-                onClose = onClose,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -358,7 +355,6 @@ private fun BrowserControlsBar(
     onBack: () -> Unit,
     onForward: () -> Unit,
     onReload: () -> Unit,
-    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -423,12 +419,6 @@ private fun BrowserControlsBar(
                         ),
                     keyboardActions = KeyboardActions(onGo = { onNavigate() }),
                 )
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier.testTag(UiAutomationIds.BROWSER_CLOSE_ACTION),
-                ) {
-                    Text(stringResource(R.string.browser_close_glyph))
-                }
             }
         }
     }

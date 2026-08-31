@@ -4,5 +4,5 @@
     <string name="browser_back">‹</string>
     <string name="browser_forward">›</string>
     <string name="browser_reload">↻</string>
-    <string name="browser_close_glyph">✕</string>
+
 </resources>
