@@ -212,8 +212,11 @@ internal class NfcReaderController(
         can?.let { CanSessionStore.remember(it) }
         val generation = probeGeneration
         val inMemoryCanBytes = can?.transfer() ?: CanSessionStore.canBytes()
-        val isoDep = latestIsoDep
-        if (isoDep == null) {
+        // Guard against the no-card case to give immediate UI feedback, but do
+        // not capture the handle: a reader-mode re-poll on the NFC callback
+        // thread can replace latestIsoDep before the executor runs, so let
+        // openSessionBytes read it at execution time instead.
+        if (latestIsoDep == null) {
             inMemoryCanBytes?.fill(0)
             pin1?.close()
             refreshReaderMode()
@@ -232,7 +235,7 @@ internal class NfcReaderController(
                     return@execute
                 }
                 val mint = can != null
-                openSessionBytes(canBytes, generation, mintOnSuccess = mint, pin1 = pin1, isoDepTarget = isoDep)
+                openSessionBytes(canBytes, generation, mintOnSuccess = mint, pin1 = pin1)
             }
         } catch (_: RejectedExecutionException) {
             inMemoryCanBytes?.fill(0)
