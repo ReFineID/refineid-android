@@ -241,7 +241,6 @@ private fun BrowserDialog(
             isWaiting = unlockWaiting,
             onUnlock = { can, pin1 ->
                 unlockWaiting = true
-                pin1.copyBytes()?.let { pinCache?.recordVerified(it) }
                 onNfcConnect(can, pin1)
             },
             onCancel = {

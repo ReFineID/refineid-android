@@ -210,16 +210,11 @@ internal class NfcReaderController(
     ) {
         checkMainThread()
         can?.let { CanSessionStore.remember(it) }
-        pin1?.copyBytes()?.let(pinCache::recordVerified)
         val generation = probeGeneration
-        val canBytes = can?.transfer() ?: CanSessionStore.canBytes() ?: primedCanStore.read()
-        if (canBytes == null) {
-            pin1?.close()
-            return
-        }
+        val inMemoryCanBytes = can?.transfer() ?: CanSessionStore.canBytes()
         val isoDep = latestIsoDep
         if (isoDep == null) {
-            canBytes.fill(0)
+            inMemoryCanBytes?.fill(0)
             pin1?.close()
             refreshReaderMode()
             return
@@ -228,11 +223,19 @@ internal class NfcReaderController(
         AppTrace.nfcConnectStarted()
         try {
             probeExecutor.execute {
+                // primedCanStore.read() decrypts Android Keystore ciphertext;
+                // it must run off the main thread — resolved here on the executor.
+                val canBytes = inMemoryCanBytes ?: primedCanStore.read()
+                if (canBytes == null) {
+                    pin1?.close()
+                    publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+                    return@execute
+                }
                 val mint = can != null
-                openSessionBytes(canBytes, generation, mintOnSuccess = mint, pin1 = pin1)
+                openSessionBytes(canBytes, generation, mintOnSuccess = mint, pin1 = pin1, isoDepTarget = isoDep)
             }
         } catch (_: RejectedExecutionException) {
-            canBytes.fill(0)
+            inMemoryCanBytes?.fill(0)
             pin1?.close()
         }
     }
