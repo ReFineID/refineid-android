@@ -141,8 +141,8 @@ private fun BrowserDialog(
     var signatureStatus by remember { mutableStateOf(BrowserSignatureStatus.IDLE) }
     // Once the holder unlocked and the session opened, resolve the held
     // certificate request; the handshake then proceeds with the card.
-    LaunchedEffect(nfcStatus, unlockWaiting) {
-        if (unlockWaiting && nfcStatus == NfcReaderStatus.CARD_READY) {
+    LaunchedEffect(nfcStatus, unlockRequest) {
+        if (unlockRequest != null && nfcStatus == NfcReaderStatus.CARD_READY) {
             val held = unlockRequest
             unlockRequest = null
             unlockWaiting = false
@@ -242,6 +242,7 @@ private fun BrowserDialog(
             isWaiting = unlockWaiting,
             onUnlock = { can, pin1 ->
                 unlockWaiting = true
+                pin1.copyBytes()?.let { pinCache?.recordVerified(it) }
                 onNfcConnect(can, pin1)
             },
             onCancel = {
@@ -456,9 +457,9 @@ private fun BrowserCardUnlockDialog(
         }
     }
     val cardEntryReady =
-        status == NfcReaderStatus.CARD_RECOGNIZED ||
-            status == NfcReaderStatus.WRONG_CAN ||
-            status == NfcReaderStatus.TRANSPORT_ERROR
+        status != NfcReaderStatus.TURNED_OFF &&
+            status != NfcReaderStatus.NOT_AVAILABLE &&
+            status != NfcReaderStatus.CARD_NOT_SUPPORTED
     val hasRememberedCan = primed || fi.refineid.android.core.CanSessionStore.hasCan
     val canReady = hasRememberedCan || CanSubmission.isComplete(canState.text)
     val pinReady = Pin1Submission.isComplete(pinState.text)
