@@ -89,6 +89,10 @@ jarsigner_cmd=(
   -providerArg "${pkcs11_cfg}"
 )
 
+if [[ -f "upload_cert_chain.pem" ]]; then
+  jarsigner_cmd+=(-certchain upload_cert_chain.pem)
+fi
+
 if [[ -n "${_TEMP_PIN_PASS}" ]]; then
   jarsigner_cmd+=(-storepass:env _TEMP_PIN_PASS)
 else
