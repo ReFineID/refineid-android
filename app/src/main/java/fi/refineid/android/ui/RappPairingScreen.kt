@@ -173,7 +173,12 @@ internal fun RappPairingScreen(
 
                             OutlinedTextField(
                                 value = pin1Input,
-                                onValueChange = { pin1Input = it.filter { c -> c in '0'..'9' }.take(4) },
+                                onValueChange = { input ->
+                                    val digits = input.filter { it in '0'..'9' }
+                                    if (Pin1Submission.acceptsEntry(digits)) {
+                                        pin1Input = digits
+                                    }
+                                },
                                 label = { Text(stringResource(R.string.pin1_optional)) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                                 visualTransformation = PasswordVisualTransformation(),
