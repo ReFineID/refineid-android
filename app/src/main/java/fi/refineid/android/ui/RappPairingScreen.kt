@@ -166,13 +166,6 @@ internal fun RappPairingScreen(
                                         fontFamily = FontFamily.Monospace,
                                     ),
                                 modifier = Modifier.fillMaxWidth(),
-                                placeholder = {
-                                    Text(
-                                        "000000",
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                },
                             )
 
                             OutlinedTextField(
@@ -187,13 +180,6 @@ internal fun RappPairingScreen(
                                         fontFamily = FontFamily.Monospace,
                                     ),
                                 modifier = Modifier.fillMaxWidth(),
-                                placeholder = {
-                                    Text(
-                                        "123456",
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                },
                             )
 
                             OutlinedTextField(
@@ -209,13 +195,6 @@ internal fun RappPairingScreen(
                                         fontFamily = FontFamily.Monospace,
                                     ),
                                 modifier = Modifier.fillMaxWidth(),
-                                placeholder = {
-                                    Text(
-                                        if (pinCache?.hasPin == true) "••••" else "",
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                },
                             )
 
                             Button(
