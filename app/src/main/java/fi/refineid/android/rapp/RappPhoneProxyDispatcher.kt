@@ -424,6 +424,36 @@ internal class RappPhoneProxyDispatcher(
         val desc = action.operation
         if (desc?.kind != RappOperationKind.READ_AUTHENTICATION_CERTIFICATE) return
         scope.launch(Dispatchers.IO) {
+            if (!isCardReady()) {
+                val requesterName =
+                    catalog
+                        .listPairs()
+                        .firstOrNull()
+                        ?.displayName
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "Computer"
+                val opIdHex = opId.joinToString("") { "%02x".format(it) }
+                var cancelled = false
+                var ready = false
+                while (!ready && !cancelled) {
+                    inbox.showTapPrompt(
+                        requestId = opIdHex,
+                        requester = requesterName,
+                        action = RappAuthAction.BROWSER_AUTH,
+                        onCancel = { cancelled = true },
+                    )
+                    ready = awaitCardReady()
+                    inbox.dismissTapPrompt(opIdHex)
+                }
+                if (cancelled || !ready) {
+                    try {
+                        val resp = bridge.cardRemovedBeforeTransmit(opId)
+                        handleBridgeAction(resp, bridge)
+                    } catch (_: Exception) {
+                    }
+                    return@launch
+                }
+            }
             val certDer = readAuthCertWithTimeout()
             if (certDer != null) {
                 try {

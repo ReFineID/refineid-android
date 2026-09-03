@@ -263,8 +263,10 @@ internal class NfcReaderController(
         // openSessionBytes read it at execution time instead.
         if (latestIsoDep == null) {
             inMemoryCanBytes?.fill(0)
+            pin1?.copyBytes()?.let(pinCache::recordVerified)
             pin1?.close()
             refreshReaderMode()
+            publish(NfcReaderSnapshot(status = NfcReaderStatus.WAITING_FOR_CARD))
             return
         }
         publish(NfcReaderSnapshot(status = NfcReaderStatus.CONNECTING))
@@ -366,8 +368,8 @@ internal class NfcReaderController(
                     openSessionBytes(
                         canBytes = storedCan,
                         generation = generation,
-                        mintOnSuccess = false,
-                        pin1 = null,
+                        mintOnSuccess = true,
+                        pin1 = pinCache.take(),
                         isoDepTarget = isoDep,
                     )
                 }

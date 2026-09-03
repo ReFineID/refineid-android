@@ -20,11 +20,13 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +53,7 @@ import fi.refineid.android.R
 import fi.refineid.android.core.AuthenticationPinCache
 import fi.refineid.android.core.CanSessionStore
 import fi.refineid.android.core.CanSubmission
+import fi.refineid.android.core.PersonCardDetails
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.rapp.PairingPhase
 import fi.refineid.android.rapp.RappPairingCode
@@ -61,6 +64,8 @@ import fi.refineid.android.rapp.RappPairingModel
 internal fun RappPairingScreen(
     model: RappPairingModel,
     pinCache: AuthenticationPinCache? = null,
+    holderName: String? = null,
+    cardDetails: PersonCardDetails? = null,
     onConnectCard: (CanSubmission?, Pin1Submission?) -> Unit = { _, _ -> },
     onBack: () -> Unit,
 ) {
@@ -274,6 +279,21 @@ internal fun RappPairingScreen(
                             style = MaterialTheme.typography.bodyLarge,
                             textAlign = TextAlign.Center,
                         )
+                        if (holderName == null) {
+                            Text(
+                                text = stringResource(R.string.hold_card_to_phone),
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Text(
+                                text = holderName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
                 }
             }
@@ -306,6 +326,49 @@ internal fun RappPairingScreen(
                             text = "${phase.peer.displayName} (${phase.peer.platform})",
                             style = MaterialTheme.typography.bodyMedium,
                         )
+                        if (holderName != null) {
+                            HorizontalDivider()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(36.dp),
+                                )
+                                Column {
+                                    Text(
+                                        text = holderName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    val identifier = cardDetails?.identifier
+                                    if (identifier != null) {
+                                        Text(
+                                            text = identifier,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            HorizontalDivider()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                Text(
+                                    text = stringResource(R.string.hold_card_to_phone),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                        }
                         Button(onClick = { model.reset() }) {
                             Text(stringResource(R.string.ready))
                         }

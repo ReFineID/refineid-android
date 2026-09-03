@@ -53,4 +53,5 @@
     <string name="pairing_failed">Anslutning misslyckades</string>
     <string name="pairing_success">Anslutningen lyckades!</string>
     <string name="pairing_code">Kopplingskod</string>
+    <string name="hold_card_to_phone">Håll ditt ID-kort mot baksidan av telefonen…</string>
 </resources>

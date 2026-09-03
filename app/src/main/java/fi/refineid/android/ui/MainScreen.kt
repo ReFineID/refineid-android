@@ -278,6 +278,8 @@ internal fun MainScreen(
                     RappPairingScreen(
                         model = model,
                         pinCache = pinCache,
+                        holderName = effectiveHolderName,
+                        cardDetails = effectiveDetails,
                         onConnectCard = { can, pin1 ->
                             onNfcConnect(can, pin1)
                         },
