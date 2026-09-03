@@ -103,7 +103,9 @@ class ReFineIdApplication : Application() {
                 qualifiedCardService = { nfcReaderController.qualifiedCardService },
             )
         val existingPairs = rappPairCatalog.listPairs()
-        android.util.Log.i("APPLICATION", "existingPairs count=${existingPairs.size}")
+        if (BuildConfig.DEBUG) {
+            android.util.Log.i("APPLICATION", "existingPairs count=${existingPairs.size}")
+        }
         if (existingPairs.isNotEmpty()) {
             val newestPair = existingPairs.maxByOrNull { it.createdAtMs } ?: existingPairs.first()
             val pairIdBytes =
