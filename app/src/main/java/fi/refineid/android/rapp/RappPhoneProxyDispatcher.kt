@@ -282,7 +282,9 @@ internal class RappPhoneProxyDispatcher(
                             pendingPins[opIdHex] = pin1
                             approve(opId, bridge)
                         },
-                        onDenied = { deny(opId, bridge) },
+                        // Browser auth has no "deny" concept — Cancel just
+                        // closes the connection; Mac can reconnect and retry.
+                        onDenied = { dropConnection() },
                     )
                 }
             }

@@ -43,7 +43,11 @@ internal fun RappAuthorizationDialog(request: RappAuthRequest) {
 
     Dialog(
         onDismissRequest = { request.onDenied() },
-        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        properties =
+            DialogProperties(
+                dismissOnBackPress = request.action == RappAuthAction.BROWSER_AUTH,
+                dismissOnClickOutside = false,
+            ),
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -57,7 +61,7 @@ internal fun RappAuthorizationDialog(request: RappAuthRequest) {
                 Text(
                     text =
                         when (request.action) {
-                            RappAuthAction.BROWSER_AUTH -> "Remote Authentication"
+                            RappAuthAction.BROWSER_AUTH -> "Enter PIN 1"
                             RappAuthAction.DOCUMENT_SIGN -> "Sign Document"
                         },
                     style = MaterialTheme.typography.titleLarge,
@@ -66,8 +70,17 @@ internal fun RappAuthorizationDialog(request: RappAuthRequest) {
 
                 Text(
                     text =
-                        "${request.requester} is requesting authentication.\n" +
-                            "Enter your PIN and hold your ID card to the phone to approve.",
+                        when (request.action) {
+                            RappAuthAction.BROWSER_AUTH -> {
+                                "${request.requester} needs your identity card.\n" +
+                                    "Enter PIN 1 and hold the card to the phone."
+                            }
+
+                            RappAuthAction.DOCUMENT_SIGN -> {
+                                "${request.requester} is requesting a document signature.\n" +
+                                    "Enter PIN 2 and hold your ID card to the phone to sign."
+                            }
+                        },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -78,8 +91,8 @@ internal fun RappAuthorizationDialog(request: RappAuthRequest) {
                     label = {
                         Text(
                             when (request.action) {
-                                RappAuthAction.BROWSER_AUTH -> "Basic PIN (PIN 1)"
-                                RappAuthAction.DOCUMENT_SIGN -> "Signature PIN (PIN 2)"
+                                RappAuthAction.BROWSER_AUTH -> "PIN 1"
+                                RappAuthAction.DOCUMENT_SIGN -> "PIN 2"
                             },
                         )
                     },
@@ -97,13 +110,25 @@ internal fun RappAuthorizationDialog(request: RappAuthRequest) {
                         onClick = { request.onDenied() },
                         modifier = Modifier.padding(end = 8.dp),
                     ) {
-                        Text("Deny")
+                        // Browser auth: Cancel (no conceptual denial, just close).
+                        // Document sign: Deny (explicit refusal to sign).
+                        Text(
+                            when (request.action) {
+                                RappAuthAction.BROWSER_AUTH -> "Cancel"
+                                RappAuthAction.DOCUMENT_SIGN -> "Deny"
+                            },
+                        )
                     }
                     Button(
                         onClick = { request.onApproved(pin) },
                         enabled = isPinValid,
                     ) {
-                        Text("Approve & Sign")
+                        Text(
+                            when (request.action) {
+                                RappAuthAction.BROWSER_AUTH -> "Continue"
+                                RappAuthAction.DOCUMENT_SIGN -> "Approve & Sign"
+                            },
+                        )
                     }
                 }
             }
