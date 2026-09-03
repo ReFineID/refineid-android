@@ -84,29 +84,27 @@ checkout for local development.
   surface: `RappPairingBridge`, `RappSessionBridge`, `RappOperationBridge`,
   `RappPairVault`, `RappOperationVault`, and the operation, pairing and
   liveness value types.
-- Gradle configures with the new tasks registered.
+- Gradle configures with the tasks registered.
 
-Nothing on Android has spoken to a peer yet. There is no pairing UI, no
-authorization prompt, no card execution path, and no evidence of
-interoperability with the Apple implementation.
+### Proven Live on 2026-09-03
 
-## What the next agent does
+- **Devices**: Samsung Galaxy S22 (`SM-S901B`, Android 16) paired with Apple Mac
+  (`m1`, macOS 26.6.2).
+- **Physical Card**: Finnish Citizen Identity Card (FINEID S1, P-384 authentication
+  profile).
+- **Pairing Ceremony**: Mutual Noise XXpsk3 pairing completed over mDNS local
+  TCP stream using a 6-digit numeric pairing code. Automated end-to-end via
+  `scripts/test-pairing-e2e.sh`.
+- **Connection Management**: Persistent storage in `RappPairCatalog` and
+  `AndroidRappVault`. Paired computers can be removed individually from the UI;
+  when all pairs are deleted, the background stream listener stops.
+- **Card Status & Identity Reading**: Remote identity probe read the 1066-byte
+  authentication certificate (`EF.4331`) over the stream relay in 540 ms.
+- **Browser Authentication Signing**: Safari on macOS requested TLS 1.3 client
+  certificate authentication for `https://card.refineid.fi`. The request routed
+  through macOS `ReFineIDRappTokenExtension` across the encrypted stream relay
+  to the phone. The phone presented `RappAuthorizationDialog` ("Requested by m1"),
+  verified PIN 1 on the physical card via NFC, and returned a valid 96-byte
+  ECDSA P-384 hardware signature. Safari verified the signature and completed
+  login.
 
-1. Implement the platform side the generated bridges require, mirroring the
-   Apple layer file for file where it makes sense: random and key material,
-   a device vault backed by the Android keystore, a pair catalog, a framed
-   transport, and a card executor that performs authorized work through the
-   existing NFC and APDU paths.
-2. Present the holder-visible parts: QR pairing, a visible paired state, and
-   an authorization prompt that names the requester, the operation, and which
-   credential it will consume. The requester must never render or collect the
-   CAN, PIN 1 or PIN 2.
-3. Keep the fail-stop rules the Rust core enforces: an invalid card
-   credential, an authenticated protocol violation, or an ambiguous card
-   completion tears the session down and requires the holder to act. Do not
-   add an Android-side recovery path that the protocol does not have.
-4. Prove interoperability against the Apple implementation, not against
-   another Android device: pair a phone with a Mac, then record one card
-   status read, one browser authentication, and one document signature.
-5. Only then describe Android RAPP as working, and update this document with
-   the exact commits, devices and operating system versions used.

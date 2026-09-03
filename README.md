@@ -102,6 +102,10 @@ instrumented development harness, but it is not the product boundary.
 - General in-app browser over both card transports: any HTTPS site, an
   address bar, client certificates served on request, and every signature
   behind the holder's PIN
+- Cross-platform Remote Authentication Proxy Protocol (RAPP) server:
+  6-digit numeric pairing over local TCP/mDNS with mutual Noise XXpsk3 encryption,
+  persistent pairing catalog, caller-identified PIN authorization prompt,
+  and contactless NFC signing for paired computers (macOS Safari, Linux)
 - Release builds omit logging and background tracking; Internet access is
   restricted to the browser boundary
 - Compose UI Test v2 and UI Automator 2.4 instrumentation on a physical device

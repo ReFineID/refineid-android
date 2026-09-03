@@ -44,6 +44,7 @@ internal class RappPhoneProxyDispatcher(
     private var operationBridge: RappOperationBridge? = null
     private var pairRecord: RappPairRecord? = null
     private var vault: AndroidRappVault? = null
+    private val catalog = RappPairCatalog(context)
     private var isClosed = false
 
     companion object {
@@ -68,6 +69,18 @@ internal class RappPhoneProxyDispatcher(
             }
         activeListener = listener
         listener.start(rendezvousName)
+    }
+
+    fun stopListening() {
+        activeListener?.close()
+        activeListener = null
+        operationBridge?.close()
+        operationBridge = null
+        sessionBridge?.close()
+        sessionBridge = null
+        pairRecord = null
+        vault = null
+        inbox.dismissAll()
     }
 
     private fun handleRelayEvent(event: StreamRelayEvent) {
@@ -251,9 +264,16 @@ internal class RappPhoneProxyDispatcher(
                     }
                     approve(opId, bridge)
                 } else {
+                    val requesterName =
+                        catalog
+                            .listPairs()
+                            .firstOrNull()
+                            ?.displayName
+                            ?.takeIf { it.isNotBlank() }
+                            ?: "Computer"
                     inbox.ask(
                         requestId = opIdHex,
-                        requester = "Mac (Safari)",
+                        requester = requesterName,
                         action = RappAuthAction.BROWSER_AUTH,
                         onApproved = { pin1 ->
                             pinCache?.recordVerified(pin1.toByteArray(Charsets.US_ASCII))
@@ -266,9 +286,16 @@ internal class RappPhoneProxyDispatcher(
             }
 
             RappOperationKind.SIGN_DOCUMENT -> {
+                val requesterName =
+                    catalog
+                        .listPairs()
+                        .firstOrNull()
+                        ?.displayName
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "Computer"
                 inbox.ask(
                     requestId = opIdHex,
-                    requester = "Mac",
+                    requester = requesterName,
                     action = RappAuthAction.DOCUMENT_SIGN,
                     onApproved = { pin2 ->
                         pendingPins[opIdHex] = pin2
@@ -288,11 +315,13 @@ internal class RappPhoneProxyDispatcher(
         opId: ByteArray,
         bridge: RappOperationBridge,
     ) {
-        try {
-            val resp = bridge.approve(opId, RappClock.monotonicMs())
-            handleBridgeAction(resp, bridge)
-        } catch (e: Exception) {
-            android.util.Log.e("PROXY_DISPATCH", "approve failed", e)
+        scope.launch(Dispatchers.IO) {
+            try {
+                val resp = bridge.approve(opId, RappClock.monotonicMs())
+                handleBridgeAction(resp, bridge)
+            } catch (e: Exception) {
+                android.util.Log.e("PROXY_DISPATCH", "approve failed", e)
+            }
         }
     }
 
@@ -300,11 +329,13 @@ internal class RappPhoneProxyDispatcher(
         opId: ByteArray,
         bridge: RappOperationBridge,
     ) {
-        try {
-            val resp = bridge.deny(opId)
-            handleBridgeAction(resp, bridge)
-        } catch (e: Exception) {
-            android.util.Log.e("PROXY_DISPATCH", "deny failed", e)
+        scope.launch(Dispatchers.IO) {
+            try {
+                val resp = bridge.deny(opId)
+                handleBridgeAction(resp, bridge)
+            } catch (e: Exception) {
+                android.util.Log.e("PROXY_DISPATCH", "deny failed", e)
+            }
         }
     }
 

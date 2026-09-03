@@ -111,12 +111,16 @@ internal class StreamRelayListener(
                     while (isActive && !isClosed.get()) {
                         try {
                             val socket = server.accept()
+                            readJob?.cancel()
                             clientSocket?.close()
                             clientSocket = socket
                             outputStream = DataOutputStream(socket.getOutputStream())
                             onEvent(StreamRelayEvent.Connected)
 
-                            readLoop(socket)
+                            readJob =
+                                scope.launch(Dispatchers.IO) {
+                                    readLoop(socket)
+                                }
                         } catch (e: IOException) {
                             if (!isClosed.get()) {
                                 onEvent(StreamRelayEvent.Error(e))
@@ -140,7 +144,7 @@ internal class StreamRelayListener(
                 onEvent(StreamRelayEvent.Frame(buffer))
             }
         } catch (e: IOException) {
-            if (!isClosed.get()) {
+            if (!isClosed.get() && clientSocket === socket) {
                 onEvent(StreamRelayEvent.Disconnected)
             }
         }

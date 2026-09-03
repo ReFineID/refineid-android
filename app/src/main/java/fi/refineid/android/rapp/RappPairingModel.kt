@@ -52,12 +52,13 @@ internal class RappPairingModel(
     private var timerJob: Job? = null
     private var proxyHandshakeStep = 0
     private var requesterHandshakeStep = 0
+    private var receivedPeerHello: uniffi.refineid_rapp.RappPeerHello? = null
 
     var phase by mutableStateOf<PairingPhase>(PairingPhase.Idle)
         private set
 
-    val pairedDevices: List<PairedPeer>
-        get() = catalog.listPairs()
+    var pairedDevices by mutableStateOf<List<PairedPeer>>(catalog.listPairs())
+        private set
 
     fun createOffer() {
         reset()
@@ -148,7 +149,7 @@ internal class RappPairingModel(
 
                         2 -> {
                             // Responder sent Hello
-                            bridge.receiveHello(event.data, RappClock.wallMs())
+                            receivedPeerHello = bridge.receiveHello(event.data, RappClock.wallMs())
                             val grantedProfiles =
                                 listOf(
                                     "fi.refineid.card-status.v1",
@@ -164,11 +165,12 @@ internal class RappPairingModel(
                             // Responder sent Confirmation
                             bridge.receiveConfirmation(event.data, RappClock.wallMs())
                             val record = bridge.finishPairing(RappClock.wallMs())
+                            val hello = receivedPeerHello
                             val peer =
                                 PairedPeer(
                                     pairIdHex = record.metadata().pairId.joinToString("") { "%02x".format(it) },
-                                    displayName = "Mac",
-                                    platform = "macOS",
+                                    displayName = hello?.displayName?.takeIf { it.isNotBlank() } ?: "Computer",
+                                    platform = hello?.platform?.takeIf { it.isNotBlank() } ?: "Unknown",
                                     createdAtMs = System.currentTimeMillis(),
                                 )
                             val app = context.applicationContext as? fi.refineid.android.ReFineIdApplication
@@ -181,6 +183,7 @@ internal class RappPairingModel(
                                 platform = peer.platform,
                                 createdAtMs = peer.createdAtMs,
                             )
+                            pairedDevices = catalog.listPairs()
                             phase = PairingPhase.Paired(peer)
 
                             val oldBrowser = browser
@@ -221,7 +224,7 @@ internal class RappPairingModel(
         val code = RappPairingCode.normalize(rawCode)
         if (!RappPairingCode.isValid(code)) return
 
-        phase = PairingPhase.Connecting("Connecting to Mac...")
+        phase = PairingPhase.Connecting("Connecting...")
         val offerId = RappPairingCode.offerIdentifier(code)
         val pairingSecret = RappPairingCode.pairingSecret(code)
         val candidates =
@@ -286,7 +289,7 @@ internal class RappPairingModel(
     ) {
         when (event) {
             is StreamRelayEvent.Connected -> {
-                phase = PairingPhase.Connecting("Mac connected! Starting security handshake...")
+                phase = PairingPhase.Connecting("Connected! Starting security handshake...")
                 proxyHandshakeStep = 0
             }
 
@@ -300,7 +303,7 @@ internal class RappPairingModel(
                     val nowMonotonicMs = RappClock.monotonicMs()
                     when (proxyHandshakeStep) {
                         0 -> {
-                            // Mac sent Message 1
+                            // Peer sent Message 1
                             bridge.readHandshakeFrame(event.data, nowMonotonicMs)
                             val response = bridge.writeHandshakeFrame(nowMonotonicMs)
                             listener?.send(response)
@@ -308,7 +311,7 @@ internal class RappPairingModel(
                         }
 
                         1 -> {
-                            // Mac sent Message 3
+                            // Peer sent Message 3
                             bridge.readHandshakeFrame(event.data, nowMonotonicMs)
                             if (bridge.handshakeComplete(nowMonotonicMs)) {
                                 bridge.enterConfirmation(nowMonotonicMs)
@@ -319,8 +322,8 @@ internal class RappPairingModel(
                         }
 
                         2 -> {
-                            // Mac sent Hello
-                            bridge.receiveHello(event.data, RappClock.wallMs())
+                            // Peer sent Hello
+                            receivedPeerHello = bridge.receiveHello(event.data, RappClock.wallMs())
                             val grantedProfiles =
                                 listOf(
                                     "fi.refineid.card-status.v1",
@@ -333,15 +336,16 @@ internal class RappPairingModel(
                         }
 
                         3 -> {
-                            // Mac sent Confirmation
+                            // Peer sent Confirmation
                             bridge.receiveConfirmation(event.data, RappClock.wallMs())
                             val nowMs = RappClock.wallMs()
                             val record = bridge.finishPairing(nowMs)
+                            val hello = receivedPeerHello
                             val peer =
                                 PairedPeer(
                                     pairIdHex = record.metadata().pairId.joinToString("") { "%02x".format(it) },
-                                    displayName = "Mac",
-                                    platform = "macOS",
+                                    displayName = hello?.displayName?.takeIf { it.isNotBlank() } ?: "Computer",
+                                    platform = hello?.platform?.takeIf { it.isNotBlank() } ?: "Unknown",
                                     createdAtMs = System.currentTimeMillis(),
                                 )
 
@@ -355,6 +359,7 @@ internal class RappPairingModel(
                                 platform = peer.platform,
                                 createdAtMs = peer.createdAtMs,
                             )
+                            pairedDevices = catalog.listPairs()
                             phase = PairingPhase.Paired(peer)
 
                             val oldListener = listener
@@ -381,7 +386,7 @@ internal class RappPairingModel(
 
             is StreamRelayEvent.Disconnected -> {
                 if (phase is PairingPhase.Connecting) {
-                    phase = PairingPhase.Failed("Mac disconnected")
+                    phase = PairingPhase.Failed("Peer disconnected")
                 }
             }
 
@@ -415,6 +420,10 @@ internal class RappPairingModel(
         val pairIdBytes = pairIdHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
         vault.revokeDeviceOnly(pairIdBytes, RappClock.wallMs())
         catalog.removePair(pairIdHex)
+        pairedDevices = catalog.listPairs()
+        if (pairedDevices.isEmpty()) {
+            app?.rappProxyDispatcher?.stopListening()
+        }
     }
 
     fun reset() {
@@ -429,7 +438,9 @@ internal class RappPairingModel(
         } catch (_: Exception) {
         }
         pairingBridge = null
+        receivedPeerHello = null
         phase = PairingPhase.Idle
+        pairedDevices = catalog.listPairs()
     }
 
     override fun close() {

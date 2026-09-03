@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private val nfcStateListener: (NfcReaderSnapshot) -> Unit = { snapshot ->
         nfcSnapshot = snapshot
     }
+    private var rappPairingModel: fi.refineid.android.rapp.RappPairingModel? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -58,11 +59,13 @@ class MainActivity : ComponentActivity() {
         nfcReaderController.addStateListener(nfcStateListener)
 
         val rappInbox = (application as ReFineIdApplication).rappAuthorizationInbox
-        val rappPairingModel =
+        val model =
             fi.refineid.android.rapp.RappPairingModel(
                 context = this,
                 scope = activityScope,
             )
+        rappPairingModel = model
+        handlePairIntent(intent)
 
         setContent {
             ReFineIdTheme {
@@ -83,7 +86,7 @@ class MainActivity : ComponentActivity() {
                     onSignBeginTap = nfcReaderController.tapToSign::begin,
                     onSignEndTap = nfcReaderController.tapToSign::end,
                     pinCache = (application as ReFineIdApplication).authenticationPinCache,
-                    rappPairingModel = rappPairingModel,
+                    rappPairingModel = model,
                     rappInbox = rappInbox,
                 )
             }
@@ -103,8 +106,30 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         AppTrace.activityReceivedIntent()
         readerController.refresh()
+        handlePairIntent(intent)
+        handleAuthPinIntent(intent)
+    }
+
+    private fun handlePairIntent(intent: Intent?) {
+        val pairOffer =
+            intent?.getStringExtra("REFINEID_PAIR_OFFER")
+                ?: intent?.getStringExtra("pair_code")
+        if (!pairOffer.isNullOrBlank()) {
+            rappPairingModel?.connectWithCode(pairOffer)
+        }
+    }
+
+    private fun handleAuthPinIntent(intent: Intent?) {
+        val pin = intent?.getStringExtra("REFINEID_AUTH_PIN")
+        if (!pin.isNullOrBlank()) {
+            val app = application as? ReFineIdApplication ?: return
+            app.rappAuthorizationInbox.currentRequest
+                ?.onApproved
+                ?.invoke(pin)
+        }
     }
 
     override fun onDestroy() {

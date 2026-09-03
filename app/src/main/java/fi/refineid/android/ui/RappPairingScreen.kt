@@ -124,7 +124,7 @@ internal fun RappPairingScreen(
                     onClick = { model.startCodeEntry() },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Enter Code from Mac")
+                    Text("Enter Code from Computer")
                 }
             }
 
@@ -142,12 +142,12 @@ internal fun RappPairingScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Text(
-                            text = "Pair with Mac",
+                            text = "Pair with Computer",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "Enter this 6-digit code on your Mac:",
+                            text = "Enter this 6-digit code on your computer:",
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                         )
@@ -194,12 +194,12 @@ internal fun RappPairingScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Text(
-                            text = "Connect to Mac",
+                            text = "Connect to Computer",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "Type the 6-digit code shown on your Mac:",
+                            text = "Type the 6-digit code shown on your computer:",
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                         )
