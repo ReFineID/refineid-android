@@ -143,17 +143,6 @@ internal fun RappPairingScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
-                            Text(
-                                text = stringResource(R.string.connect_to_computer),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = stringResource(R.string.enter_code_from_computer),
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Center,
-                            )
-
                             OutlinedTextField(
                                 value = codeInput,
                                 onValueChange = { codeInput = RappPairingCode.normalize(it) },

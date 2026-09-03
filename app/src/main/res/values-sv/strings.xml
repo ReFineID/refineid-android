@@ -49,8 +49,6 @@
     <string name="share_photo">Dela bild</string>
     <string name="photo_copied">Bilden kopierades till urklipp</string>
     <string name="connected_to_computer">Ansluten till dator</string>
-    <string name="connect_to_computer">Anslut till dator</string>
-    <string name="enter_code_from_computer">Ange den 6-siffriga koden som visas på datorn:</string>
     <string name="disconnect">Koppla från</string>
     <string name="pairing_failed">Anslutning misslyckades</string>
     <string name="pairing_success">Anslutningen lyckades!</string>
