@@ -3,6 +3,7 @@
 package fi.refineid.android.rapp
 
 import android.content.Context
+import fi.refineid.android.BuildConfig
 import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationPinCache
 import fi.refineid.android.core.AuthenticationSignResult
@@ -175,28 +176,33 @@ internal class RappPhoneProxyDispatcher(
         }
     }
 
+    private val pendingPins = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     private fun handleBridgeAction(
         action: uniffi.refineid_rapp.RappBridgeAction,
         bridge: RappOperationBridge,
     ) {
+        if (action.kind == RappBridgeActionKind.SEND_FRAME) {
+            action.frame?.let { frame ->
+                try {
+                    activeListener?.send(frame)
+                } catch (e: Exception) {
+                    android.util.Log.e("PROXY_DISPATCH", "send frame failed", e)
+                }
+            }
+            return
+        }
+
         val opId = action.operationId ?: return
         val opIdHex = opId.joinToString("") { "%02x".format(it) }
 
         when (action.kind) {
-            RappBridgeActionKind.SEND_FRAME -> {
-                action.frame?.let { frame ->
-                    try {
-                        activeListener?.send(frame)
-                    } catch (_: Exception) {
-                    }
-                }
-            }
-
             RappBridgeActionKind.INSPECT_PREREQUISITES -> {
                 try {
                     val resp = bridge.prerequisitesComplete(opId)
                     handleBridgeAction(resp, bridge)
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    android.util.Log.e("PROXY_DISPATCH", "prerequisitesComplete failed", e)
                 }
             }
 
@@ -206,67 +212,113 @@ internal class RappPhoneProxyDispatcher(
 
             RappBridgeActionKind.AWAIT_USER_APPROVAL -> {
                 val desc = action.operation ?: return
-                when (desc.kind) {
-                    RappOperationKind.BROWSER_AUTHENTICATE -> {
-                        // Check if PIN1 is cached
-                        val cachedPin = pinCache?.take()
-                        if (cachedPin != null) {
-                            cachedPin.consume { pinBytes ->
-                                val pinString = String(pinBytes, Charsets.US_ASCII)
-                                executeBrowserAuth(opId, desc, pinString, bridge)
-                            }
-                        } else {
-                            inbox.ask(
-                                requestId = opIdHex,
-                                requester = "Mac (Safari)",
-                                action = RappAuthAction.BROWSER_AUTH,
-                                onApproved = { pin1 ->
-                                    executeBrowserAuth(opId, desc, pin1, bridge)
-                                },
-                                onDenied = {
-                                    try {
-                                        val resp = bridge.deny(opId)
-                                        handleBridgeAction(resp, bridge)
-                                    } catch (_: Exception) {
-                                    }
-                                },
-                            )
-                        }
-                    }
+                handleApproval(desc, opId, opIdHex, bridge)
+            }
 
-                    RappOperationKind.SIGN_DOCUMENT -> {
-                        inbox.ask(
-                            requestId = opIdHex,
-                            requester = "Mac",
-                            action = RappAuthAction.DOCUMENT_SIGN,
-                            onApproved = { pin2 ->
-                                executeDocumentSign(opId, desc, pin2, bridge)
-                            },
-                            onDenied = {
-                                try {
-                                    val resp = bridge.deny(opId)
-                                    handleBridgeAction(resp, bridge)
-                                } catch (_: Exception) {
-                                }
-                            },
-                        )
-                    }
-
-                    else -> {
-                        try {
-                            val resp = bridge.approve(opId, RappClock.monotonicMs())
-                            handleBridgeAction(resp, bridge)
-                        } catch (_: Exception) {
-                        }
-                    }
-                }
+            RappBridgeActionKind.EXECUTE_CARD_COMMAND -> {
+                val desc = action.operation ?: return
+                handleExecute(desc, opId, opIdHex, bridge)
             }
 
             RappBridgeActionKind.RESULT_ACKNOWLEDGMENT -> {
                 try {
                     bridge.acknowledgmentReleased(opId)
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    android.util.Log.e("PROXY_DISPATCH", "acknowledgmentReleased failed", e)
                 }
+            }
+
+            else -> {
+            }
+        }
+    }
+
+    private fun handleApproval(
+        desc: uniffi.refineid_rapp.RappOperationDescriptor,
+        opId: ByteArray,
+        opIdHex: String,
+        bridge: RappOperationBridge,
+    ) {
+        when (desc.kind) {
+            RappOperationKind.BROWSER_AUTHENTICATE -> {
+                val cachedPin = pinCache?.take()
+                if (cachedPin != null) {
+                    cachedPin.consume { pinBytes ->
+                        pendingPins[opIdHex] = String(pinBytes, Charsets.US_ASCII)
+                    }
+                    approve(opId, bridge)
+                } else {
+                    inbox.ask(
+                        requestId = opIdHex,
+                        requester = "Mac (Safari)",
+                        action = RappAuthAction.BROWSER_AUTH,
+                        onApproved = { pin1 ->
+                            pinCache?.recordVerified(pin1.toByteArray(Charsets.US_ASCII))
+                            pendingPins[opIdHex] = pin1
+                            approve(opId, bridge)
+                        },
+                        onDenied = { deny(opId, bridge) },
+                    )
+                }
+            }
+
+            RappOperationKind.SIGN_DOCUMENT -> {
+                inbox.ask(
+                    requestId = opIdHex,
+                    requester = "Mac",
+                    action = RappAuthAction.DOCUMENT_SIGN,
+                    onApproved = { pin2 ->
+                        pendingPins[opIdHex] = pin2
+                        approve(opId, bridge)
+                    },
+                    onDenied = { deny(opId, bridge) },
+                )
+            }
+
+            else -> {
+                approve(opId, bridge)
+            }
+        }
+    }
+
+    private fun approve(
+        opId: ByteArray,
+        bridge: RappOperationBridge,
+    ) {
+        try {
+            val resp = bridge.approve(opId, RappClock.monotonicMs())
+            handleBridgeAction(resp, bridge)
+        } catch (e: Exception) {
+            android.util.Log.e("PROXY_DISPATCH", "approve failed", e)
+        }
+    }
+
+    private fun deny(
+        opId: ByteArray,
+        bridge: RappOperationBridge,
+    ) {
+        try {
+            val resp = bridge.deny(opId)
+            handleBridgeAction(resp, bridge)
+        } catch (e: Exception) {
+            android.util.Log.e("PROXY_DISPATCH", "deny failed", e)
+        }
+    }
+
+    private fun handleExecute(
+        desc: uniffi.refineid_rapp.RappOperationDescriptor,
+        opId: ByteArray,
+        opIdHex: String,
+        bridge: RappOperationBridge,
+    ) {
+        val pin = pendingPins.remove(opIdHex) ?: ""
+        when (desc.kind) {
+            RappOperationKind.BROWSER_AUTHENTICATE -> {
+                executeBrowserAuth(opId, desc, pin, bridge)
+            }
+
+            RappOperationKind.SIGN_DOCUMENT -> {
+                executeDocumentSign(opId, desc, pin, bridge)
             }
 
             else -> {
