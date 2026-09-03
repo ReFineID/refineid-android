@@ -22,6 +22,7 @@ import uniffi.refineid_rapp.RappOperationDescriptor
 import uniffi.refineid_rapp.RappOperationKind
 import uniffi.refineid_rapp.RappPairRecord
 import uniffi.refineid_rapp.RappSessionBridge
+import uniffi.refineid_rapp.RappSignatureAlgorithm
 import uniffi.refineid_rapp.rappStreamSessionPreamble
 import java.security.SecureRandom
 
@@ -48,6 +49,8 @@ internal class RappPhoneProxyDispatcher(
     companion object {
         /** Maximum time to wait for an NFC card certificate read before reporting card-removed. */
         private const val CERT_READ_TIMEOUT_MS = 5_000L
+        private const val SHA256_DIGEST_LENGTH = 32
+        private const val SHA384_DIGEST_LENGTH = 48
     }
 
     fun startListening(
@@ -375,7 +378,8 @@ internal class RappPhoneProxyDispatcher(
     ) {
         scope.launch(Dispatchers.IO) {
             val service = authCardService()
-            if (service == null) {
+            val algorithm = resolveSignAlgorithm(desc)
+            if (service == null || algorithm == null) {
                 try {
                     val resp = bridge.credentialRejected(opId, RappClock.monotonicMs())
                     handleBridgeAction(resp, bridge)
@@ -385,7 +389,7 @@ internal class RappPhoneProxyDispatcher(
             }
             val result =
                 service.signAuthenticationDigest(
-                    algorithm = AuthenticationSigningAlgorithm.ECDSA_P384_SHA384,
+                    algorithm = algorithm,
                     pin1 = Pin1Submission.from(pin1),
                     digest = desc.digest,
                 )
@@ -408,6 +412,24 @@ internal class RappPhoneProxyDispatcher(
             }
         }
     }
+
+    private fun resolveSignAlgorithm(desc: RappOperationDescriptor): AuthenticationSigningAlgorithm? =
+        when (desc.algorithm) {
+            RappSignatureAlgorithm.ECDSA_SHA256 -> AuthenticationSigningAlgorithm.ECDSA_P384_SHA256
+            RappSignatureAlgorithm.ECDSA_SHA384 -> AuthenticationSigningAlgorithm.ECDSA_P384_SHA384
+            RappSignatureAlgorithm.RSA_PKCS1_SHA256 -> AuthenticationSigningAlgorithm.RSA_PKCS1_SHA256
+            RappSignatureAlgorithm.RSA_PKCS1_SHA384 -> AuthenticationSigningAlgorithm.RSA_PKCS1_SHA384
+            RappSignatureAlgorithm.RSA_PKCS1_SHA512 -> AuthenticationSigningAlgorithm.RSA_PKCS1_SHA512
+            RappSignatureAlgorithm.RSA_PSS_SHA256 -> AuthenticationSigningAlgorithm.RSA_PSS_SHA256
+            else -> fallbackSignAlgorithm(desc.digest.size)
+        }
+
+    private fun fallbackSignAlgorithm(digestSize: Int): AuthenticationSigningAlgorithm? =
+        when (digestSize) {
+            SHA256_DIGEST_LENGTH -> AuthenticationSigningAlgorithm.ECDSA_P384_SHA256
+            SHA384_DIGEST_LENGTH -> AuthenticationSigningAlgorithm.ECDSA_P384_SHA384
+            else -> null
+        }
 
     private fun executeDocumentSign(
         opId: ByteArray,

@@ -39,6 +39,8 @@ internal sealed interface PairingPhase {
     ) : PairingPhase
 }
 
+private const val LISTENER_CLOSE_DELAY_MS = 2000L
+
 internal class RappPairingModel(
     private val context: Context,
     private val scope: CoroutineScope,
@@ -181,8 +183,12 @@ internal class RappPairingModel(
                             )
                             phase = PairingPhase.Paired(peer)
 
-                            browser?.close()
+                            val oldBrowser = browser
                             browser = null
+                            scope.launch {
+                                kotlinx.coroutines.delay(LISTENER_CLOSE_DELAY_MS)
+                                oldBrowser?.close()
+                            }
 
                             val rendezvousToken = record.metadata().rendezvousToken
                             val sessionRendezvousName = StreamRendezvousName.name(sharingValue = rendezvousToken)
@@ -351,8 +357,12 @@ internal class RappPairingModel(
                             )
                             phase = PairingPhase.Paired(peer)
 
-                            listener?.close()
+                            val oldListener = listener
                             listener = null
+                            scope.launch {
+                                kotlinx.coroutines.delay(LISTENER_CLOSE_DELAY_MS)
+                                oldListener?.close()
+                            }
 
                             val rendezvousToken = record.metadata().rendezvousToken
                             val sessionRendezvousName = StreamRendezvousName.name(sharingValue = rendezvousToken)

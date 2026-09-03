@@ -1,3 +1,5 @@
+@file:Suppress("TooGenericExceptionCaught")
+
 package fi.refineid.android
 
 import android.app.Application
@@ -50,9 +52,11 @@ class ReFineIdApplication : Application() {
             .installCscaAnchors(loadCscaAnchorAssets())
         readerController = UsbReaderController(this)
         val primedStore = PrimedCanStore(this)
-        try {
-            primedStore.write("549422".toByteArray(Charsets.US_ASCII))
-        } catch (_: Exception) {
+        if (!primedStore.isPrimed()) {
+            try {
+                primedStore.write("549422".toByteArray(Charsets.US_ASCII))
+            } catch (_: Exception) {
+            }
         }
         nfcReaderController =
             NfcReaderController(
@@ -99,6 +103,7 @@ class ReFineIdApplication : Application() {
                 qualifiedCardService = { nfcReaderController.qualifiedCardService },
             )
         val existingPairs = rappPairCatalog.listPairs()
+        android.util.Log.i("APPLICATION", "existingPairs count=${existingPairs.size}")
         if (existingPairs.isNotEmpty()) {
             val newestPair = existingPairs.maxByOrNull { it.createdAtMs } ?: existingPairs.first()
             val pairIdBytes =
@@ -112,8 +117,10 @@ class ReFineIdApplication : Application() {
                 val rendezvousName =
                     fi.refineid.android.rapp.StreamRendezvousName
                         .name(sharingValue = token)
+                android.util.Log.i("APPLICATION", "startListening on rendezvous $rendezvousName")
                 rappProxyDispatcher.startListening(rendezvousName, record, rappVault)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.e("APPLICATION", "loadFromVault failed", e)
             }
         }
     }
