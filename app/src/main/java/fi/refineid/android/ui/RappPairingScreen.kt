@@ -150,7 +150,7 @@ internal fun RappPairingScreen(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
                                 textStyle =
-                                    MaterialTheme.typography.headlineMedium.copy(
+                                    MaterialTheme.typography.bodyLarge.copy(
                                         textAlign = TextAlign.Center,
                                         fontFamily = FontFamily.Monospace,
                                     ),
