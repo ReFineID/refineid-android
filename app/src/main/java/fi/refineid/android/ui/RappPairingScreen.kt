@@ -340,13 +340,15 @@ internal fun RappPairingScreen(
                                     modifier = Modifier.size(36.dp),
                                 )
                                 Column {
+                                    val details = cardDetails ?: PersonCardDetails.fromHolderName(holderName)
+                                    val displayName = details.fullName.ifBlank { holderName }
                                     Text(
-                                        text = holderName,
+                                        text = displayName,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                     )
-                                    val identifier = cardDetails?.identifier
-                                    if (identifier != null) {
+                                    val identifier = details.identifier
+                                    if (!identifier.isNullOrBlank() && !displayName.contains(identifier)) {
                                         Text(
                                             text = identifier,
                                             style = MaterialTheme.typography.bodyMedium,
