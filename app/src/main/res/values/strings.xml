@@ -52,4 +52,11 @@
     <string name="copy_photo">Copy photo</string>
     <string name="share_photo">Share photo</string>
     <string name="photo_copied">Photo copied to clipboard</string>
+    <string name="connected_to_computer">Connected to computer</string>
+    <string name="connect_to_computer">Connect to computer</string>
+    <string name="enter_code_from_computer">Type the 6-digit code shown on your computer:</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="pairing_failed">Pairing failed</string>
+    <string name="pairing_success">Successfully paired!</string>
+    <string name="pairing_code">Pairing code</string>
 </resources>

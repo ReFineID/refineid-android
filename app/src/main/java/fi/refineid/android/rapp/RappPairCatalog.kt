@@ -52,15 +52,15 @@ internal class RappPairCatalog(
         createdAtMs: Long,
     ) {
         val hex = pairId.joinToString("") { "%02x".format(it) }
-        val current = listPairs().filter { it.pairIdHex != hex }.toMutableList()
-        current.add(
-            PairedPeer(
-                pairIdHex = hex,
-                displayName = displayName,
-                platform = platform,
-                createdAtMs = createdAtMs,
-            ),
-        )
+        val current =
+            listOf(
+                PairedPeer(
+                    pairIdHex = hex,
+                    displayName = displayName,
+                    platform = platform,
+                    createdAtMs = createdAtMs,
+                ),
+            )
         val arr = JSONArray()
         for (p in current) {
             val obj = JSONObject()
@@ -85,5 +85,9 @@ internal class RappPairCatalog(
             arr.put(obj)
         }
         prefs.edit { putString(KEY_PAIRS, arr.toString()) }
+    }
+
+    fun clearAll() {
+        prefs.edit { remove(KEY_PAIRS) }
     }
 }

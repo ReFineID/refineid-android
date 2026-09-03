@@ -53,12 +53,31 @@ internal class RappPairingModel(
     private var proxyHandshakeStep = 0
     private var requesterHandshakeStep = 0
     private var receivedPeerHello: uniffi.refineid_rapp.RappPeerHello? = null
+    private val app = context.applicationContext as? fi.refineid.android.ReFineIdApplication
 
     var phase by mutableStateOf<PairingPhase>(PairingPhase.Idle)
         private set
 
     var pairedDevices by mutableStateOf<List<PairedPeer>>(catalog.listPairs())
         private set
+
+    var activeConnectedPeer by mutableStateOf<PairedPeer?>(null)
+        private set
+
+    init {
+        val dispatcher = app?.rappProxyDispatcher
+        if (dispatcher != null) {
+            scope.launch {
+                dispatcher.connectedPeer.collect { peer ->
+                    activeConnectedPeer = peer
+                }
+            }
+        }
+    }
+
+    fun disconnectActivePeer() {
+        app?.rappProxyDispatcher?.disconnectClient()
+    }
 
     fun createOffer() {
         reset()
@@ -424,6 +443,7 @@ internal class RappPairingModel(
         if (pairedDevices.isEmpty()) {
             app?.rappProxyDispatcher?.stopListening()
         }
+        activeConnectedPeer = null
     }
 
     fun reset() {

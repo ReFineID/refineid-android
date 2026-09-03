@@ -277,6 +277,10 @@ internal fun MainScreen(
                 rappPairingModel?.let { model ->
                     RappPairingScreen(
                         model = model,
+                        pinCache = pinCache,
+                        onConnectCard = { can, pin1 ->
+                            onNfcConnect(can, pin1)
+                        },
                         onBack = {
                             model.reset()
                             destination = MainDestination.HOME

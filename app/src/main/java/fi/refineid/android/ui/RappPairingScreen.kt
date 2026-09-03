@@ -43,10 +43,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fi.refineid.android.R
+import fi.refineid.android.core.AuthenticationPinCache
+import fi.refineid.android.core.CanSessionStore
+import fi.refineid.android.core.CanSubmission
+import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.rapp.PairingPhase
 import fi.refineid.android.rapp.RappPairingCode
 import fi.refineid.android.rapp.RappPairingModel
@@ -55,10 +60,11 @@ import fi.refineid.android.rapp.RappPairingModel
 @Composable
 internal fun RappPairingScreen(
     model: RappPairingModel,
+    pinCache: AuthenticationPinCache? = null,
+    onConnectCard: (CanSubmission?, Pin1Submission?) -> Unit = { _, _ -> },
     onBack: () -> Unit,
 ) {
     val phase = model.phase
-    val pairedDevices = model.pairedDevices
 
     Column(
         modifier =
@@ -68,63 +74,174 @@ internal fun RappPairingScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         when (phase) {
-            is PairingPhase.Idle -> {
-                if (pairedDevices.isNotEmpty()) {
+            is PairingPhase.Idle, is PairingPhase.CodeEntry -> {
+                val connectedPeer = model.activeConnectedPeer
+                if (connectedPeer != null) {
                     Text(
-                        text = "Paired Computers",
+                        text = stringResource(R.string.connected_to_computer),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    pairedDevices.forEach { device ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    ) {
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column {
-                                    Text(
-                                        text = device.displayName,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Medium,
-                                    )
-                                    Text(
-                                        text = device.platform,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                IconButton(onClick = { model.removePair(device.pairIdHex) }) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Delete,
-                                        contentDescription = "Remove paired device",
-                                        tint = MaterialTheme.colorScheme.error,
-                                    )
-                                }
+                            Column {
+                                Text(
+                                    text = connectedPeer.displayName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    text = connectedPeer.platform,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            IconButton(onClick = { model.removePair(connectedPeer.pairIdHex) }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Delete,
+                                    contentDescription = stringResource(R.string.forget),
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                }
+                    Button(
+                        onClick = { model.disconnectActivePeer() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                    ) {
+                        Text(stringResource(R.string.disconnect))
+                    }
+                } else {
+                    var codeInput by remember { mutableStateOf("") }
+                    val initialCan = remember { CanSessionStore.currentCan ?: "" }
+                    var canInput by remember { mutableStateOf(initialCan) }
+                    var pin1Input by remember { mutableStateOf(pinCache?.peekPin() ?: "") }
+                    val canValid = CanSubmission.isComplete(canInput)
+                    val codeValid = RappPairingCode.isValid(codeInput)
 
-                Button(
-                    onClick = { model.createOffer() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Pair New Computer (Generate Code)")
-                }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    ) {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.connect_to_computer),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = stringResource(R.string.enter_code_from_computer),
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
+                            )
 
-                OutlinedButton(
-                    onClick = { model.startCodeEntry() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Enter Code from Computer")
+                            OutlinedTextField(
+                                value = codeInput,
+                                onValueChange = { codeInput = RappPairingCode.normalize(it) },
+                                label = { Text(stringResource(R.string.pairing_code)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                textStyle =
+                                    MaterialTheme.typography.headlineMedium.copy(
+                                        textAlign = TextAlign.Center,
+                                        fontFamily = FontFamily.Monospace,
+                                    ),
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = {
+                                    Text(
+                                        "000000",
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                },
+                            )
+
+                            OutlinedTextField(
+                                value = canInput,
+                                onValueChange = { canInput = it.filter { c -> c in '0'..'9' }.take(6) },
+                                label = { Text(stringResource(R.string.can)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                textStyle =
+                                    MaterialTheme.typography.bodyLarge.copy(
+                                        textAlign = TextAlign.Center,
+                                        fontFamily = FontFamily.Monospace,
+                                    ),
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = {
+                                    Text(
+                                        "123456",
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                },
+                            )
+
+                            OutlinedTextField(
+                                value = pin1Input,
+                                onValueChange = { pin1Input = it.filter { c -> c in '0'..'9' }.take(4) },
+                                label = { Text(stringResource(R.string.pin1_optional)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true,
+                                textStyle =
+                                    MaterialTheme.typography.bodyLarge.copy(
+                                        textAlign = TextAlign.Center,
+                                        fontFamily = FontFamily.Monospace,
+                                    ),
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = {
+                                    Text(
+                                        if (pinCache?.hasPin == true) "••••" else "",
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                },
+                            )
+
+                            Button(
+                                onClick = {
+                                    CanSessionStore.remember(canInput)
+                                    val canSubmission = CanSubmission.from(canInput)
+                                    val pin1Submission =
+                                        if (Pin1Submission.isComplete(pin1Input)) {
+                                            val pinBytes = pin1Input.toByteArray(Charsets.US_ASCII)
+                                            pinCache?.recordVerified(pinBytes)
+                                            Pin1Submission.from(pin1Input)
+                                        } else if (pinCache?.hasPin == true) {
+                                            pinCache.take()
+                                        } else {
+                                            null
+                                        }
+                                    onConnectCard(canSubmission, pin1Submission)
+                                    model.connectWithCode(codeInput)
+                                },
+                                enabled = codeValid && canValid,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(R.string.pair_computer))
+                            }
+                        }
+                    }
                 }
             }
 
@@ -142,16 +259,10 @@ internal fun RappPairingScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Text(
-                            text = "Pair with Computer",
+                            text = stringResource(R.string.pair_computer),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
-                        Text(
-                            text = "Enter this 6-digit code on your computer:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                        )
-
                         Text(
                             text = RappPairingCode.formatted(phase.code),
                             style = MaterialTheme.typography.headlineLarge,
@@ -161,81 +272,11 @@ internal fun RappPairingScreen(
                             letterSpacing = 4.sp,
                             color = MaterialTheme.colorScheme.primary,
                         )
-
-                        Text(
-                            text = "Expires in ${phase.secondsRemaining}s",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
                         Button(
                             onClick = { model.reset() },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                         ) {
-                            Text("Cancel")
-                        }
-                    }
-                }
-            }
-
-            is PairingPhase.CodeEntry -> {
-                var codeInput by remember { mutableStateOf("") }
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                ) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        Text(
-                            text = "Connect to Computer",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = "Type the 6-digit code shown on your computer:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                        )
-
-                        OutlinedTextField(
-                            value = codeInput,
-                            onValueChange = { codeInput = RappPairingCode.normalize(it) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            textStyle =
-                                MaterialTheme.typography.headlineMedium.copy(
-                                    textAlign = TextAlign.Center,
-                                    fontFamily = FontFamily.Monospace,
-                                ),
-                            modifier = Modifier.fillMaxWidth(0.8f),
-                            placeholder = {
-                                Text(
-                                    "000000",
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            },
-                        )
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            OutlinedButton(onClick = { model.reset() }) {
-                                Text("Back")
-                            }
-                            Button(
-                                onClick = { model.connectWithCode(codeInput) },
-                                enabled = RappPairingCode.isValid(codeInput),
-                            ) {
-                                Text("Connect")
-                            }
+                            Text(stringResource(R.string.cancel))
                         }
                     }
                 }
@@ -284,16 +325,16 @@ internal fun RappPairingScreen(
                             modifier = Modifier.size(48.dp),
                         )
                         Text(
-                            text = "Successfully Paired!",
+                            text = stringResource(R.string.pairing_success),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            text = "Paired with ${phase.peer.displayName} (${phase.peer.platform})",
+                            text = "${phase.peer.displayName} (${phase.peer.platform})",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Button(onClick = { model.reset() }) {
-                            Text("Done")
+                            Text(stringResource(R.string.ready))
                         }
                     }
                 }
@@ -319,7 +360,7 @@ internal fun RappPairingScreen(
                             modifier = Modifier.size(48.dp),
                         )
                         Text(
-                            text = "Pairing Failed",
+                            text = stringResource(R.string.pairing_failed),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                         )
@@ -329,7 +370,7 @@ internal fun RappPairingScreen(
                             textAlign = TextAlign.Center,
                         )
                         Button(onClick = { model.reset() }) {
-                            Text("Try Again")
+                            Text(stringResource(R.string.retry))
                         }
                     }
                 }

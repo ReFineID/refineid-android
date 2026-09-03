@@ -48,4 +48,11 @@
     <string name="copy_photo">Kopioi kuva</string>
     <string name="share_photo">Jaa kuva</string>
     <string name="photo_copied">Kuva kopioitu leikepöydälle</string>
+    <string name="connected_to_computer">Yhdistetty tietokoneeseen</string>
+    <string name="connect_to_computer">Yhdistä tietokoneeseen</string>
+    <string name="enter_code_from_computer">Syötä tietokoneella näkyvä 6-numeroinen koodi:</string>
+    <string name="disconnect">Katkaise yhteys</string>
+    <string name="pairing_failed">Yhdistäminen epäonnistui</string>
+    <string name="pairing_success">Yhdistetty onnistuneesti!</string>
+    <string name="pairing_code">Pariliitoskoodi</string>
 </resources>

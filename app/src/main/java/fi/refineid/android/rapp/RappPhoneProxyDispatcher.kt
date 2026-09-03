@@ -1,4 +1,4 @@
-@file:Suppress("UnusedParameter", "TooGenericExceptionCaught")
+@file:Suppress("UnusedParameter", "TooGenericExceptionCaught", "TooManyFunctions")
 
 package fi.refineid.android.rapp
 
@@ -13,6 +13,9 @@ import fi.refineid.android.core.QualifiedCardService
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.refineid_rapp.RappBridgeActionKind
@@ -49,6 +52,9 @@ internal class RappPhoneProxyDispatcher(
     private val catalog = RappPairCatalog(context)
     private var isClosed = false
 
+    private val _connectedPeer = MutableStateFlow<PairedPeer?>(null)
+    val connectedPeer: StateFlow<PairedPeer?> = _connectedPeer.asStateFlow()
+
     companion object {
         /** Maximum time to wait for an NFC card certificate read before reporting card-removed. */
         private const val CERT_READ_TIMEOUT_MS = 5_000L
@@ -82,7 +88,26 @@ internal class RappPhoneProxyDispatcher(
         sessionBridge = null
         pairRecord = null
         vault = null
+        _connectedPeer.value = null
         inbox.dismissAll()
+    }
+
+    fun disconnectClient() {
+        activeListener?.close()
+        sessionBridge?.close()
+        sessionBridge = null
+        sessionHandshakeDone = false
+        operationBridge?.close()
+        operationBridge = null
+        _connectedPeer.value = null
+        inbox.dismissAll()
+        val currentPair = pairRecord
+        val vlt = vault
+        if (currentPair != null && vlt != null && !isClosed) {
+            val token = currentPair.metadata().rendezvousToken
+            val name = StreamRendezvousName.name(sharingValue = token)
+            startListening(name, currentPair, vlt)
+        }
     }
 
     private fun handleRelayEvent(event: StreamRelayEvent) {
@@ -179,6 +204,19 @@ internal class RappPhoneProxyDispatcher(
                             nowMs = RappClock.wallMs(),
                         )
                     operationBridge = newOpBridge
+                    val currentPair = pairRecord
+                    if (currentPair != null) {
+                        val hex = currentPair.metadata().pairId.joinToString("") { "%02x".format(it) }
+                        val peer =
+                            catalog.listPairs().firstOrNull { it.pairIdHex == hex }
+                                ?: PairedPeer(
+                                    pairIdHex = hex,
+                                    displayName = "Computer",
+                                    platform = "macOS",
+                                    createdAtMs = System.currentTimeMillis(),
+                                )
+                        _connectedPeer.value = peer
+                    }
                 } catch (_: Exception) {
                 }
             }
@@ -189,6 +227,7 @@ internal class RappPhoneProxyDispatcher(
                 sessionHandshakeDone = false
                 operationBridge?.close()
                 operationBridge = null
+                _connectedPeer.value = null
                 inbox.dismissAll()
             }
         }
