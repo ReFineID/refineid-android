@@ -327,6 +327,18 @@ internal class RappPhoneProxyDispatcher(
         }
     }
 
+    /** Tears down the active stream so Mac must reconnect for the next request. */
+    private fun dropConnection() {
+        activeListener?.close()
+        activeListener = null
+        operationBridge?.close()
+        operationBridge = null
+        sessionBridge?.close()
+        sessionBridge = null
+        sessionHandshakeDone = false
+        pendingPins.clear()
+    }
+
     private fun deny(
         opId: ByteArray,
         bridge: RappOperationBridge,
@@ -338,14 +350,7 @@ internal class RappPhoneProxyDispatcher(
                 android.util.Log.e("PROXY_DISPATCH", "deny failed", e)
             }
             // Drop the stream so Mac cannot immediately re-request on the same session.
-            activeListener?.close()
-            activeListener = null
-            operationBridge?.close()
-            operationBridge = null
-            sessionBridge?.close()
-            sessionBridge = null
-            sessionHandshakeDone = false
-            pendingPins.clear()
+            dropConnection()
         }
     }
 
@@ -437,22 +442,25 @@ internal class RappPhoneProxyDispatcher(
                         ?: "Computer"
                 val opIdHex = opId.joinToString("") { "%02x".format(it) }
                 var cancelled = false
-                inbox.showTapPrompt(
-                    requestId = opIdHex,
-                    requester = requesterName,
-                    action = RappAuthAction.BROWSER_AUTH,
-                    onCancel = {
-                        cancelled = true
-                    },
-                )
-                val ready = awaitCardReady()
-                inbox.dismissTapPrompt(opIdHex)
-                if (!ready || cancelled) {
+                var ready = false
+                // Loop: timeout re-shows the prompt; explicit Cancel breaks out.
+                while (!ready && !cancelled) {
+                    inbox.showTapPrompt(
+                        requestId = opIdHex,
+                        requester = requesterName,
+                        action = RappAuthAction.BROWSER_AUTH,
+                        onCancel = { cancelled = true },
+                    )
+                    ready = awaitCardReady()
+                    inbox.dismissTapPrompt(opIdHex)
+                }
+                if (cancelled || !ready) {
                     try {
-                        val resp = bridge.credentialRejected(opId, RappClock.monotonicMs())
-                        handleBridgeAction(resp, bridge)
+                        bridge.credentialRejected(opId, RappClock.monotonicMs())
                     } catch (_: Exception) {
                     }
+                    // User explicitly pressed Cancel — drop the connection.
+                    dropConnection()
                     return@launch
                 }
             }
