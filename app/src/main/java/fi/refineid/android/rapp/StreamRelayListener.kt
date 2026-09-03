@@ -5,6 +5,7 @@ package fi.refineid.android.rapp
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import fi.refineid.android.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -70,19 +71,37 @@ internal class StreamRelayListener(
 
             val regListener =
                 object : NsdManager.RegistrationListener {
-                    override fun onServiceRegistered(serviceInfo: NsdServiceInfo) = Unit
+                    override fun onServiceRegistered(serviceInfo: NsdServiceInfo) {
+                        if (BuildConfig.DEBUG) {
+                            android.util.Log.i("STREAM_LISTENER", "onServiceRegistered: ${serviceInfo.serviceName}")
+                        }
+                    }
 
                     override fun onRegistrationFailed(
                         serviceInfo: NsdServiceInfo,
                         errorCode: Int,
-                    ) = Unit
+                    ) {
+                        android.util.Log.e(
+                            "STREAM_LISTENER",
+                            "onRegistrationFailed: ${serviceInfo.serviceName}, errorCode: $errorCode",
+                        )
+                    }
 
-                    override fun onServiceUnregistered(serviceInfo: NsdServiceInfo) = Unit
+                    override fun onServiceUnregistered(serviceInfo: NsdServiceInfo) {
+                        if (BuildConfig.DEBUG) {
+                            android.util.Log.i("STREAM_LISTENER", "onServiceUnregistered: ${serviceInfo.serviceName}")
+                        }
+                    }
 
                     override fun onUnregistrationFailed(
                         serviceInfo: NsdServiceInfo,
                         errorCode: Int,
-                    ) = Unit
+                    ) {
+                        android.util.Log.e(
+                            "STREAM_LISTENER",
+                            "onUnregistrationFailed: ${serviceInfo.serviceName}, errorCode: $errorCode",
+                        )
+                    }
                 }
             registrationListener = regListener
             nsdManager?.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, regListener)
@@ -139,6 +158,7 @@ internal class StreamRelayListener(
 
     override fun close() {
         if (isClosed.compareAndSet(false, true)) {
+            if (BuildConfig.DEBUG) android.util.Log.i("STREAM_LISTENER", "close() called", Throwable("close() caller"))
             registrationListener?.let {
                 try {
                     nsdManager?.unregisterService(it)

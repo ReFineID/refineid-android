@@ -11,6 +11,7 @@
 //   google-play-developer-release-manager.main.kts add-group <track> <groupEmail>
 //   google-play-developer-release-manager.main.kts remove-group <track> <groupEmail>
 //   google-play-developer-release-manager.main.kts sync-groups <track> <groupsFile>
+//   google-play-developer-release-manager.main.kts promote <fromTrack> <toTrack>
 //   google-play-developer-release-manager.main.kts listings
 //   google-play-developer-release-manager.main.kts api <METHOD> <path> [jsonBody]
 
@@ -207,13 +208,16 @@ Usage:
       List Google Groups linked to the specified track (e.g. internal, alpha).
 
   google-play-developer-release-manager.main.kts add-group <track> <groupEmail>
-      Add/link a Google Group (e.g. refineid-testers@googlegroups.com) to a track.
+      Add/link a Google Group (e.g. refineid-test@googlegroups.com) to a track.
 
   google-play-developer-release-manager.main.kts remove-group <track> <groupEmail>
       Remove a Google Group from the specified track.
 
   google-play-developer-release-manager.main.kts sync-groups <track> <groupsFile>
       Synchronize a list of Google Groups from a newline-delimited text file.
+
+  google-play-developer-release-manager.main.kts promote <fromTrack> <toTrack>
+      Promote active releases from one track to another (e.g. internal -> alpha).
 
   google-play-developer-release-manager.main.kts listings
       Display store presence listings and descriptions across locales.
@@ -348,6 +352,33 @@ fun main(args: Array<String>) {
             }
         }
 
+        "promote" -> {
+            if (args.size < 3) fail("Usage: promote <fromTrack> <toTrack>")
+            val fromTrack = args[1]
+            val toTrack = args[2]
+
+            client.withEdit { editId ->
+                val sourceResp = client.request("GET", "$API_BASE/applications/$APP_PACKAGE/edits/$editId/tracks/$fromTrack")
+                if (sourceResp.statusCode() !in 200..299) {
+                    fail("Failed to fetch source track '$fromTrack': ${sourceResp.body()}")
+                }
+
+                val releasesMatch = "\"releases\"\\s*:\\s*(\\[[\\s\\S]*?\\])".toRegex().find(sourceResp.body())
+                    ?: fail("Source track '$fromTrack' has no releases to promote.")
+
+                val releasesJson = releasesMatch.groupValues[1]
+                val destBody = """{"track":"$toTrack","releases":$releasesJson}"""
+
+                val updateResp = client.request("PUT", "$API_BASE/applications/$APP_PACKAGE/edits/$editId/tracks/$toTrack", destBody)
+                if (updateResp.statusCode() !in 200..299) {
+                    fail("Failed to promote releases to track '$toTrack': ${updateResp.body()}")
+                }
+
+                note("Promoted releases from '$fromTrack' to '$toTrack'.")
+                client.commitEdit(editId)
+            }
+        }
+
         "listings" -> {
             client.withEdit { editId ->
                 val resp = client.request("GET", "$API_BASE/applications/$APP_PACKAGE/edits/$editId/listings")
@@ -361,7 +392,10 @@ fun main(args: Array<String>) {
             val path = args[2]
             val body = if (args.size >= 4) args.drop(3).joinToString(" ") else null
 
-            val url = if (path.startsWith("http")) path else "$API_BASE/$path".replace("//", "/")
+            val url = if (path.startsWith("http")) path else {
+                val cleanPath = path.removePrefix("/")
+                "$API_BASE/$cleanPath"
+            }
             val resp = client.request(method, url, body)
             println("Status: ${resp.statusCode()}")
             println(resp.body())

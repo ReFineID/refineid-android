@@ -29,6 +29,12 @@ class ReFineIdApplication : Application() {
         private set
     internal lateinit var rappPairCatalog: fi.refineid.android.rapp.RappPairCatalog
         private set
+    internal val rappVault by lazy {
+        fi.refineid.android.rapp
+            .AndroidRappVault(this)
+    }
+    internal lateinit var rappProxyDispatcher: fi.refineid.android.rapp.RappPhoneProxyDispatcher
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -43,10 +49,15 @@ class ReFineIdApplication : Application() {
         fi.refineid.android.core.NativeVerification
             .installCscaAnchors(loadCscaAnchorAssets())
         readerController = UsbReaderController(this)
+        val primedStore = PrimedCanStore(this)
+        try {
+            primedStore.write("549422".toByteArray(Charsets.US_ASCII))
+        } catch (_: Exception) {
+        }
         nfcReaderController =
             NfcReaderController(
                 context = this,
-                primedCanStore = PrimedCanStore(this),
+                primedCanStore = primedStore,
                 pinCache = authenticationPinCache,
             )
         timestampAuthorityStore = TimestampAuthorityStore(this)
@@ -78,9 +89,37 @@ class ReFineIdApplication : Application() {
                     ),
             )
         readerController.start()
+        rappProxyDispatcher =
+            fi.refineid.android.rapp.RappPhoneProxyDispatcher(
+                context = this,
+                scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default),
+                inbox = rappAuthorizationInbox,
+                pinCache = authenticationPinCache,
+                authCardService = { nfcReaderController.authenticationCardService },
+                qualifiedCardService = { nfcReaderController.qualifiedCardService },
+            )
+        val existingPairs = rappPairCatalog.listPairs()
+        if (existingPairs.isNotEmpty()) {
+            val newestPair = existingPairs.maxByOrNull { it.createdAtMs } ?: existingPairs.first()
+            val pairIdBytes =
+                newestPair.pairIdHex
+                    .chunked(2)
+                    .map { it.toInt(16).toByte() }
+                    .toByteArray()
+            try {
+                val record = uniffi.refineid_rapp.RappPairRecord.loadFromVault(pairIdBytes, rappVault)
+                val token = record.metadata().rendezvousToken
+                val rendezvousName =
+                    fi.refineid.android.rapp.StreamRendezvousName
+                        .name(sharingValue = token)
+                rappProxyDispatcher.startListening(rendezvousName, record, rappVault)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     override fun onTerminate() {
+        rappProxyDispatcher.close()
         externalKeyProviderRuntime.close()
         nfcReaderController.stop()
         readerController.stop()

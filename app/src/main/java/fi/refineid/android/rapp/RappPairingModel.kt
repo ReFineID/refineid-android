@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import fi.refineid.android.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import uniffi.refineid_rapp.RappPairingBridge
 import uniffi.refineid_rapp.RappTransportCandidate
+import uniffi.refineid_rapp.rappStreamPairingPreamble
 
 internal sealed interface PairingPhase {
     data object Idle : PairingPhase
@@ -46,6 +48,8 @@ internal class RappPairingModel(
     private var browser: StreamRelayBrowser? = null
     private var pairingBridge: RappPairingBridge? = null
     private var timerJob: Job? = null
+    private var proxyHandshakeStep = 0
+    private var requesterHandshakeStep = 0
 
     var phase by mutableStateOf<PairingPhase>(PairingPhase.Idle)
         private set
@@ -91,29 +95,33 @@ internal class RappPairingModel(
             phase = PairingPhase.Offering(code = code, secondsRemaining = 180)
             startCountdown()
 
-            val relayListener =
-                StreamRelayListener(context, scope) { event ->
-                    handleListenerEvent(event, bridge)
+            bridge.begin(candidateId = "stream-1", nowMonotonicMs = startedAtMonotonicMs)
+            requesterHandshakeStep = 0
+
+            val relayBrowser =
+                StreamRelayBrowser(context, scope, rendezvousName) { event ->
+                    handleRequesterBrowserEvent(event, bridge)
                 }
-            listener = relayListener
-            relayListener.start(rendezvousName)
+            browser = relayBrowser
+            relayBrowser.start()
         } catch (e: Exception) {
             phase = PairingPhase.Failed(e.message ?: "Failed to generate pairing offer")
         }
     }
 
-    private fun handleListenerEvent(
+    private fun handleRequesterBrowserEvent(
         event: StreamRelayEvent,
         bridge: RappPairingBridge,
     ) {
         when (event) {
             is StreamRelayEvent.Connected -> {
-                phase = PairingPhase.Connecting("Exchanging security handshake...")
+                phase = PairingPhase.Connecting("Peer connected! Starting security handshake...")
+                requesterHandshakeStep = 0
                 try {
+                    browser?.send(rappStreamPairingPreamble())
                     val frame = bridge.writeHandshakeFrame(RappClock.monotonicMs())
-                    if (frame.isNotEmpty()) {
-                        listener?.send(frame)
-                    }
+                    browser?.send(frame)
+                    requesterHandshakeStep = 1
                 } catch (e: Exception) {
                     phase = PairingPhase.Failed("Handshake write error: ${e.message}")
                 }
@@ -122,49 +130,78 @@ internal class RappPairingModel(
             is StreamRelayEvent.Frame -> {
                 try {
                     val nowMonotonicMs = RappClock.monotonicMs()
-                    bridge.readHandshakeFrame(event.data, nowMonotonicMs)
-                    if (bridge.handshakeComplete(nowMonotonicMs)) {
-                        val nowMs = RappClock.wallMs()
-                        val hello = bridge.receiveHello(event.data, nowMs)
-                        val conf =
-                            bridge.sendConfirmation(
-                                listOf("fi.refineid.authentication.v1", "fi.refineid.document-signing.v1"),
+                    when (requesterHandshakeStep) {
+                        1 -> {
+                            // Responder sent Message 2
+                            bridge.readHandshakeFrame(event.data, nowMonotonicMs)
+                            val finalHandshake = bridge.writeHandshakeFrame(nowMonotonicMs)
+                            if (bridge.handshakeComplete(nowMonotonicMs)) {
+                                bridge.enterConfirmation(nowMonotonicMs)
+                                val hello = bridge.sendHello(displayName = "Samsung Galaxy", platform = "Android")
+                                browser?.send(finalHandshake)
+                                browser?.send(hello)
+                                requesterHandshakeStep = 2
+                            }
+                        }
+
+                        2 -> {
+                            // Responder sent Hello
+                            bridge.receiveHello(event.data, RappClock.wallMs())
+                            val grantedProfiles =
+                                listOf(
+                                    "fi.refineid.card-status.v1",
+                                    "fi.refineid.authentication.v1",
+                                    "fi.refineid.document-signing.v1",
+                                )
+                            val conf = bridge.sendConfirmation(grantedProfiles)
+                            browser?.send(conf)
+                            requesterHandshakeStep = 3
+                        }
+
+                        3 -> {
+                            // Responder sent Confirmation
+                            bridge.receiveConfirmation(event.data, RappClock.wallMs())
+                            val record = bridge.finishPairing(RappClock.wallMs())
+                            val peer =
+                                PairedPeer(
+                                    pairIdHex = record.metadata().pairId.joinToString("") { "%02x".format(it) },
+                                    displayName = "Mac",
+                                    platform = "macOS",
+                                    createdAtMs = System.currentTimeMillis(),
+                                )
+                            val app = context.applicationContext as? fi.refineid.android.ReFineIdApplication
+                            val vault = app?.rappVault ?: AndroidRappVault(context)
+                            record.persistDeviceOnly(vault)
+
+                            catalog.savePair(
+                                pairId = record.metadata().pairId,
+                                displayName = peer.displayName,
+                                platform = peer.platform,
+                                createdAtMs = peer.createdAtMs,
                             )
-                        listener?.send(conf)
-                        val record = bridge.finishPairing(nowMs)
-                        val peer =
-                            PairedPeer(
-                                pairIdHex = record.metadata().pairId.joinToString("") { "%02x".format(it) },
-                                displayName = hello.displayName.ifEmpty { "Mac" },
-                                platform = hello.platform.ifEmpty { "macOS" },
-                                createdAtMs = System.currentTimeMillis(),
-                            )
-                        catalog.savePair(
-                            pairId = record.metadata().pairId,
-                            displayName = peer.displayName,
-                            platform = peer.platform,
-                            createdAtMs = peer.createdAtMs,
-                        )
-                        phase = PairingPhase.Paired(peer)
-                    } else {
-                        val response = bridge.writeHandshakeFrame(nowMonotonicMs)
-                        if (response.isNotEmpty()) {
-                            listener?.send(response)
+                            phase = PairingPhase.Paired(peer)
+
+                            browser?.close()
+                            browser = null
+
+                            val rendezvousToken = record.metadata().rendezvousToken
+                            val sessionRendezvousName = StreamRendezvousName.name(sharingValue = rendezvousToken)
+                            app?.rappProxyDispatcher?.startListening(sessionRendezvousName, record, vault)
                         }
                     }
-                } catch (_: Exception) {
-                    // Ongoing frames
+                } catch (e: Exception) {
+                    phase = PairingPhase.Failed("Handshake error: ${e.message}")
                 }
             }
 
             is StreamRelayEvent.Disconnected -> {
                 if (phase is PairingPhase.Connecting) {
-                    phase = PairingPhase.Failed("Peer disconnected during pairing")
+                    phase = PairingPhase.Failed("Peer disconnected")
                 }
             }
 
             is StreamRelayEvent.Error -> {
-                phase = PairingPhase.Failed(event.cause.message ?: "Network error")
+                phase = PairingPhase.Failed(event.cause.message ?: "Connection error")
             }
         }
     }
@@ -178,7 +215,7 @@ internal class RappPairingModel(
         val code = RappPairingCode.normalize(rawCode)
         if (!RappPairingCode.isValid(code)) return
 
-        phase = PairingPhase.Connecting("Locating Mac...")
+        phase = PairingPhase.Connecting("Connecting to Mac...")
         val offerId = RappPairingCode.offerIdentifier(code)
         val pairingSecret = RappPairingCode.pairingSecret(code)
         val candidates =
@@ -198,7 +235,8 @@ internal class RappPairingModel(
 
         try {
             val startedAtMonotonicMs = RappClock.monotonicMs()
-            val bridge =
+            if (BuildConfig.DEBUG) android.util.Log.i("RAPP_PAIR", "Step 1: createRequesterOffer")
+            val tempBridge =
                 RappPairingBridge.createRequesterOffer(
                     offerId = offerId,
                     pairingSecret = pairingSecret,
@@ -207,74 +245,133 @@ internal class RappPairingModel(
                     offerTtlMs = RappPairingCode.DEFAULT_LIFETIME_MS.toULong(),
                     startedAtMonotonicMs = startedAtMonotonicMs,
                 )
-            pairingBridge = bridge
-            val offerUri = bridge.offerUri(nowMonotonicMs = startedAtMonotonicMs)
+            if (BuildConfig.DEBUG) android.util.Log.i("RAPP_PAIR", "Step 2: offerUri")
+            val offerUri = tempBridge.offerUri(nowMonotonicMs = startedAtMonotonicMs)
+            if (BuildConfig.DEBUG) android.util.Log.i("RAPP_PAIR", "Step 3: rendezvousName from $offerUri")
             val rendezvousName = StreamRendezvousName.name(sharingOfferUri = offerUri)
 
-            val relayBrowser =
-                StreamRelayBrowser(context, scope, rendezvousName) { event ->
-                    handleBrowserEvent(event, bridge)
+            if (BuildConfig.DEBUG) android.util.Log.i("RAPP_PAIR", "Step 4: fromScannedOffer")
+            val proxyBridge =
+                RappPairingBridge.fromScannedOffer(
+                    uri = offerUri,
+                    startedAtMonotonicMs = startedAtMonotonicMs,
+                )
+            pairingBridge = proxyBridge
+            if (BuildConfig.DEBUG) android.util.Log.i("RAPP_PAIR", "Step 5: begin stream-1")
+            proxyBridge.begin(candidateId = "stream-1", nowMonotonicMs = startedAtMonotonicMs)
+            proxyHandshakeStep = 0
+
+            if (BuildConfig.DEBUG) android.util.Log.i("RAPP_PAIR", "Step 6: StreamRelayListener start $rendezvousName")
+            val relayListener =
+                StreamRelayListener(context, scope) { event ->
+                    handleProxyListenerEvent(event, proxyBridge)
                 }
-            browser = relayBrowser
-            relayBrowser.start()
-        } catch (e: Exception) {
-            phase = PairingPhase.Failed(e.message ?: "Failed to initiate pairing")
+            listener = relayListener
+            relayListener.start(rendezvousName)
+        } catch (e: Throwable) {
+            android.util.Log.e("RAPP_PAIR", "Failed to initiate pairing: ${e.javaClass.name}: ${e.message}", e)
+            phase = PairingPhase.Failed("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
-    private fun handleBrowserEvent(
+    private fun handleProxyListenerEvent(
         event: StreamRelayEvent,
         bridge: RappPairingBridge,
     ) {
         when (event) {
             is StreamRelayEvent.Connected -> {
-                phase = PairingPhase.Connecting("Connected! Verifying credentials...")
-                try {
-                    val frame = bridge.writeHandshakeFrame(RappClock.monotonicMs())
-                    if (frame.isNotEmpty()) {
-                        browser?.send(frame)
-                    }
-                } catch (e: Exception) {
-                    phase = PairingPhase.Failed("Handshake write error: ${e.message}")
-                }
+                phase = PairingPhase.Connecting("Mac connected! Starting security handshake...")
+                proxyHandshakeStep = 0
             }
 
             is StreamRelayEvent.Frame -> {
                 try {
+                    val preamble = rappStreamPairingPreamble()
+                    if (event.data.contentEquals(preamble)) {
+                        return
+                    }
+
                     val nowMonotonicMs = RappClock.monotonicMs()
-                    bridge.readHandshakeFrame(event.data, nowMonotonicMs)
-                    if (bridge.handshakeComplete(nowMonotonicMs)) {
-                        val nowMs = RappClock.wallMs()
-                        val hello = bridge.sendHello(displayName = "Samsung Galaxy", platform = "Android")
-                        browser?.send(hello)
-                        val record = bridge.finishPairing(nowMs)
-                        val peer =
-                            PairedPeer(
-                                pairIdHex = record.metadata().pairId.joinToString("") { "%02x".format(it) },
-                                displayName = "Mac",
-                                platform = "macOS",
-                                createdAtMs = System.currentTimeMillis(),
+                    when (proxyHandshakeStep) {
+                        0 -> {
+                            // Mac sent Message 1
+                            bridge.readHandshakeFrame(event.data, nowMonotonicMs)
+                            val response = bridge.writeHandshakeFrame(nowMonotonicMs)
+                            listener?.send(response)
+                            proxyHandshakeStep = 1
+                        }
+
+                        1 -> {
+                            // Mac sent Message 3
+                            bridge.readHandshakeFrame(event.data, nowMonotonicMs)
+                            if (bridge.handshakeComplete(nowMonotonicMs)) {
+                                bridge.enterConfirmation(nowMonotonicMs)
+                                val hello = bridge.sendHello(displayName = "Samsung Galaxy", platform = "Android")
+                                listener?.send(hello)
+                                proxyHandshakeStep = 2
+                            }
+                        }
+
+                        2 -> {
+                            // Mac sent Hello
+                            bridge.receiveHello(event.data, RappClock.wallMs())
+                            val grantedProfiles =
+                                listOf(
+                                    "fi.refineid.card-status.v1",
+                                    "fi.refineid.authentication.v1",
+                                    "fi.refineid.document-signing.v1",
+                                )
+                            val confirmation = bridge.sendConfirmation(grantedProfiles)
+                            listener?.send(confirmation)
+                            proxyHandshakeStep = 3
+                        }
+
+                        3 -> {
+                            // Mac sent Confirmation
+                            bridge.receiveConfirmation(event.data, RappClock.wallMs())
+                            val nowMs = RappClock.wallMs()
+                            val record = bridge.finishPairing(nowMs)
+                            val peer =
+                                PairedPeer(
+                                    pairIdHex = record.metadata().pairId.joinToString("") { "%02x".format(it) },
+                                    displayName = "Mac",
+                                    platform = "macOS",
+                                    createdAtMs = System.currentTimeMillis(),
+                                )
+
+                            val app = context.applicationContext as? fi.refineid.android.ReFineIdApplication
+                            val vault = app?.rappVault ?: AndroidRappVault(context)
+                            record.persistDeviceOnly(vault)
+
+                            catalog.savePair(
+                                pairId = record.metadata().pairId,
+                                displayName = peer.displayName,
+                                platform = peer.platform,
+                                createdAtMs = peer.createdAtMs,
                             )
-                        catalog.savePair(
-                            pairId = record.metadata().pairId,
-                            displayName = peer.displayName,
-                            platform = peer.platform,
-                            createdAtMs = peer.createdAtMs,
-                        )
-                        phase = PairingPhase.Paired(peer)
-                    } else {
-                        val response = bridge.writeHandshakeFrame(nowMonotonicMs)
-                        if (response.isNotEmpty()) {
-                            browser?.send(response)
+                            phase = PairingPhase.Paired(peer)
+
+                            listener?.close()
+                            listener = null
+
+                            val rendezvousToken = record.metadata().rendezvousToken
+                            val sessionRendezvousName = StreamRendezvousName.name(sharingValue = rendezvousToken)
+                            app?.rappProxyDispatcher?.startListening(sessionRendezvousName, record, vault)
                         }
                     }
-                } catch (_: Exception) {
+                } catch (e: Throwable) {
+                    android.util.Log.e(
+                        "RAPP_PAIR",
+                        "handleProxyListenerEvent failed: ${e.javaClass.name}: ${e.message}",
+                        e,
+                    )
+                    phase = PairingPhase.Failed("Pairing error: ${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
                 }
             }
 
             is StreamRelayEvent.Disconnected -> {
                 if (phase is PairingPhase.Connecting) {
-                    phase = PairingPhase.Failed("Peer disconnected")
+                    phase = PairingPhase.Failed("Mac disconnected")
                 }
             }
 
@@ -303,6 +400,10 @@ internal class RappPairingModel(
     }
 
     fun removePair(pairIdHex: String) {
+        val app = context.applicationContext as? fi.refineid.android.ReFineIdApplication
+        val vault = app?.rappVault ?: AndroidRappVault(context)
+        val pairIdBytes = pairIdHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        vault.revokeDeviceOnly(pairIdBytes, RappClock.wallMs())
         catalog.removePair(pairIdHex)
     }
 
@@ -313,7 +414,10 @@ internal class RappPairingModel(
         listener = null
         browser?.close()
         browser = null
-        pairingBridge?.close()
+        try {
+            pairingBridge?.cancelPairing()
+        } catch (_: Exception) {
+        }
         pairingBridge = null
         phase = PairingPhase.Idle
     }

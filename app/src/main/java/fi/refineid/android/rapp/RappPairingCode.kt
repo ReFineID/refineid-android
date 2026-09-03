@@ -11,7 +11,7 @@ internal object RappPairingCode {
     const val DEFAULT_LIFETIME_MS: Long = 180_000L
     private const val ALPHABET = "0123456789"
     private const val PAIRING_SECRET_BYTE_COUNT = 32
-    private const val OFFER_ID_BYTE_COUNT = 16
+    private const val OFFER_ID_BYTE_COUNT = 32
 
     fun generate(): String {
         val random = SecureRandom()
