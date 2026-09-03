@@ -58,4 +58,7 @@
     <string name="pairing_success">Successfully paired!</string>
     <string name="pairing_code">Pairing code</string>
     <string name="hold_card_to_phone">Hold your ID card to the back of the phone…</string>
+    <string name="remote_auth_title">Remote Authentication</string>
+    <string name="hold_card_to_approve">Hold your ID card against the phone to approve.</string>
+    <string name="sign_document_title">Sign Document</string>
 </resources>

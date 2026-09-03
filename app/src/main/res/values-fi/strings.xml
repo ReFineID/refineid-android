@@ -54,4 +54,7 @@
     <string name="pairing_success">Yhdistetty onnistuneesti!</string>
     <string name="pairing_code">Pariliitoskoodi</string>
     <string name="hold_card_to_phone">Pidä henkilökorttia puhelimen takana…</string>
+    <string name="remote_auth_title">Etätunnistautuminen</string>
+    <string name="hold_card_to_approve">Pidä henkilökorttia puhelimen takana vahvistaaksesi.</string>
+    <string name="sign_document_title">Allekirjoita asiakirja</string>
 </resources>
