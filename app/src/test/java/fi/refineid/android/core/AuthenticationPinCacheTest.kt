@@ -54,6 +54,24 @@ class AuthenticationPinCacheTest {
         cache.clear()
 
         assertNull(cache.take())
+        assertFalse(cache.hasPin)
+    }
+
+    @Test
+    fun defaultCacheHoldsVerifiedPinIndefinitely() {
+        val cache = AuthenticationPinCache()
+        assertFalse(cache.hasPin)
+        cache.recordVerified(pinBytes())
+        assertTrue(cache.hasPin)
+
+        val held = cache.take()
+        assertArrayEquals(PIN_BYTES, held?.copyBytes())
+        held?.close()
+        assertTrue(cache.hasPin)
+
+        cache.clear()
+        assertFalse(cache.hasPin)
+        assertNull(cache.take())
     }
 
     private fun pinBytes(): ByteArray = PIN_BYTES.copyOf()

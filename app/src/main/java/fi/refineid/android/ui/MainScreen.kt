@@ -409,6 +409,7 @@ private fun HomeScreen(
                 onForget = onForgetIdentity,
                 onOpenPerson = onOpenPerson,
                 onReadCard = onReadCard,
+                pinCache = pinCache,
             )
 
             if (BuildDiagnostics.TIMESTAMP_SETTINGS_ENABLED) {
@@ -425,6 +426,7 @@ private fun IdentitySection(
     onForget: (() -> Unit)?,
     onOpenPerson: () -> Unit,
     onReadCard: (CanSubmission?, Pin1Submission?) -> Unit,
+    pinCache: AuthenticationPinCache? = null,
 ) {
     var showsForgetConfirmation by remember { mutableStateOf(false) }
     var showsNfcReadDialog by remember { mutableStateOf(false) }
@@ -480,7 +482,7 @@ private fun IdentitySection(
                         },
                     modifier = Modifier.weight(ROW_LABEL_WEIGHT),
                 )
-                if (holderName != null && onForget != null) {
+                if ((holderName != null || pinCache?.hasPin == true) && onForget != null) {
                     IconButton(
                         onClick = { showsForgetConfirmation = true },
                         modifier =

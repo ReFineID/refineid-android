@@ -475,14 +475,33 @@ internal class RappPhoneProxyDispatcher(
                 }
                 return@launch
             }
+            val resolvedPin =
+                if (pin1.isNotEmpty()) {
+                    pin1
+                } else {
+                    var fromCache = ""
+                    pinCache?.take()?.consume { pinBytes ->
+                        fromCache = String(pinBytes, Charsets.US_ASCII)
+                    }
+                    fromCache
+                }
+            if (resolvedPin.isEmpty()) {
+                try {
+                    val resp = bridge.credentialRejected(opId, RappClock.monotonicMs())
+                    handleBridgeAction(resp, bridge)
+                } catch (_: Exception) {
+                }
+                return@launch
+            }
             val result =
                 service.signAuthenticationDigest(
                     algorithm = algorithm,
-                    pin1 = Pin1Submission.from(pin1),
+                    pin1 = Pin1Submission.from(resolvedPin),
                     digest = desc.digest,
                 )
             when (result) {
                 is AuthenticationSignResult.Success -> {
+                    pinCache?.recordVerified(resolvedPin.toByteArray(Charsets.US_ASCII))
                     try {
                         val resp = bridge.completeSignature(opId, result.signature.copyBytes())
                         handleBridgeAction(resp, bridge)

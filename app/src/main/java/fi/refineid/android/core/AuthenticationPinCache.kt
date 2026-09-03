@@ -19,7 +19,7 @@ import java.security.SecureRandom
  * the window is testable without a clock.
  */
 internal class AuthenticationPinCache(
-    private val lifetimeMillis: Long = PIN1_CACHE_LIFETIME_MILLIS,
+    private val lifetimeMillis: Long? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val lock = Any()
@@ -30,15 +30,21 @@ internal class AuthenticationPinCache(
     private var heldFingerprint: String? = null
     private var expiresAtMillis: Long = 0
 
+    /** True when a valid PIN1 is currently held in cache. */
+    val hasPin: Boolean
+        get() = synchronized(lock) { heldPin != null }
+
     /** A cached, unexpired PIN1 as a fresh submission, or null. */
     fun take(): Pin1Submission? =
         synchronized(lock) {
             val held = heldPin ?: return null
-            if (clock() >= expiresAtMillis) {
-                clearHeldLocked()
-                return null
+            if (lifetimeMillis != null) {
+                if (clock() >= expiresAtMillis) {
+                    clearHeldLocked()
+                    return null
+                }
+                expiresAtMillis = clock() + lifetimeMillis
             }
-            expiresAtMillis = clock() + lifetimeMillis
             Pin1Submission.fromOwnedBytes(held.copyOf())
         }
 
@@ -55,7 +61,9 @@ internal class AuthenticationPinCache(
             clearHeldLocked()
             heldPin = pinBytes
             heldFingerprint = fingerprint
-            expiresAtMillis = clock() + lifetimeMillis
+            if (lifetimeMillis != null) {
+                expiresAtMillis = clock() + lifetimeMillis
+            }
             rejected.remove(fingerprint)
         }
     }
@@ -93,10 +101,6 @@ internal class AuthenticationPinCache(
     }
 
     private companion object {
-        const val MINUTES = 15L
-        const val SECONDS_PER_MINUTE = 60L
-        const val MILLIS_PER_SECOND = 1_000L
-        const val PIN1_CACHE_LIFETIME_MILLIS = MINUTES * SECONDS_PER_MINUTE * MILLIS_PER_SECOND
         const val FINGERPRINT_KEY_BYTES = 32
         const val DIGEST_NAME = "SHA-256"
         const val UNSIGNED_BYTE_MASK = 0xFF
