@@ -18,6 +18,13 @@ internal data class RappAuthRequest(
     val onDenied: () -> Unit,
 )
 
+internal data class RappCardTapPrompt(
+    val requestId: String,
+    val requester: String,
+    val action: RappAuthAction,
+    val onCancel: () -> Unit,
+)
+
 /**
  * Rendezvous between incoming RAPP proxy events, notifications, and Compose UI.
  */
@@ -27,6 +34,9 @@ internal class RappAuthorizationInbox(
     private val notificationManager = RappNotificationManager(context)
 
     var currentRequest by mutableStateOf<RappAuthRequest?>(null)
+        private set
+
+    var currentTapPrompt by mutableStateOf<RappCardTapPrompt?>(null)
         private set
 
     fun ask(
@@ -61,10 +71,45 @@ internal class RappAuthorizationInbox(
         notificationManager.postAuthorizationNotification(requestId, requester, actionDescription)
     }
 
+    fun showTapPrompt(
+        requestId: String,
+        requester: String,
+        action: RappAuthAction,
+        onCancel: () -> Unit,
+    ) {
+        currentTapPrompt =
+            RappCardTapPrompt(
+                requestId = requestId,
+                requester = requester,
+                action = action,
+                onCancel = {
+                    currentTapPrompt = null
+                    onCancel()
+                },
+            )
+        notificationManager.postAuthorizationNotification(
+            requestId = requestId,
+            requester = requester,
+            actionName = "Hold ID card against phone",
+        )
+    }
+
+    fun dismissTapPrompt(requestId: String? = null) {
+        if (requestId == null || currentTapPrompt?.requestId == requestId) {
+            currentTapPrompt = null
+            notificationManager.dismissNotification()
+        }
+    }
+
     fun cancel(requestId: String) {
         if (currentRequest?.requestId == requestId) {
             currentRequest?.onDenied?.invoke()
             currentRequest = null
+            notificationManager.dismissNotification()
+        }
+        if (currentTapPrompt?.requestId == requestId) {
+            currentTapPrompt?.onCancel?.invoke()
+            currentTapPrompt = null
             notificationManager.dismissNotification()
         }
     }
@@ -72,6 +117,8 @@ internal class RappAuthorizationInbox(
     fun dismissAll() {
         currentRequest?.onDenied?.invoke()
         currentRequest = null
+        currentTapPrompt?.onCancel?.invoke()
+        currentTapPrompt = null
         notificationManager.dismissNotification()
     }
 }

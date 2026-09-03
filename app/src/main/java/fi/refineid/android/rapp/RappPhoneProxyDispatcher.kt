@@ -37,6 +37,8 @@ internal class RappPhoneProxyDispatcher(
     private val pinCache: AuthenticationPinCache? = null,
     private val authCardService: () -> AuthenticationCardService?,
     private val qualifiedCardService: () -> QualifiedCardService?,
+    private val isCardReady: () -> Boolean = { false },
+    private val awaitCardReady: suspend () -> Boolean = { false },
 ) : AutoCloseable {
     private var activeListener: StreamRelayListener? = null
     private var sessionBridge: RappSessionBridge? = null
@@ -408,9 +410,46 @@ internal class RappPhoneProxyDispatcher(
         bridge: RappOperationBridge,
     ) {
         scope.launch(Dispatchers.IO) {
-            val service = authCardService()
             val algorithm = resolveSignAlgorithm(desc)
-            if (service == null || algorithm == null) {
+            if (algorithm == null) {
+                try {
+                    val resp = bridge.credentialRejected(opId, RappClock.monotonicMs())
+                    handleBridgeAction(resp, bridge)
+                } catch (_: Exception) {
+                }
+                return@launch
+            }
+            if (!isCardReady()) {
+                val requesterName =
+                    catalog
+                        .listPairs()
+                        .firstOrNull()
+                        ?.displayName
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "Computer"
+                val opIdHex = opId.joinToString("") { "%02x".format(it) }
+                var cancelled = false
+                inbox.showTapPrompt(
+                    requestId = opIdHex,
+                    requester = requesterName,
+                    action = RappAuthAction.BROWSER_AUTH,
+                    onCancel = {
+                        cancelled = true
+                    },
+                )
+                val ready = awaitCardReady()
+                inbox.dismissTapPrompt(opIdHex)
+                if (!ready || cancelled) {
+                    try {
+                        val resp = bridge.credentialRejected(opId, RappClock.monotonicMs())
+                        handleBridgeAction(resp, bridge)
+                    } catch (_: Exception) {
+                    }
+                    return@launch
+                }
+            }
+            val service = authCardService()
+            if (service == null) {
                 try {
                     val resp = bridge.credentialRejected(opId, RappClock.monotonicMs())
                     handleBridgeAction(resp, bridge)

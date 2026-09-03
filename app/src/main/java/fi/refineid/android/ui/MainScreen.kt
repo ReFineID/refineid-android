@@ -135,6 +135,10 @@ internal fun MainScreen(
         RappAuthorizationDialog(request = req)
     }
 
+    rappInbox?.currentTapPrompt?.let { prompt ->
+        RappCardTapDialog(prompt = prompt)
+    }
+
     var destination by rememberSaveable { mutableStateOf(MainDestination.HOME) }
     var validationUri by remember { mutableStateOf<Uri?>(null) }
     val verifyPicker =

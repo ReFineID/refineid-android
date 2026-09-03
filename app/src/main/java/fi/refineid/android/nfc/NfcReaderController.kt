@@ -30,11 +30,14 @@ import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.keychain.nextProviderGeneration
 import fi.refineid.android.prime.PrimedCanStore
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import java.security.SecureRandom
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import kotlin.coroutines.resume
 
 /**
  * Contactless discovery and card sessions bound to one foreground
@@ -43,6 +46,7 @@ import java.util.concurrent.RejectedExecutionException
  * opens a contactless session whose every operation re-runs PACE inside
  * one bounded ISO-DEP connection on a dedicated worker thread.
  */
+@Suppress("TooManyFunctions")
 internal class NfcReaderController(
     context: Context,
     private val primedCanStore: PrimedCanStore,
@@ -197,6 +201,47 @@ internal class NfcReaderController(
     fun removeStateListener(listener: (NfcReaderSnapshot) -> Unit) {
         checkMainThread()
         stateListeners -= listener
+    }
+
+    val isCardReady: Boolean
+        get() = latestSnapshot.status == NfcReaderStatus.CARD_READY
+
+    suspend fun awaitCardReady(timeoutMs: Long = 30_000L): Boolean {
+        if (isCardReady) {
+            return true
+        }
+        val resting = latestIsoDep
+        if (resting != null) {
+            val storedCan = CanSessionStore.canBytes() ?: primedCanStore.read()
+            if (storedCan != null) {
+                val generation = probeGeneration
+                try {
+                    probeExecutor.execute {
+                        openSessionBytes(
+                            canBytes = storedCan,
+                            generation = generation,
+                            mintOnSuccess = false,
+                            pin1 = null,
+                            isoDepTarget = resting,
+                        )
+                    }
+                } catch (_: RejectedExecutionException) {
+                }
+            }
+        }
+        return withTimeoutOrNull(timeoutMs) {
+            suspendCancellableCoroutine { continuation ->
+                val listener: (NfcReaderSnapshot) -> Unit = { snapshot ->
+                    if (snapshot.status == NfcReaderStatus.CARD_READY && continuation.isActive) {
+                        continuation.resume(true)
+                    }
+                }
+                mainHandler.post { addStateListener(listener) }
+                continuation.invokeOnCancellation {
+                    mainHandler.post { removeStateListener(listener) }
+                }
+            }
+        } ?: false
     }
 
     /**

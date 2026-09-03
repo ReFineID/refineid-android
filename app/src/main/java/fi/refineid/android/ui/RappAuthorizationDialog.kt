@@ -110,3 +110,58 @@ internal fun RappAuthorizationDialog(request: RappAuthRequest) {
         }
     }
 }
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+internal fun RappCardTapDialog(prompt: fi.refineid.android.rapp.RappCardTapPrompt) {
+    Dialog(
+        onDismissRequest = { prompt.onCancel() },
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false),
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text =
+                        when (prompt.action) {
+                            RappAuthAction.BROWSER_AUTH -> "Suomi.fi Authentication"
+                            RappAuthAction.DOCUMENT_SIGN -> "Sign Document"
+                        },
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+
+                Text(
+                    text = "Hold your ID card against the phone to approve.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    strokeWidth = 3.dp,
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    OutlinedButton(
+                        onClick = { prompt.onCancel() },
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+}

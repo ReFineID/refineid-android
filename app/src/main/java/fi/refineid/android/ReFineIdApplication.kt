@@ -101,6 +101,8 @@ class ReFineIdApplication : Application() {
                 pinCache = authenticationPinCache,
                 authCardService = { nfcReaderController.authenticationCardService },
                 qualifiedCardService = { nfcReaderController.qualifiedCardService },
+                isCardReady = { nfcReaderController.isCardReady },
+                awaitCardReady = { nfcReaderController.awaitCardReady() },
             )
         val existingPairs = rappPairCatalog.listPairs()
         if (BuildConfig.DEBUG) {
