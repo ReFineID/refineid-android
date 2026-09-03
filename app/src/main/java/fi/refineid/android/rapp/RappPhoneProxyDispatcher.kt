@@ -333,11 +333,19 @@ internal class RappPhoneProxyDispatcher(
     ) {
         scope.launch(Dispatchers.IO) {
             try {
-                val resp = bridge.deny(opId)
-                handleBridgeAction(resp, bridge)
+                bridge.deny(opId)
             } catch (e: Exception) {
                 android.util.Log.e("PROXY_DISPATCH", "deny failed", e)
             }
+            // Drop the stream so Mac cannot immediately re-request on the same session.
+            activeListener?.close()
+            activeListener = null
+            operationBridge?.close()
+            operationBridge = null
+            sessionBridge?.close()
+            sessionBridge = null
+            sessionHandshakeDone = false
+            pendingPins.clear()
         }
     }
 

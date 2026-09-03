@@ -65,7 +65,7 @@ internal class RappAuthorizationInbox(
         currentRequest = req
         val actionDescription =
             when (action) {
-                RappAuthAction.BROWSER_AUTH -> "Suomi.fi Authentication"
+                RappAuthAction.BROWSER_AUTH -> "Remote Authentication"
                 RappAuthAction.DOCUMENT_SIGN -> "Document Signature"
             }
         notificationManager.postAuthorizationNotification(requestId, requester, actionDescription)

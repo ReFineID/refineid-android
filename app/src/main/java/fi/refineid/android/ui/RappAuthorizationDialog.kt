@@ -57,7 +57,7 @@ internal fun RappAuthorizationDialog(request: RappAuthRequest) {
                 Text(
                     text =
                         when (request.action) {
-                            RappAuthAction.BROWSER_AUTH -> "Suomi.fi Authentication"
+                            RappAuthAction.BROWSER_AUTH -> "Remote Authentication"
                             RappAuthAction.DOCUMENT_SIGN -> "Sign Document"
                         },
                     style = MaterialTheme.typography.titleLarge,
@@ -66,8 +66,8 @@ internal fun RappAuthorizationDialog(request: RappAuthRequest) {
 
                 Text(
                     text =
-                        "Requested by ${request.requester}.\n" +
-                            "Enter your PIN and hold your ID card to the NFC reader to approve.",
+                        "${request.requester} is requesting authentication.\n" +
+                            "Enter your PIN and hold your ID card to the phone to approve.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -131,7 +131,7 @@ internal fun RappCardTapDialog(prompt: fi.refineid.android.rapp.RappCardTapPromp
                 Text(
                     text =
                         when (prompt.action) {
-                            RappAuthAction.BROWSER_AUTH -> "Suomi.fi Authentication"
+                            RappAuthAction.BROWSER_AUTH -> "Remote Authentication"
                             RappAuthAction.DOCUMENT_SIGN -> "Sign Document"
                         },
                     style = MaterialTheme.typography.titleLarge,
