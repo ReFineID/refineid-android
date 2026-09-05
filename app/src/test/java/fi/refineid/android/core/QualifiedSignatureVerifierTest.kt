@@ -79,6 +79,87 @@ class QualifiedSignatureVerifierTest {
         )
     }
 
+    @Test
+    fun verifiesPrehashedRsaSha384AndRejectsDifferentDigest() {
+        val keyPair =
+            KeyPairGenerator
+                .getInstance(RSA_KEY_ALGORITHM)
+                .apply { initialize(RSA_3072_KEY_LENGTH_BITS) }
+                .generateKeyPair()
+        val digest =
+            java.security.MessageDigest
+                .getInstance("SHA-384")
+                .digest(SIGNED_ATTRIBUTES)
+        val signature =
+            sign(
+                keyPair = keyPair,
+                algorithm = QualifiedSigningAlgorithm.RSA_PKCS1_SHA384,
+                content = SIGNED_ATTRIBUTES,
+            )
+
+        assertTrue(
+            QualifiedSignatureVerifier.verifyPrehashed(
+                publicKey = keyPair.public,
+                algorithm = QualifiedSigningAlgorithm.RSA_PKCS1_SHA384,
+                digest = digest,
+                signature = signature,
+            ),
+        )
+        val differentDigest =
+            java.security.MessageDigest
+                .getInstance("SHA-384")
+                .digest(DIFFERENT_ATTRIBUTES)
+        assertFalse(
+            QualifiedSignatureVerifier.verifyPrehashed(
+                publicKey = keyPair.public,
+                algorithm = QualifiedSigningAlgorithm.RSA_PKCS1_SHA384,
+                digest = differentDigest,
+                signature = signature,
+            ),
+        )
+    }
+
+    @Test
+    fun verifiesPrehashedP384Sha384FromTheRawCardShape() {
+        val keyPair =
+            KeyPairGenerator
+                .getInstance(EC_KEY_ALGORITHM)
+                .apply { initialize(ECGenParameterSpec(P384_CURVE_NAME)) }
+                .generateKeyPair()
+        val digest =
+            java.security.MessageDigest
+                .getInstance("SHA-384")
+                .digest(SIGNED_ATTRIBUTES)
+        val derSignature =
+            sign(
+                keyPair = keyPair,
+                algorithm = QualifiedSigningAlgorithm.ECDSA_P384_SHA384,
+                content = SIGNED_ATTRIBUTES,
+            )
+        val rawSignature = derP384EcdsaToRaw(derSignature)
+
+        assertTrue(
+            QualifiedSignatureVerifier.verifyPrehashed(
+                publicKey = keyPair.public,
+                algorithm = QualifiedSigningAlgorithm.ECDSA_P384_SHA384,
+                digest = digest,
+                signature = rawSignature,
+            ),
+        )
+        val differentDigest =
+            java.security.MessageDigest
+                .getInstance("SHA-384")
+                .digest(DIFFERENT_ATTRIBUTES)
+        assertFalse(
+            QualifiedSignatureVerifier.verifyPrehashed(
+                publicKey = keyPair.public,
+                algorithm = QualifiedSigningAlgorithm.ECDSA_P384_SHA384,
+                digest = differentDigest,
+                signature = rawSignature,
+            ),
+        )
+    }
+
     private fun sign(
         keyPair: KeyPair,
         algorithm: QualifiedSigningAlgorithm,

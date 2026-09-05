@@ -263,6 +263,16 @@ class QualifiedPdfInteropTest {
             )
         }
 
+        override fun requestQualifiedDigestSignature(
+            algorithm: QualifiedSigningAlgorithm,
+            pin2: Pin2Submission,
+            digest: ByteArray,
+            expectedCertificate: NativeQualifiedCertificate,
+            onResult: (QualifiedSignResult) -> Unit,
+        ) {
+            error("the interop signer does not sign prehashed digests")
+        }
+
         override fun close() {
             certificateDer.fill(ZERO_BYTE)
         }

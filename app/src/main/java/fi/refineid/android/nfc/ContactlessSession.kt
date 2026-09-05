@@ -25,6 +25,7 @@ import fi.refineid.android.core.QualifiedSignFailure
 import fi.refineid.android.core.QualifiedSignResult
 import fi.refineid.android.core.QualifiedSignatureVerifier
 import fi.refineid.android.core.QualifiedSigningAlgorithm
+import fi.refineid.android.core.QualifiedSigningInputMode
 import fi.refineid.android.diagnostics.AppTrace
 import java.io.IOException
 
@@ -226,10 +227,39 @@ internal class ContactlessSession(
         return result
     }
 
+    fun qualifiedSignPrehashed(
+        algorithm: QualifiedSigningAlgorithm,
+        pin2: Pin2Submission,
+        digest: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+    ): QualifiedSignResult =
+        qualifiedSignInput(
+            algorithm = algorithm,
+            inputMode = QualifiedSigningInputMode.PREHASHED,
+            pin2 = pin2,
+            input = digest,
+            expectedCertificate = expectedCertificate,
+        )
+
     fun qualifiedSign(
         algorithm: QualifiedSigningAlgorithm,
         pin2: Pin2Submission,
         content: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+    ): QualifiedSignResult =
+        qualifiedSignInput(
+            algorithm = algorithm,
+            inputMode = QualifiedSigningInputMode.MESSAGE,
+            pin2 = pin2,
+            input = content,
+            expectedCertificate = expectedCertificate,
+        )
+
+    fun qualifiedSignInput(
+        algorithm: QualifiedSigningAlgorithm,
+        inputMode: QualifiedSigningInputMode,
+        pin2: Pin2Submission,
+        input: ByteArray,
         expectedCertificate: NativeQualifiedCertificate,
     ): QualifiedSignResult {
         checkOwnerThread()
@@ -245,11 +275,12 @@ internal class ContactlessSession(
             return QualifiedSignResult.Failure(QualifiedSignFailure.CARD_UNAVAILABLE)
         }
         val nativeResult =
-            NativeContactlessCore.qualifiedSign(
+            NativeContactlessCore.qualifiedSignInput(
                 canCopy = can.copyOf(),
                 algorithm = algorithm,
+                inputMode = inputMode,
                 pin2 = pin2,
-                content = content,
+                input = input,
                 expectedCertificate = expectedCertificate,
                 exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
             )
@@ -257,11 +288,23 @@ internal class ContactlessSession(
         return when (nativeResult) {
             is NativeQualifiedSignResult.Success -> {
                 val isVerified =
-                    QualifiedSignatureVerifier.verify(
-                        certificate = expectedCertificate,
-                        content = content,
-                        signature = nativeResult.signature,
-                    )
+                    when (inputMode) {
+                        QualifiedSigningInputMode.MESSAGE -> {
+                            QualifiedSignatureVerifier.verify(
+                                certificate = expectedCertificate,
+                                content = input,
+                                signature = nativeResult.signature,
+                            )
+                        }
+
+                        QualifiedSigningInputMode.PREHASHED -> {
+                            QualifiedSignatureVerifier.verifyPrehashed(
+                                certificate = expectedCertificate,
+                                digest = input,
+                                signature = nativeResult.signature,
+                            )
+                        }
+                    }
                 AppTrace.qualifiedSignatureVerificationCompleted(isVerified)
                 if (isVerified) {
                     QualifiedSignResult.Success(nativeResult.signature)

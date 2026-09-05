@@ -37,6 +37,7 @@ import fi.refineid.android.core.QualifiedSignFailure
 import fi.refineid.android.core.QualifiedSignResult
 import fi.refineid.android.core.QualifiedSignatureVerifier
 import fi.refineid.android.core.QualifiedSigningAlgorithm
+import fi.refineid.android.core.QualifiedSigningInputMode
 import fi.refineid.android.diagnostics.AppTrace
 
 internal sealed interface CcidSessionOpenResult {
@@ -64,6 +65,7 @@ internal sealed interface CcidSessionOpenResult {
 }
 
 /** One claimed CCID interface, confined to the worker thread that opened it. */
+@Suppress("TooManyFunctions")
 internal class CcidUsbSession(
     private val connection: UsbDeviceConnection,
     private val usbInterface: UsbInterface,
@@ -349,10 +351,39 @@ internal class CcidUsbSession(
         }
     }
 
+    fun qualifiedSignPrehashed(
+        algorithm: QualifiedSigningAlgorithm,
+        pin2: Pin2Submission,
+        digest: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+    ): QualifiedSignResult =
+        qualifiedSignInput(
+            algorithm = algorithm,
+            inputMode = QualifiedSigningInputMode.PREHASHED,
+            pin2 = pin2,
+            input = digest,
+            expectedCertificate = expectedCertificate,
+        )
+
     fun qualifiedSign(
         algorithm: QualifiedSigningAlgorithm,
         pin2: Pin2Submission,
         content: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+    ): QualifiedSignResult =
+        qualifiedSignInput(
+            algorithm = algorithm,
+            inputMode = QualifiedSigningInputMode.MESSAGE,
+            pin2 = pin2,
+            input = content,
+            expectedCertificate = expectedCertificate,
+        )
+
+    fun qualifiedSignInput(
+        algorithm: QualifiedSigningAlgorithm,
+        inputMode: QualifiedSigningInputMode,
+        pin2: Pin2Submission,
+        input: ByteArray,
         expectedCertificate: NativeQualifiedCertificate,
     ): QualifiedSignResult {
         checkOwnerThread()
@@ -365,11 +396,12 @@ internal class CcidUsbSession(
         }
 
         val nativeResult =
-            NativeQualifiedCore.qualifiedSign(
+            NativeQualifiedCore.qualifiedSignInput(
                 exchangeLevel = exchangeLevel,
                 algorithm = algorithm,
+                inputMode = inputMode,
                 pin2 = pin2,
-                content = content,
+                input = input,
                 expectedCertificate = expectedCertificate,
                 exchange = nativeExchange,
             )
@@ -377,11 +409,23 @@ internal class CcidUsbSession(
             when (nativeResult) {
                 is NativeQualifiedSignResult.Success -> {
                     val isVerified =
-                        QualifiedSignatureVerifier.verify(
-                            certificate = expectedCertificate,
-                            content = content,
-                            signature = nativeResult.signature,
-                        )
+                        when (inputMode) {
+                            QualifiedSigningInputMode.MESSAGE -> {
+                                QualifiedSignatureVerifier.verify(
+                                    certificate = expectedCertificate,
+                                    content = input,
+                                    signature = nativeResult.signature,
+                                )
+                            }
+
+                            QualifiedSigningInputMode.PREHASHED -> {
+                                QualifiedSignatureVerifier.verifyPrehashed(
+                                    certificate = expectedCertificate,
+                                    digest = input,
+                                    signature = nativeResult.signature,
+                                )
+                            }
+                        }
                     AppTrace.qualifiedSignatureVerificationCompleted(isVerified)
                     if (isVerified) {
                         QualifiedSignResult.Success(nativeResult.signature)

@@ -31,7 +31,7 @@ use crate::pin1_status::{Pin1Preflight, Pin1PreflightFailure, probe_pin1_preflig
 use crate::pin2_status::{Pin2Preflight, Pin2PreflightFailure, probe_pin2_preflight};
 use crate::qualified_signer::{
     QualifiedCertificateSource, QualifiedSignFailure, QualifiedSignature,
-    QualifiedSigningAlgorithm, qualified_sign,
+    QualifiedSigningAlgorithm, QualifiedSigningInput, qualified_sign,
 };
 
 /// Coarse failures of the secure-channel front door, before any
@@ -378,7 +378,7 @@ pub(crate) fn contactless_qualified_sign<Exchange: SingleBlockExchange>(
     can_bytes: Vec<u8>,
     algorithm: QualifiedSigningAlgorithm,
     mut pin_bytes: Vec<u8>,
-    content: &[u8],
+    input: QualifiedSigningInput<'_>,
     expected_certificate: &[u8],
 ) -> (Result<QualifiedSignature, QualifiedSignFailure>, Exchange) {
     let mut secure = match open_secure_channel(transport, can_bytes) {
@@ -399,7 +399,7 @@ pub(crate) fn contactless_qualified_sign<Exchange: SingleBlockExchange>(
         &mut secure,
         algorithm,
         pin_bytes,
-        content,
+        input,
         expected_certificate,
     );
     (result, secure.into_inner().into_exchange())

@@ -43,6 +43,15 @@ pub(crate) enum QualifiedSigningAlgorithm {
     EcdsaP384Sha384,
 }
 
+/// Whether this boundary hashes a content message or accepts a caller-asserted digest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum QualifiedSigningInput<'a> {
+    /// Hash these complete message bytes with SHA-384.
+    Message(&'a [u8]),
+    /// Use these bytes as an already-computed SHA-384 digest after exact-length validation.
+    Prehashed(&'a [u8]),
+}
+
 impl QualifiedSigningAlgorithm {
     const fn accepts_profile(self, profile: CardKeyProfile) -> bool {
         matches!(
@@ -131,16 +140,24 @@ pub(crate) fn qualified_sign<T>(
     transport: &mut T,
     algorithm: QualifiedSigningAlgorithm,
     pin_bytes: Vec<u8>,
-    content: &[u8],
+    input: QualifiedSigningInput<'_>,
     expected_certificate: &[u8],
 ) -> Result<QualifiedSignature, QualifiedSignFailure>
 where
     T: QualifiedCertificateSource,
 {
-    if content.len() > MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH {
-        return Err(QualifiedSignFailure::Bridge);
-    }
-    let digest = Sha384::of(content);
+    let digest = match input {
+        QualifiedSigningInput::Message(content) => {
+            if content.len() > MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH {
+                return Err(QualifiedSignFailure::Bridge);
+            }
+            Sha384::of(content)
+        }
+        QualifiedSigningInput::Prehashed(digest_bytes) => digest_bytes
+            .try_into()
+            .map(Sha384::from_bytes)
+            .map_err(|_| QualifiedSignFailure::Bridge)?,
+    };
     let pin_input = UnvalidatedSecret::from_owned_bytes(pin_bytes);
     let pin = Pin2::reconstruct(pin_input).map_err(|_| QualifiedSignFailure::InvalidPin)?;
     let preflight = probe_pin2_preflight(transport).map_err(map_preflight_failure)?;
@@ -253,7 +270,7 @@ mod tests {
 
     use super::{
         MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH, QualifiedCertificateSource, QualifiedSignFailure,
-        QualifiedSigningAlgorithm, qualified_sign,
+        QualifiedSigningAlgorithm, QualifiedSigningInput, qualified_sign,
     };
     use crate::card_certificate::{CardCertificate, CardKeyProfile, CertificateReadFailure};
 
@@ -383,7 +400,7 @@ mod tests {
             &mut transport,
             QualifiedSigningAlgorithm::RsaPkcs1Sha384,
             SYNTHETIC_PIN2.to_vec(),
-            SYNTHETIC_CONTENT,
+            QualifiedSigningInput::Message(SYNTHETIC_CONTENT),
             SYNTHETIC_CERTIFICATE,
         )
         .expect("scripted qualified signature succeeds");
@@ -395,6 +412,25 @@ mod tests {
         assert!(transport.public_responses.is_empty());
         let digest = Sha384::of(SYNTHETIC_CONTENT).into_bytes();
         assert!(transport.public_commands[PSO_HASH_PUBLIC_COMMAND_INDEX].ends_with(&digest));
+    }
+
+    #[test]
+    fn prehashed_submission_signs_exact_digest() {
+        let mut transport = success_script(CardKeyProfile::EcdsaP384, ECDSA_P384_SIG_BYTES);
+        let digest = Sha384::of(SYNTHETIC_CONTENT).into_bytes();
+
+        let result = qualified_sign(
+            &mut transport,
+            QualifiedSigningAlgorithm::EcdsaP384Sha384,
+            SYNTHETIC_PIN2.to_vec(),
+            QualifiedSigningInput::Prehashed(&digest),
+            SYNTHETIC_CERTIFICATE,
+        )
+        .expect("scripted prehashed signature succeeds");
+
+        assert_eq!(result.algorithm, QualifiedSigningAlgorithm::EcdsaP384Sha384);
+        assert_eq!(result.bytes.len(), ECDSA_P384_SIG_BYTES);
+        assert_eq!(transport.credential_calls, 1);
     }
 
     #[test]
@@ -417,7 +453,7 @@ mod tests {
                 &mut transport,
                 algorithm,
                 SYNTHETIC_PIN2.to_vec(),
-                SYNTHETIC_CONTENT,
+                QualifiedSigningInput::Message(SYNTHETIC_CONTENT),
                 SYNTHETIC_CERTIFICATE,
             )
             .expect("scripted profile succeeds");
@@ -441,7 +477,7 @@ mod tests {
             &mut transport,
             QualifiedSigningAlgorithm::RsaPkcs1Sha384,
             SYNTHETIC_PIN2.to_vec(),
-            SYNTHETIC_CONTENT,
+            QualifiedSigningInput::Message(SYNTHETIC_CONTENT),
             SYNTHETIC_CERTIFICATE,
         );
 
@@ -458,7 +494,7 @@ mod tests {
             &mut transport,
             QualifiedSigningAlgorithm::RsaPkcs1Sha384,
             SYNTHETIC_PIN2.to_vec(),
-            SYNTHETIC_CONTENT,
+            QualifiedSigningInput::Message(SYNTHETIC_CONTENT),
             DIFFERENT_CERTIFICATE,
         );
 
@@ -479,7 +515,7 @@ mod tests {
             &mut transport,
             QualifiedSigningAlgorithm::RsaPkcs1Sha384,
             SYNTHETIC_PIN2.to_vec(),
-            SYNTHETIC_CONTENT,
+            QualifiedSigningInput::Message(SYNTHETIC_CONTENT),
             SYNTHETIC_CERTIFICATE,
         );
 
@@ -503,7 +539,7 @@ mod tests {
             &mut transport,
             QualifiedSigningAlgorithm::RsaPkcs1Sha384,
             SYNTHETIC_PIN2.to_vec(),
-            SYNTHETIC_CONTENT,
+            QualifiedSigningInput::Message(SYNTHETIC_CONTENT),
             SYNTHETIC_CERTIFICATE,
         );
 
@@ -519,7 +555,7 @@ mod tests {
             &mut invalid_pin,
             QualifiedSigningAlgorithm::RsaPkcs1Sha384,
             Vec::new(),
-            SYNTHETIC_CONTENT,
+            QualifiedSigningInput::Message(SYNTHETIC_CONTENT),
             SYNTHETIC_CERTIFICATE,
         );
         assert!(matches!(
@@ -538,7 +574,7 @@ mod tests {
             &mut oversized,
             QualifiedSigningAlgorithm::RsaPkcs1Sha384,
             SYNTHETIC_PIN2.to_vec(),
-            &content,
+            QualifiedSigningInput::Message(&content),
             SYNTHETIC_CERTIFICATE,
         );
         assert!(matches!(
@@ -547,5 +583,20 @@ mod tests {
         ));
         assert_eq!(oversized.public_calls, 0);
         assert_eq!(oversized.credential_calls, 0);
+
+        let mut bad_digest = success_script(CardKeyProfile::Rsa3072, RSA_3072_SIG_BYTES);
+        let bad_digest_result = qualified_sign(
+            &mut bad_digest,
+            QualifiedSigningAlgorithm::RsaPkcs1Sha384,
+            SYNTHETIC_PIN2.to_vec(),
+            QualifiedSigningInput::Prehashed(b"short"),
+            SYNTHETIC_CERTIFICATE,
+        );
+        assert!(matches!(
+            bad_digest_result,
+            Err(QualifiedSignFailure::Bridge)
+        ));
+        assert_eq!(bad_digest.public_calls, 0);
+        assert_eq!(bad_digest.credential_calls, 0);
     }
 }

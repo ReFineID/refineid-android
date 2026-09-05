@@ -372,6 +372,16 @@ class QualifiedPdfSigningCoordinatorTest {
             returnedSignature = signature
             onResult(QualifiedSignResult.Success(signature))
         }
+
+        override fun requestQualifiedDigestSignature(
+            algorithm: QualifiedSigningAlgorithm,
+            pin2: Pin2Submission,
+            digest: ByteArray,
+            expectedCertificate: NativeQualifiedCertificate,
+            onResult: (QualifiedSignResult) -> Unit,
+        ) {
+            requestQualifiedSignature(algorithm, pin2, digest, expectedCertificate, onResult)
+        }
     }
 
     private class FakeQualifiedPdfCryptography(

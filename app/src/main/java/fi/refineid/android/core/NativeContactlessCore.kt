@@ -251,14 +251,33 @@ internal object NativeContactlessCore {
         content: ByteArray,
         expectedCertificate: NativeQualifiedCertificate,
         exchange: NativeBlockExchange,
+    ): NativeQualifiedSignResult =
+        qualifiedSignInput(
+            canCopy = canCopy,
+            algorithm = algorithm,
+            inputMode = QualifiedSigningInputMode.MESSAGE,
+            pin2 = pin2,
+            input = content,
+            expectedCertificate = expectedCertificate,
+            exchange = exchange,
+        )
+
+    fun qualifiedSignInput(
+        canCopy: ByteArray,
+        algorithm: QualifiedSigningAlgorithm,
+        inputMode: QualifiedSigningInputMode,
+        pin2: Pin2Submission,
+        input: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+        exchange: NativeBlockExchange,
     ): NativeQualifiedSignResult {
         val startedAt =
             AppTrace.nativeQualifiedSignStarted(
                 algorithm = algorithm,
-                contentLength = content.size,
+                contentLength = input.size,
             )
         val result =
-            if (!algorithm.acceptsContentLength(content.size)) {
+            if (!algorithm.acceptsInputLength(inputMode, input.size)) {
                 canCopy.fill(0)
                 pin2.close()
                 NativeQualifiedSignResult.Failure(NativeQualifiedSignFailure.BRIDGE_ERROR)
@@ -285,9 +304,9 @@ internal object NativeContactlessCore {
                                 NativeQualifiedSignReply.decode(
                                     contactlessQualifiedSignNative(
                                         can = canCopy,
-                                        algorithm = algorithm.wireValue,
+                                        algorithm = algorithm.requestWireValue(inputMode),
                                         pin = pinBytes,
-                                        content = content,
+                                        content = input,
                                         expectedCertificate = expectedDer,
                                         callback = exchange,
                                     ),

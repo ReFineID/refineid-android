@@ -159,7 +159,11 @@ internal class RappPairingModel(
                             val finalHandshake = bridge.writeHandshakeFrame(nowMonotonicMs)
                             if (bridge.handshakeComplete(nowMonotonicMs)) {
                                 bridge.enterConfirmation(nowMonotonicMs)
-                                val hello = bridge.sendHello(displayName = "Samsung Galaxy", platform = "Android")
+                                val hello =
+                                    bridge.sendHello(
+                                        displayName = localDeviceDisplayName(),
+                                        platform = "Android",
+                                    )
                                 browser?.send(finalHandshake)
                                 browser?.send(hello)
                                 requesterHandshakeStep = 2
@@ -334,7 +338,11 @@ internal class RappPairingModel(
                             bridge.readHandshakeFrame(event.data, nowMonotonicMs)
                             if (bridge.handshakeComplete(nowMonotonicMs)) {
                                 bridge.enterConfirmation(nowMonotonicMs)
-                                val hello = bridge.sendHello(displayName = "Samsung Galaxy", platform = "Android")
+                                val hello =
+                                    bridge.sendHello(
+                                        displayName = localDeviceDisplayName(),
+                                        platform = "Android",
+                                    )
                                 listener?.send(hello)
                                 proxyHandshakeStep = 2
                             }
@@ -461,6 +469,29 @@ internal class RappPairingModel(
         receivedPeerHello = null
         phase = PairingPhase.Idle
         pairedDevices = catalog.listPairs()
+    }
+
+    private fun localDeviceDisplayName(): String {
+        val deviceName =
+            try {
+                android.provider.Settings.Global
+                    .getString(
+                        context.contentResolver,
+                        android.provider.Settings.Global.DEVICE_NAME,
+                    )?.trim()
+            } catch (_: Exception) {
+                null
+            }
+        if (!deviceName.isNullOrBlank()) {
+            return deviceName
+        }
+        val model =
+            android.os.Build.MODEL
+                ?.trim()
+        if (!model.isNullOrBlank()) {
+            return model
+        }
+        return "Android"
     }
 
     override fun close() {
