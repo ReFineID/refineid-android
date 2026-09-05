@@ -26,12 +26,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import fi.refineid.android.R
 import fi.refineid.android.rapp.RappAuthAction
 import fi.refineid.android.rapp.RappAuthRequest
 
@@ -156,8 +158,8 @@ internal fun RappCardTapDialog(prompt: fi.refineid.android.rapp.RappCardTapPromp
                 Text(
                     text =
                         when (prompt.action) {
-                            RappAuthAction.BROWSER_AUTH -> "Remote Authentication"
-                            RappAuthAction.DOCUMENT_SIGN -> "Sign Document"
+                            RappAuthAction.BROWSER_AUTH -> stringResource(R.string.remote_auth_title)
+                            RappAuthAction.DOCUMENT_SIGN -> stringResource(R.string.sign_document_title)
                         },
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
@@ -165,7 +167,7 @@ internal fun RappCardTapDialog(prompt: fi.refineid.android.rapp.RappCardTapPromp
                 )
 
                 Text(
-                    text = "Hold your ID card against the phone to approve.",
+                    text = stringResource(R.string.hold_card_to_approve),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,

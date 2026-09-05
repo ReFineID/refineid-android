@@ -53,12 +53,31 @@ internal class RappPairingModel(
     private var proxyHandshakeStep = 0
     private var requesterHandshakeStep = 0
     private var receivedPeerHello: uniffi.refineid_rapp.RappPeerHello? = null
+    private val app = context.applicationContext as? fi.refineid.android.ReFineIdApplication
 
     var phase by mutableStateOf<PairingPhase>(PairingPhase.Idle)
         private set
 
     var pairedDevices by mutableStateOf<List<PairedPeer>>(catalog.listPairs())
         private set
+
+    var activeConnectedPeer by mutableStateOf<PairedPeer?>(null)
+        private set
+
+    init {
+        val dispatcher = app?.rappProxyDispatcher
+        if (dispatcher != null) {
+            scope.launch {
+                dispatcher.connectedPeer.collect { peer ->
+                    activeConnectedPeer = peer
+                }
+            }
+        }
+    }
+
+    fun disconnectActivePeer() {
+        app?.rappProxyDispatcher?.disconnectClient()
+    }
 
     fun createOffer() {
         reset()
@@ -140,7 +159,11 @@ internal class RappPairingModel(
                             val finalHandshake = bridge.writeHandshakeFrame(nowMonotonicMs)
                             if (bridge.handshakeComplete(nowMonotonicMs)) {
                                 bridge.enterConfirmation(nowMonotonicMs)
-                                val hello = bridge.sendHello(displayName = "Samsung Galaxy", platform = "Android")
+                                val hello =
+                                    bridge.sendHello(
+                                        displayName = localDeviceDisplayName(),
+                                        platform = "Android",
+                                    )
                                 browser?.send(finalHandshake)
                                 browser?.send(hello)
                                 requesterHandshakeStep = 2
@@ -315,7 +338,11 @@ internal class RappPairingModel(
                             bridge.readHandshakeFrame(event.data, nowMonotonicMs)
                             if (bridge.handshakeComplete(nowMonotonicMs)) {
                                 bridge.enterConfirmation(nowMonotonicMs)
-                                val hello = bridge.sendHello(displayName = "Samsung Galaxy", platform = "Android")
+                                val hello =
+                                    bridge.sendHello(
+                                        displayName = localDeviceDisplayName(),
+                                        platform = "Android",
+                                    )
                                 listener?.send(hello)
                                 proxyHandshakeStep = 2
                             }
@@ -424,6 +451,7 @@ internal class RappPairingModel(
         if (pairedDevices.isEmpty()) {
             app?.rappProxyDispatcher?.stopListening()
         }
+        activeConnectedPeer = null
     }
 
     fun reset() {
@@ -441,6 +469,29 @@ internal class RappPairingModel(
         receivedPeerHello = null
         phase = PairingPhase.Idle
         pairedDevices = catalog.listPairs()
+    }
+
+    private fun localDeviceDisplayName(): String {
+        val deviceName =
+            try {
+                android.provider.Settings.Global
+                    .getString(
+                        context.contentResolver,
+                        android.provider.Settings.Global.DEVICE_NAME,
+                    )?.trim()
+            } catch (_: Exception) {
+                null
+            }
+        if (!deviceName.isNullOrBlank()) {
+            return deviceName
+        }
+        val model =
+            android.os.Build.MODEL
+                ?.trim()
+        if (!model.isNullOrBlank()) {
+            return model
+        }
+        return "Android"
     }
 
     override fun close() {

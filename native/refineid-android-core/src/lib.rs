@@ -38,7 +38,7 @@ use pin1_status::{Pin1Preflight, Pin1PreflightFailure, Pin1State, probe_pin1_pre
 use pin2_status::{Pin2Preflight, Pin2PreflightFailure, Pin2State, probe_pin2_preflight};
 use qualified_signer::{
     MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH, QualifiedSignFailure, QualifiedSignature,
-    QualifiedSigningAlgorithm, qualified_sign,
+    QualifiedSigningAlgorithm, QualifiedSigningInput, qualified_sign,
 };
 use refineid_apdu::TransportOutcome;
 use refineid_atr::{Atr, Convention};
@@ -138,6 +138,9 @@ const QUALIFIED_SIGNATURE_SIGNING_REJECTED: u8 = 13;
 
 const QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384: u8 = 0;
 const QUALIFIED_ALGORITHM_ECDSA_P384_SHA384: u8 = 1;
+const QUALIFIED_PREHASHED_RSA_PKCS1_SHA384: u8 = 2;
+const QUALIFIED_PREHASHED_ECDSA_P384_SHA384: u8 = 3;
+const SHA384_DIGEST_LENGTH: usize = 48;
 
 const PIN_REFERENCE_CITIZEN: u8 = 0;
 const PIN_REFERENCE_ORGANIZATIONAL: u8 = 1;
@@ -799,7 +802,7 @@ fn contactless_qualified_sign_native<'local>(
         }
     };
 
-    let Some(algorithm) = qualified_algorithm_from_jint(algorithm) else {
+    let Some((algorithm, input_mode)) = qualified_request_from_jint(algorithm) else {
         can_bytes.fill(0);
         pin_bytes.fill(0);
         return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
@@ -812,10 +815,21 @@ fn contactless_qualified_sign_native<'local>(
             return Err(error);
         }
     };
-    if content_length > MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH {
-        can_bytes.fill(0);
-        pin_bytes.fill(0);
-        return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
+    match input_mode {
+        QualifiedSigningInputMode::Message => {
+            if content_length > MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH {
+                can_bytes.fill(0);
+                pin_bytes.fill(0);
+                return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
+            }
+        }
+        QualifiedSigningInputMode::Prehashed => {
+            if content_length != SHA384_DIGEST_LENGTH {
+                can_bytes.fill(0);
+                pin_bytes.fill(0);
+                return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
+            }
+        }
     }
     let certificate_length = match expected_certificate.len(env) {
         Ok(length) => length,
@@ -852,12 +866,18 @@ fn contactless_qualified_sign_native<'local>(
     let (result, bridge_failed) = {
         let exchange = JniBlockExchange::new(env, callback);
         let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let input = match input_mode {
+            QualifiedSigningInputMode::Message => QualifiedSigningInput::Message(&content_bytes),
+            QualifiedSigningInputMode::Prehashed => {
+                QualifiedSigningInput::Prehashed(&content_bytes)
+            }
+        };
         let (result, exchange) = contactless_qualified_sign(
             transport,
             can_bytes,
             algorithm,
             pin_bytes,
-            &content_bytes,
+            input,
             &certificate_bytes,
         );
         (result, exchange.bridge_failed())
@@ -1029,7 +1049,7 @@ fn qualified_sign_native<'local>(
         pin_bytes.fill(0);
         return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
     };
-    let Some(algorithm) = qualified_algorithm_from_jint(algorithm) else {
+    let Some((algorithm, input_mode)) = qualified_request_from_jint(algorithm) else {
         pin_bytes.fill(0);
         return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
     };
@@ -1040,9 +1060,19 @@ fn qualified_sign_native<'local>(
             return Err(error);
         }
     };
-    if content_length > MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH {
-        pin_bytes.fill(0);
-        return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
+    match input_mode {
+        QualifiedSigningInputMode::Message => {
+            if content_length > MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH {
+                pin_bytes.fill(0);
+                return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
+            }
+        }
+        QualifiedSigningInputMode::Prehashed => {
+            if content_length != SHA384_DIGEST_LENGTH {
+                pin_bytes.fill(0);
+                return one_byte_reply(env, QUALIFIED_SIGNATURE_BRIDGE_ERROR);
+            }
+        }
     }
     let certificate_length = match expected_certificate.len(env) {
         Ok(length) => length,
@@ -1074,11 +1104,17 @@ fn qualified_sign_native<'local>(
     let (result, bridge_failed) = {
         let exchange = JniBlockExchange::new(env, callback);
         let mut transport = AndroidCardTransport::new(exchange, level);
+        let input = match input_mode {
+            QualifiedSigningInputMode::Message => QualifiedSigningInput::Message(&content_bytes),
+            QualifiedSigningInputMode::Prehashed => {
+                QualifiedSigningInput::Prehashed(&content_bytes)
+            }
+        };
         let result = qualified_sign(
             &mut transport,
             algorithm,
             pin_bytes,
-            &content_bytes,
+            input,
             &certificate_bytes,
         );
         let exchange = transport.into_exchange();
@@ -1183,6 +1219,31 @@ fn qualified_algorithm_from_jint(value: jint) -> Option<QualifiedSigningAlgorith
         value if value == jint::from(QUALIFIED_ALGORITHM_ECDSA_P384_SHA384) => {
             Some(QualifiedSigningAlgorithm::EcdsaP384Sha384)
         }
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum QualifiedSigningInputMode {
+    Message,
+    Prehashed,
+}
+
+fn qualified_request_from_jint(
+    value: jint,
+) -> Option<(QualifiedSigningAlgorithm, QualifiedSigningInputMode)> {
+    if let Some(algorithm) = qualified_algorithm_from_jint(value) {
+        return Some((algorithm, QualifiedSigningInputMode::Message));
+    }
+    match value {
+        value if value == jint::from(QUALIFIED_PREHASHED_RSA_PKCS1_SHA384) => Some((
+            QualifiedSigningAlgorithm::RsaPkcs1Sha384,
+            QualifiedSigningInputMode::Prehashed,
+        )),
+        value if value == jint::from(QUALIFIED_PREHASHED_ECDSA_P384_SHA384) => Some((
+            QualifiedSigningAlgorithm::EcdsaP384Sha384,
+            QualifiedSigningInputMode::Prehashed,
+        )),
         _ => None,
     }
 }
@@ -1524,14 +1585,15 @@ mod tests {
         PIN1_PREFLIGHT_REPLY_LENGTH_BYTE, PIN1_PREFLIGHT_SUCCEEDED, PIN1_STATE_REMAINING,
         PIN2_PREFLIGHT_BRIDGE_ERROR, PIN2_PREFLIGHT_CARD_UNAVAILABLE, PIN2_PREFLIGHT_REPLY_LENGTH,
         PIN2_PREFLIGHT_SUCCEEDED, PIN2_STATE_REMAINING, POLICY_PERMITTED, PUBLISHED_PROFILE_ABSENT,
-        PUBLISHED_PROFILE_PRESENT, QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384,
-        QUALIFIED_SIGNATURE_CARD_UNAVAILABLE, QUALIFIED_SIGNATURE_REPLY_HEADER_LENGTH,
-        QUALIFIED_SIGNATURE_SUCCEEDED, authentication_algorithm_from_jint,
-        authentication_request_from_jint, encode_authentication_signature_reply,
-        encode_card_access_reply, encode_certificate_reply, encode_contactless_open_reply,
-        encode_pin1_preflight_reply, encode_pin2_preflight_reply, encode_qualified_signature_reply,
-        exchange_level_from_jint, map_pkcs15_selection_result, qualified_algorithm_from_jint,
-        validate_atr_bytes,
+        PUBLISHED_PROFILE_PRESENT, QUALIFIED_ALGORITHM_ECDSA_P384_SHA384,
+        QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384, QUALIFIED_PREHASHED_ECDSA_P384_SHA384,
+        QUALIFIED_PREHASHED_RSA_PKCS1_SHA384, QUALIFIED_SIGNATURE_CARD_UNAVAILABLE,
+        QUALIFIED_SIGNATURE_REPLY_HEADER_LENGTH, QUALIFIED_SIGNATURE_SUCCEEDED,
+        authentication_algorithm_from_jint, authentication_request_from_jint,
+        encode_authentication_signature_reply, encode_card_access_reply, encode_certificate_reply,
+        encode_contactless_open_reply, encode_pin1_preflight_reply, encode_pin2_preflight_reply,
+        encode_qualified_signature_reply, exchange_level_from_jint, map_pkcs15_selection_result,
+        qualified_algorithm_from_jint, qualified_request_from_jint, validate_atr_bytes,
     };
     use crate::authentication_signer::{
         AuthenticationSignFailure, AuthenticationSignature, AuthenticationSigningAlgorithm,
@@ -1559,6 +1621,7 @@ mod tests {
         AUTHENTICATION_PREHASHED_RSA_PSS_SHA512 as i32 + 1;
     const QUALIFIED_ALGORITHM_BELOW_RANGE: i32 = -1;
     const QUALIFIED_ALGORITHM_ABOVE_RANGE: i32 = 2;
+    const QUALIFIED_REQUEST_ABOVE_RANGE: i32 = QUALIFIED_PREHASHED_ECDSA_P384_SHA384 as i32 + 1;
     const SYNTHETIC_REJECTED_STATUS_WORD: u16 = 0x6a82;
     const SYNTHETIC_DER_SEQUENCE_TAG: u8 = 0x30;
     const SYNTHETIC_DER_EMPTY_LENGTH: u8 = 0x00;
@@ -1670,6 +1733,46 @@ mod tests {
         );
         assert_eq!(
             qualified_algorithm_from_jint(QUALIFIED_ALGORITHM_ABOVE_RANGE),
+            None
+        );
+    }
+
+    #[test]
+    fn accepts_only_stable_qualified_request_codes() {
+        assert_eq!(
+            qualified_request_from_jint(i32::from(QUALIFIED_ALGORITHM_RSA_PKCS1_SHA384)),
+            Some((
+                QualifiedSigningAlgorithm::RsaPkcs1Sha384,
+                super::QualifiedSigningInputMode::Message
+            ))
+        );
+        assert_eq!(
+            qualified_request_from_jint(i32::from(QUALIFIED_ALGORITHM_ECDSA_P384_SHA384)),
+            Some((
+                QualifiedSigningAlgorithm::EcdsaP384Sha384,
+                super::QualifiedSigningInputMode::Message
+            ))
+        );
+        assert_eq!(
+            qualified_request_from_jint(i32::from(QUALIFIED_PREHASHED_RSA_PKCS1_SHA384)),
+            Some((
+                QualifiedSigningAlgorithm::RsaPkcs1Sha384,
+                super::QualifiedSigningInputMode::Prehashed
+            ))
+        );
+        assert_eq!(
+            qualified_request_from_jint(i32::from(QUALIFIED_PREHASHED_ECDSA_P384_SHA384)),
+            Some((
+                QualifiedSigningAlgorithm::EcdsaP384Sha384,
+                super::QualifiedSigningInputMode::Prehashed
+            ))
+        );
+        assert_eq!(
+            qualified_request_from_jint(QUALIFIED_ALGORITHM_BELOW_RANGE),
+            None
+        );
+        assert_eq!(
+            qualified_request_from_jint(QUALIFIED_REQUEST_ABOVE_RANGE),
             None
         );
     }

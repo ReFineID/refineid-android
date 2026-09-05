@@ -13,6 +13,8 @@ private const val ZERO_BYTE: Byte = 0
 internal object NativeQualifiedSignWire {
     const val ALGORITHM_RSA_PKCS1_SHA384 = 0
     const val ALGORITHM_ECDSA_P384_SHA384 = 1
+    const val REQUEST_PREHASHED_RSA_PKCS1_SHA384 = 2
+    const val REQUEST_PREHASHED_ECDSA_P384_SHA384 = 3
 
     const val BRIDGE_ERROR_TAG = 0
     const val SUCCESS_TAG = 1
@@ -35,10 +37,16 @@ internal object NativeQualifiedSignWire {
     const val SIGNATURE_REPLY_HEADER_LENGTH = 2
 }
 
+internal enum class QualifiedSigningInputMode {
+    MESSAGE,
+    PREHASHED,
+}
+
 internal enum class QualifiedSigningAlgorithm(
     val wireValue: Int,
     val keyProfile: NativeCardKeyProfile,
     val signatureLength: Int,
+    val digestLength: Int = SHA384_DIGEST_LENGTH_BYTES,
 ) {
     RSA_PKCS1_SHA384(
         wireValue = NativeQualifiedSignWire.ALGORITHM_RSA_PKCS1_SHA384,
@@ -52,8 +60,36 @@ internal enum class QualifiedSigningAlgorithm(
     ),
 }
 
+internal fun QualifiedSigningAlgorithm.requestWireValue(inputMode: QualifiedSigningInputMode): Int =
+    when (inputMode) {
+        QualifiedSigningInputMode.MESSAGE -> {
+            wireValue
+        }
+
+        QualifiedSigningInputMode.PREHASHED -> {
+            when (this) {
+                QualifiedSigningAlgorithm.RSA_PKCS1_SHA384 -> {
+                    NativeQualifiedSignWire.REQUEST_PREHASHED_RSA_PKCS1_SHA384
+                }
+
+                QualifiedSigningAlgorithm.ECDSA_P384_SHA384 -> {
+                    NativeQualifiedSignWire.REQUEST_PREHASHED_ECDSA_P384_SHA384
+                }
+            }
+        }
+    }
+
+internal fun QualifiedSigningAlgorithm.acceptsInputLength(
+    inputMode: QualifiedSigningInputMode,
+    length: Int,
+): Boolean =
+    when (inputMode) {
+        QualifiedSigningInputMode.MESSAGE -> length in 0..MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH
+        QualifiedSigningInputMode.PREHASHED -> length == digestLength
+    }
+
 internal fun QualifiedSigningAlgorithm.acceptsContentLength(length: Int): Boolean =
-    length in 0..MAXIMUM_QUALIFIED_SIGNING_CONTENT_LENGTH
+    acceptsInputLength(QualifiedSigningInputMode.MESSAGE, length)
 
 /** One manually entered PIN2 submission, transferred to at most one native call. */
 internal class Pin2Submission private constructor(

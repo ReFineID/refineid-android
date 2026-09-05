@@ -108,6 +108,48 @@ internal class NfcQualifiedCardService(
         content: ByteArray,
         expectedCertificate: NativeQualifiedCertificate,
         onResult: (QualifiedSignResult) -> Unit,
+    ) = requestQualifiedInput(
+        pin2 = pin2,
+        input = content,
+        expectedCertificate = expectedCertificate,
+        onResult = onResult,
+        signer = { session, cert, input ->
+            session.qualifiedSign(
+                algorithm = algorithm,
+                pin2 = pin2,
+                content = input,
+                expectedCertificate = cert,
+            )
+        },
+    )
+
+    override fun requestQualifiedDigestSignature(
+        algorithm: QualifiedSigningAlgorithm,
+        pin2: Pin2Submission,
+        digest: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+        onResult: (QualifiedSignResult) -> Unit,
+    ) = requestQualifiedInput(
+        pin2 = pin2,
+        input = digest,
+        expectedCertificate = expectedCertificate,
+        onResult = onResult,
+        signer = { session, cert, input ->
+            session.qualifiedSignPrehashed(
+                algorithm = algorithm,
+                pin2 = pin2,
+                digest = input,
+                expectedCertificate = cert,
+            )
+        },
+    )
+
+    private fun requestQualifiedInput(
+        pin2: Pin2Submission,
+        input: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+        onResult: (QualifiedSignResult) -> Unit,
+        signer: (ContactlessSession, NativeQualifiedCertificate, ByteArray) -> QualifiedSignResult,
     ) {
         if (!isReady()) {
             pin2.close()
@@ -122,19 +164,16 @@ internal class NfcQualifiedCardService(
                 onResult(QualifiedSignResult.Failure(QualifiedSignFailure.BRIDGE_ERROR))
                 return
             }
-        val contentCopy = content.copyOf()
+        val inputCopy = input.copyOf()
         val generation = currentGeneration()
         try {
             probeExecutor.execute {
                 val result =
                     try {
                         if (generation == currentGeneration()) {
-                            activeSession()?.qualifiedSign(
-                                algorithm = algorithm,
-                                pin2 = pin2,
-                                content = contentCopy,
-                                expectedCertificate = certificateCopy,
-                            ) ?: run {
+                            activeSession()?.let { session ->
+                                signer(session, certificateCopy, inputCopy)
+                            } ?: run {
                                 pin2.close()
                                 qualifiedUnavailable()
                             }
@@ -147,7 +186,7 @@ internal class NfcQualifiedCardService(
                         QualifiedSignResult.Failure(QualifiedSignFailure.BRIDGE_ERROR)
                     } finally {
                         certificateCopy.close()
-                        contentCopy.fill(ZERO_BYTE)
+                        inputCopy.fill(ZERO_BYTE)
                     }
                 mainHandler.post {
                     if (generation == currentGeneration()) {
@@ -161,7 +200,7 @@ internal class NfcQualifiedCardService(
         } catch (_: RejectedExecutionException) {
             pin2.close()
             certificateCopy.close()
-            contentCopy.fill(ZERO_BYTE)
+            inputCopy.fill(ZERO_BYTE)
             onResult(qualifiedUnavailable())
         }
     }

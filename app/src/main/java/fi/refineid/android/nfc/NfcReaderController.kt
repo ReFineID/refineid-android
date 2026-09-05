@@ -263,8 +263,10 @@ internal class NfcReaderController(
         // openSessionBytes read it at execution time instead.
         if (latestIsoDep == null) {
             inMemoryCanBytes?.fill(0)
+            pin1?.copyBytes()?.let(pinCache::recordVerified)
             pin1?.close()
             refreshReaderMode()
+            publish(NfcReaderSnapshot(status = NfcReaderStatus.WAITING_FOR_CARD))
             return
         }
         publish(NfcReaderSnapshot(status = NfcReaderStatus.CONNECTING))
@@ -366,8 +368,8 @@ internal class NfcReaderController(
                     openSessionBytes(
                         canBytes = storedCan,
                         generation = generation,
-                        mintOnSuccess = false,
-                        pin1 = null,
+                        mintOnSuccess = true,
+                        pin1 = pinCache.take(),
                         isoDepTarget = isoDep,
                     )
                 }
@@ -549,6 +551,9 @@ internal class NfcReaderController(
             // Hold PIN1 for the session so browser signing needs no
             // prompt; the negative cache guards a genuinely wrong value.
             pin1?.copyBytes()?.let(pinCache::recordVerified)
+            if (mintOnSuccess || primedCardStored) {
+                pin1?.copyBytes()?.let(primedCanStore::writePin1)
+            }
             pin1?.close()
             // Keep the field connected: the PACE session opened just now is
             // held so the sign that follows reuses it with no second handshake.

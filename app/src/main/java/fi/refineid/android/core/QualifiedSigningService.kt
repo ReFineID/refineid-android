@@ -11,6 +11,14 @@ internal interface QualifiedSigningService {
         expectedCertificate: NativeQualifiedCertificate,
         onResult: (QualifiedSignResult) -> Unit,
     )
+
+    fun requestQualifiedDigestSignature(
+        algorithm: QualifiedSigningAlgorithm,
+        pin2: Pin2Submission,
+        digest: ByteArray,
+        expectedCertificate: NativeQualifiedCertificate,
+        onResult: (QualifiedSignResult) -> Unit,
+    )
 }
 
 internal interface QualifiedCardService :
