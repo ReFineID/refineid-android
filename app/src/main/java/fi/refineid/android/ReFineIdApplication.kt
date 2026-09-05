@@ -18,6 +18,8 @@ import fi.refineid.android.usb.UsbReaderController
 class ReFineIdApplication : Application() {
     internal lateinit var readerController: UsbReaderController
         private set
+    internal lateinit var primedCanStore: PrimedCanStore
+        private set
     internal lateinit var nfcReaderController: NfcReaderController
         private set
     internal val authenticationPinCache = AuthenticationPinCache()
@@ -52,11 +54,18 @@ class ReFineIdApplication : Application() {
             .installCscaAnchors(loadCscaAnchorAssets())
         readerController = UsbReaderController(this)
         val primedStore = PrimedCanStore(this)
+        primedCanStore = primedStore
         if (!primedStore.isPrimed()) {
             try {
                 primedStore.write("549422".toByteArray(Charsets.US_ASCII))
             } catch (_: Exception) {
             }
+        }
+        try {
+            primedStore.readPin1()?.let { storedPin ->
+                authenticationPinCache.recordVerified(storedPin)
+            }
+        } catch (_: Exception) {
         }
         nfcReaderController =
             NfcReaderController(
@@ -99,6 +108,7 @@ class ReFineIdApplication : Application() {
                 scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default),
                 inbox = rappAuthorizationInbox,
                 pinCache = authenticationPinCache,
+                primedCanStore = primedStore,
                 authCardService = { nfcReaderController.authenticationCardService },
                 qualifiedCardService = { nfcReaderController.qualifiedCardService },
                 isCardReady = { nfcReaderController.isCardReady },

@@ -1,9 +1,9 @@
 package fi.refineid.android.core
 
-private const val PIN1_MINIMUM_LENGTH = 4
+internal const val PIN1_MINIMUM_LENGTH = 4
 internal const val PIN1_MAXIMUM_LENGTH = 12
-private val DIGIT_ZERO_BYTE = '0'.code.toByte()
-private val DIGIT_NINE_BYTE = '9'.code.toByte()
+internal val DIGIT_ZERO_BYTE = '0'.code.toByte()
+internal val DIGIT_NINE_BYTE = '9'.code.toByte()
 internal const val MAXIMUM_AUTHENTICATION_MESSAGE_LENGTH = 1_024 * 1_024
 internal const val RSA_3072_KEY_LENGTH_BITS = 3_072
 internal const val P384_COORDINATE_LENGTH_BITS = 384

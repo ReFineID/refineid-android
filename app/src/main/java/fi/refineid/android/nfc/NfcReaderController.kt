@@ -551,6 +551,9 @@ internal class NfcReaderController(
             // Hold PIN1 for the session so browser signing needs no
             // prompt; the negative cache guards a genuinely wrong value.
             pin1?.copyBytes()?.let(pinCache::recordVerified)
+            if (mintOnSuccess || primedCardStored) {
+                pin1?.copyBytes()?.let(primedCanStore::writePin1)
+            }
             pin1?.close()
             // Keep the field connected: the PACE session opened just now is
             // held so the sign that follows reuses it with no second handshake.

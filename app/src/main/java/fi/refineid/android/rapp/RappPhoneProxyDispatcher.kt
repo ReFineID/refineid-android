@@ -6,6 +6,7 @@ import android.content.Context
 import fi.refineid.android.BuildConfig
 import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationPinCache
+import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.NativeCardKeyProfile
@@ -17,6 +18,7 @@ import fi.refineid.android.core.Pin2Submission
 import fi.refineid.android.core.QualifiedCardService
 import fi.refineid.android.core.QualifiedSignResult
 import fi.refineid.android.core.QualifiedSigningAlgorithm
+import fi.refineid.android.prime.PrimedCanStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +47,7 @@ internal class RappPhoneProxyDispatcher(
     private val scope: CoroutineScope,
     private val inbox: RappAuthorizationInbox,
     private val pinCache: AuthenticationPinCache? = null,
+    private val primedCanStore: PrimedCanStore? = null,
     private val authCardService: () -> AuthenticationCardService?,
     private val qualifiedCardService: () -> QualifiedCardService?,
     private val isCardReady: () -> Boolean = { false },
@@ -306,10 +309,25 @@ internal class RappPhoneProxyDispatcher(
         when (desc.kind) {
             RappOperationKind.BROWSER_AUTHENTICATE -> {
                 val cachedPin = pinCache?.take()
-                if (cachedPin != null) {
-                    cachedPin.consume { pinBytes ->
-                        pendingPins[opIdHex] = String(pinBytes, Charsets.US_ASCII)
+                val storedPinBytes = if (cachedPin == null) primedCanStore?.readPin1() else null
+                val pinToUse =
+                    if (cachedPin != null) {
+                        var pinStr = ""
+                        cachedPin.consume { pinBytes ->
+                            pinStr = String(pinBytes, Charsets.US_ASCII)
+                        }
+                        pinStr
+                    } else if (storedPinBytes != null) {
+                        val pinStr = String(storedPinBytes, Charsets.US_ASCII)
+                        storedPinBytes.fill(0)
+                        pinCache?.recordVerified(pinStr.toByteArray(Charsets.US_ASCII))
+                        pinStr
+                    } else {
+                        null
                     }
+
+                if (pinToUse != null) {
+                    pendingPins[opIdHex] = pinToUse
                     approve(opId, bridge)
                 } else {
                     val requesterName =
@@ -325,6 +343,9 @@ internal class RappPhoneProxyDispatcher(
                         action = RappAuthAction.BROWSER_AUTH,
                         onApproved = { pin1 ->
                             pinCache?.recordVerified(pin1.toByteArray(Charsets.US_ASCII))
+                            if (primedCanStore?.isPrimed() == true) {
+                                primedCanStore.writePin1(pin1.toByteArray(Charsets.US_ASCII))
+                            }
                             pendingPins[opIdHex] = pin1
                             approve(opId, bridge)
                         },
@@ -613,6 +634,13 @@ internal class RappPhoneProxyDispatcher(
                     pinCache?.take()?.consume { pinBytes ->
                         fromCache = String(pinBytes, Charsets.US_ASCII)
                     }
+                    if (fromCache.isEmpty()) {
+                        primedCanStore?.readPin1()?.let { storedBytes ->
+                            fromCache = String(storedBytes, Charsets.US_ASCII)
+                            storedBytes.fill(0)
+                            pinCache?.recordVerified(fromCache.toByteArray(Charsets.US_ASCII))
+                        }
+                    }
                     fromCache
                 }
             if (resolvedPin.isEmpty()) {
@@ -632,6 +660,9 @@ internal class RappPhoneProxyDispatcher(
             when (result) {
                 is AuthenticationSignResult.Success -> {
                     pinCache?.recordVerified(resolvedPin.toByteArray(Charsets.US_ASCII))
+                    if (primedCanStore?.isPrimed() == true) {
+                        primedCanStore.writePin1(resolvedPin.toByteArray(Charsets.US_ASCII))
+                    }
                     try {
                         val rawSig = result.signature.copyBytes()
                         val wireSig =
@@ -648,7 +679,11 @@ internal class RappPhoneProxyDispatcher(
                     }
                 }
 
-                else -> {
+                is AuthenticationSignResult.Failure -> {
+                    if (result.kind == AuthenticationSignFailure.WRONG_PIN) {
+                        pinCache?.recordRejected(resolvedPin.toByteArray(Charsets.US_ASCII))
+                        primedCanStore?.forgetPin1()
+                    }
                     try {
                         val resp = bridge.credentialRejected(opId, RappClock.monotonicMs())
                         handleBridgeAction(resp, bridge)
