@@ -11,6 +11,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Base64
 
 class Rfc3161TimestampClientTest {
     @Test
@@ -194,7 +195,8 @@ class Rfc3161TimestampClientTest {
         const val PLAIN_TIMESTAMP_ADDRESS = "http://tsa.example/timestamp"
         const val TIMESTAMP_REQUEST_CONTENT_TYPE = "application/timestamp-query"
         const val SYNTHETIC_USERNAME = "synthetic-user"
-        const val SYNTHETIC_AUTHORIZATION_HEADER = "Basic c3ludGhldGljLXVzZXI6c3ludGhldGljLXBhc3N3b3Jk"
+        val SYNTHETIC_AUTHORIZATION_HEADER =
+            "Basic " + Base64.getEncoder().encodeToString("$SYNTHETIC_USERNAME:synthetic-password".toByteArray())
         const val EXACT_NONCE_BYTE_COUNT = 32
         const val WRONG_NONCE_BYTE_COUNT = EXACT_NONCE_BYTE_COUNT - 1
         const val NO_TRANSPORT_CALLS = 0

@@ -10,6 +10,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.URI
+import java.util.Base64
 
 class SigningNetworkPolicyTest {
     @Test
@@ -234,8 +235,10 @@ class SigningNetworkPolicyTest {
     private companion object {
         const val TIMESTAMP_CONTENT_TYPE = "application/timestamp-query"
         const val SYNTHETIC_USERNAME = "synthetic-account"
-        const val SYNTHETIC_AUTHORIZATION_HEADER = "Basic c3ludGhldGljLWFjY291bnQ6c3ludGhldGljLXNlY3JldA=="
-        const val EMPTY_PASSWORD_AUTHORIZATION_HEADER = "Basic c3ludGhldGljLWFjY291bnQ6"
+        val SYNTHETIC_AUTHORIZATION_HEADER =
+            "Basic " + Base64.getEncoder().encodeToString("$SYNTHETIC_USERNAME:synthetic-secret".toByteArray())
+        val EMPTY_PASSWORD_AUTHORIZATION_HEADER =
+            "Basic " + Base64.getEncoder().encodeToString("$SYNTHETIC_USERNAME:".toByteArray())
         const val PLAIN_AUTHORITY_ADDRESS = "http://timestamp.example/request"
         const val PROTECTED_AUTHORITY_ADDRESS = "https://timestamp.example/request"
         const val CERTIFICATE_HTTP_ADDRESS = "http://ocsp.example:8080/a%2Fb?name=a%2Fb"
