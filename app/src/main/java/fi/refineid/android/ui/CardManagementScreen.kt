@@ -74,6 +74,11 @@ private enum class ManagementTask {
     ACTIVATE_CARD,
 }
 
+private data class OutcomeNotice(
+    val resId: Int,
+    val arg: String? = null,
+)
+
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun CardManagementScreen(
@@ -87,7 +92,7 @@ internal fun CardManagementScreen(
     var isProbing by remember { mutableStateOf(false) }
     var isOperating by remember { mutableStateOf(false) }
     var selectedTask by remember { mutableStateOf(ManagementTask.CHANGE_PIN1) }
-    var outcomeNoticeResId by remember { mutableStateOf<Int?>(null) }
+    var outcomeNotice by remember { mutableStateOf<OutcomeNotice?>(null) }
     var outcomeIsError by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
@@ -135,11 +140,13 @@ internal fun CardManagementScreen(
                 }
 
                 is CardManagementResult.Failure -> {
-                    outcomeNoticeResId =
-                        when (result.kind) {
-                            CardManagementFailure.CARD_UNAVAILABLE -> R.string.unavailable
-                            else -> R.string.error
-                        }
+                    outcomeNotice =
+                        OutcomeNotice(
+                            when (result.kind) {
+                                CardManagementFailure.CARD_UNAVAILABLE -> R.string.unavailable
+                                else -> R.string.error
+                            },
+                        )
                     outcomeIsError = true
                 }
             }
@@ -272,13 +279,14 @@ internal fun CardManagementScreen(
     fun executeOperation() {
         if (!canExecute || cardManagementService == null) return
         isOperating = true
-        outcomeNoticeResId = null
+        outcomeNotice = null
 
         when (selectedTask) {
             ManagementTask.CHANGE_PIN1, ManagementTask.CHANGE_PIN2 -> {
                 val curBytes = currentPin.toByteArray(Charsets.US_ASCII)
                 val newBytes = newPin.toByteArray(Charsets.US_ASCII)
                 val isPin1 = selectedTask == ManagementTask.CHANGE_PIN1
+                val pinName = if (isPin1) "PIN 1" else "PIN 2"
                 if (isPin1) {
                     pinCache?.clear()
                     onPin1Changed?.invoke()
@@ -289,21 +297,21 @@ internal fun CardManagementScreen(
                     when (result) {
                         is CardManagementResult.Success -> {
                             if (result.value is ManageOutcome.Succeeded) {
-                                outcomeNoticeResId = R.string.pin_changed_success
+                                outcomeNotice = OutcomeNotice(R.string.pin_changed_success, pinName)
                                 outcomeIsError = false
                                 if (isPin1) {
                                     pinCache?.clear()
                                     onPin1Changed?.invoke()
                                 }
                             } else {
-                                outcomeNoticeResId = R.string.error
+                                outcomeNotice = OutcomeNotice(R.string.error)
                                 outcomeIsError = true
                             }
                             probe()
                         }
 
                         is CardManagementResult.Failure -> {
-                            outcomeNoticeResId = R.string.error
+                            outcomeNotice = OutcomeNotice(R.string.error)
                             outcomeIsError = true
                         }
                     }
@@ -319,6 +327,7 @@ internal fun CardManagementScreen(
                 val pukBytes = puk.toByteArray(Charsets.US_ASCII)
                 val newBytes = newPin.toByteArray(Charsets.US_ASCII)
                 val isPin1 = selectedTask == ManagementTask.RESET_PIN1
+                val pinName = if (isPin1) "PIN 1" else "PIN 2"
                 if (isPin1) {
                     pinCache?.clear()
                     onPin1Changed?.invoke()
@@ -329,21 +338,21 @@ internal fun CardManagementScreen(
                     when (result) {
                         is CardManagementResult.Success -> {
                             if (result.value is ManageOutcome.Succeeded) {
-                                outcomeNoticeResId = R.string.pin_reset_success
+                                outcomeNotice = OutcomeNotice(R.string.pin_reset_success, pinName)
                                 outcomeIsError = false
                                 if (isPin1) {
                                     pinCache?.clear()
                                     onPin1Changed?.invoke()
                                 }
                             } else {
-                                outcomeNoticeResId = R.string.error
+                                outcomeNotice = OutcomeNotice(R.string.error)
                                 outcomeIsError = true
                             }
                             probe()
                         }
 
                         is CardManagementResult.Failure -> {
-                            outcomeNoticeResId = R.string.error
+                            outcomeNotice = OutcomeNotice(R.string.error)
                             outcomeIsError = true
                         }
                     }
@@ -385,20 +394,20 @@ internal fun CardManagementScreen(
                             if (actReport.pin1Outcome is ManageOutcome.Succeeded &&
                                 actReport.pin2Outcome is ManageOutcome.Succeeded
                             ) {
-                                outcomeNoticeResId = R.string.card_activated_success
+                                outcomeNotice = OutcomeNotice(R.string.card_activated_success)
                                 outcomeIsError = false
                                 pinCache?.clear()
                                 onPin1Changed?.invoke()
                                 probe()
                             } else {
-                                outcomeNoticeResId = R.string.error
+                                outcomeNotice = OutcomeNotice(R.string.error)
                                 outcomeIsError = true
                                 probe()
                             }
                         }
 
                         is CardManagementResult.Failure -> {
-                            outcomeNoticeResId = R.string.error
+                            outcomeNotice = OutcomeNotice(R.string.error)
                             outcomeIsError = true
                         }
                     }
@@ -465,15 +474,22 @@ internal fun CardManagementScreen(
         }
 
         // Outcome Banner
-        if (outcomeNoticeResId != null) {
+        if (outcomeNotice != null) {
+            val notice = outcomeNotice!!
+            val message =
+                if (notice.arg != null) {
+                    stringResource(notice.resId, notice.arg)
+                } else {
+                    stringResource(notice.resId)
+                }
             OutcomeBanner(
-                message = stringResource(outcomeNoticeResId!!),
+                message = message,
                 isError = outcomeIsError,
             )
         }
 
         // Guidance / Policy Banner
-        if (guidanceMessage != null && guidanceTone != null && outcomeNoticeResId == null) {
+        if (guidanceMessage != null && guidanceTone != null && outcomeNotice == null) {
             GuidanceBanner(
                 message = guidanceMessage,
                 tone = guidanceTone,
@@ -568,7 +584,7 @@ internal fun CardManagementScreen(
                     selectedTask = selectedTask,
                     onSelect = { task ->
                         selectedTask = task
-                        outcomeNoticeResId = null
+                        outcomeNotice = null
                         clearEntries()
                     },
                 )
