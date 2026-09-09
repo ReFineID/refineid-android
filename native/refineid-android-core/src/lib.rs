@@ -29,7 +29,8 @@ use card_transport::{AndroidCardTransport, CardExchangeLevel};
 use contactless::{
     contactless_authenticate_and_sign, contactless_authenticate_and_sign_on_session,
     contactless_close, contactless_connect, contactless_open, contactless_probe_pin2,
-    contactless_qualified_sign, contactless_read_qualified_certificate,
+    contactless_qualified_sign, contactless_read_face_photo,
+    contactless_read_face_photo_on_session, contactless_read_qualified_certificate,
 };
 use jni::objects::{JByteArray, JClass, JObject};
 use jni::sys::jint;
@@ -348,6 +349,21 @@ const _: NativeMethod = jni::native_method! {
 const _: NativeMethod = jni::native_method! {
     java_type = "fi.refineid.android.core.NativeContactlessSession",
     static extern fn contactless_close_native() -> jint,
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeContactlessSession",
+    static extern fn read_face_photo_on_session_native(
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeContactlessSession",
+    static extern fn read_face_photo_with_can_native(
+        can: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
 };
 
 const _: NativeMethod = jni::native_method! {
@@ -727,6 +743,50 @@ fn contactless_close_native<'local>(
     contactless::set_last_read_document_number(None);
     contactless_close();
     Ok(CONTACTLESS_SESSION_CLOSED)
+}
+
+fn read_face_photo_on_session_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let (photo, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let (photo, exchange) = contactless_read_face_photo_on_session(transport);
+        (photo, exchange.bridge_failed())
+    };
+    if bridge_failed {
+        env.new_byte_array(0)
+    } else {
+        match photo {
+            Some(bytes) => env.byte_array_from_slice(&bytes),
+            None => env.new_byte_array(0),
+        }
+    }
+}
+
+fn read_face_photo_with_can_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    can: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let can_bytes = take_secret_bytes(env, &can)?;
+    let (photo, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let (photo, exchange) = contactless_read_face_photo(transport, can_bytes);
+        (photo, exchange.bridge_failed())
+    };
+    if bridge_failed {
+        env.new_byte_array(0)
+    } else {
+        match photo {
+            Some(bytes) => env.byte_array_from_slice(&bytes),
+            None => env.new_byte_array(0),
+        }
+    }
 }
 
 fn read_card_face_photo_native<'local>(

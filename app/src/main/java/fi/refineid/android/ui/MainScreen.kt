@@ -124,7 +124,21 @@ internal fun MainScreen(
     rappInbox: RappAuthorizationInbox? = null,
     remoteCardModel: fi.refineid.android.rapp.RemoteCardModel? = null,
     onPin1Changed: () -> Unit = {},
+    onReadPhoto: (((ByteArray?) -> Unit) -> Unit)? = null,
 ) {
+    var showsPhotoReadNfcDialog by remember { mutableStateOf(false) }
+    var pendingPhotoConsumer by remember { mutableStateOf<((ByteArray?) -> Unit)?>(null) }
+
+    LaunchedEffect(nfcSnapshot.status, pendingPhotoConsumer) {
+        if (nfcSnapshot.status == NfcReaderStatus.CARD_READY && pendingPhotoConsumer != null) {
+            onReadPhoto?.invoke { bytes ->
+                pendingPhotoConsumer?.invoke(bytes)
+                pendingPhotoConsumer = null
+                showsPhotoReadNfcDialog = false
+            }
+        }
+    }
+
     val fallbackRemoteName = remember { kotlinx.coroutines.flow.MutableStateFlow<String?>(null) }
     val fallbackRemoteDetails = remember { kotlinx.coroutines.flow.MutableStateFlow<PersonCardDetails?>(null) }
     val remoteHolderName by (remoteCardModel?.holderName ?: fallbackRemoteName).collectAsState()
@@ -187,8 +201,6 @@ internal fun MainScreen(
     val performFullIdentityReset: () -> Unit = {
         onForgetPrimedCard()
         CanSessionStore.drop()
-        fi.refineid.android.core.CardPhotoStore
-            .clear()
         pinCache?.clear()
         onPin1Changed()
         rappPairingModel?.terminate()
@@ -327,7 +339,17 @@ internal fun MainScreen(
                 tag = "PersonScreen",
                 onBack = { destination = MainDestination.HOME },
             ) {
-                PersonScreen(details = details)
+                PersonScreen(
+                    details = details,
+                    onReadPhoto = { onLoaded ->
+                        if (usbCardReady || nfcSnapshot.status == NfcReaderStatus.CARD_READY) {
+                            onReadPhoto?.invoke(onLoaded)
+                        } else {
+                            pendingPhotoConsumer = onLoaded
+                            showsPhotoReadNfcDialog = true
+                        }
+                    },
+                )
             }
         }
 
@@ -353,6 +375,19 @@ internal fun MainScreen(
                 )
             }
         }
+    }
+
+    if (showsPhotoReadNfcDialog) {
+        ReadCardNfcDialog(
+            onDismiss = {
+                showsPhotoReadNfcDialog = false
+                pendingPhotoConsumer?.invoke(null)
+                pendingPhotoConsumer = null
+            },
+            onConnect = { can, pin1 ->
+                onNfcConnect(can, pin1)
+            },
+        )
     }
 }
 
@@ -496,22 +531,6 @@ private fun IdentitySection(
 ) {
     var showsForgetConfirmation by remember { mutableStateOf(false) }
     var showsNfcReadDialog by remember { mutableStateOf(false) }
-    var readNavigationPending by remember { mutableStateOf(false) }
-
-    // Open the person page only after the requested read actually
-    // completed: completion is the holder name arriving from a successful
-    // PACE read. A pre-existing or restored holder name alone never navigates.
-    LaunchedEffect(readNavigationPending, holderName) {
-        if (readNavigationPending) {
-            if (holderName != null) {
-                readNavigationPending = false
-                onOpenPerson()
-            } else {
-                delay(READ_NAVIGATION_TIMEOUT_MILLISECONDS)
-                readNavigationPending = false
-            }
-        }
-    }
 
     Section(stringResource(R.string.section_identity)) {
         NavigationGroup {
@@ -614,7 +633,6 @@ private fun IdentitySection(
         ReadCardNfcDialog(
             onDismiss = { showsNfcReadDialog = false },
             onConnect = { can, pin1 ->
-                readNavigationPending = true
                 onReadCard(can, pin1)
             },
         )
@@ -1237,8 +1255,6 @@ private fun ReaderCanEntry(onConnect: (CanSubmission) -> Unit) {
 
 private const val WEIGHT_FILL = 1F
 
-/** How long a requested card read may take before its navigation intent lapses. */
-private const val READ_NAVIGATION_TIMEOUT_MILLISECONDS = 30_000L
 private val SCREEN_HORIZONTAL_PADDING = 24.dp
 private val SCREEN_VERTICAL_PADDING = 28.dp
 private val SCREEN_ITEM_SPACING = 28.dp

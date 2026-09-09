@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
                     rappPairingModel = model,
                     rappInbox = rappInbox,
                     remoteCardModel = (application as ReFineIdApplication).remoteCardModel,
+                    onReadPhoto = nfcReaderController::readPhoto,
                 )
             }
         }

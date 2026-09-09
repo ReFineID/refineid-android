@@ -95,6 +95,25 @@ internal class ContactlessSession(
         return material.copyAuthenticationCertificate()
     }
 
+    fun readFacePhoto(): ByteArray? {
+        checkOwnerThread()
+        check(!isClosed) {
+            "contactless session is closed"
+        }
+        return if (heldSession && isoDep.isConnected) {
+            NativeContactlessSession.readFacePhotoOnSession(
+                NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        } else if (isoDep.isConnected) {
+            NativeContactlessSession.readFacePhotoWithCan(
+                can.copyOf(),
+                NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        } else {
+            null
+        }
+    }
+
     fun authenticateAndSignInput(
         algorithm: AuthenticationSigningAlgorithm,
         inputMode: AuthenticationSigningInputMode,
