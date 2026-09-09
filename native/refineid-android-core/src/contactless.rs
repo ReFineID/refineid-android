@@ -202,7 +202,7 @@ pub(crate) fn contactless_open<Exchange: SingleBlockExchange>(
                 .map_err(open_preflight_failure)
         });
     if result.is_ok() {
-        read_minimal_emrtd_data_from_secure_channel(&mut secure);
+        read_emrtd_data_from_secure_channel(&mut secure);
     }
     (result, secure.into_inner().into_exchange())
 }
@@ -270,7 +270,7 @@ pub(crate) fn contactless_connect<Exchange: SingleBlockExchange>(
                 .map_err(open_preflight_failure)
         });
     if result.is_ok() {
-        read_minimal_emrtd_data_from_secure_channel(&mut secure);
+        read_emrtd_data_from_secure_channel(&mut secure);
     }
     let (transport, session) = secure.into_parts();
     if result.is_ok() {
@@ -594,53 +594,44 @@ fn qualified_selection_failure<E>(error: Pkcs15Error<E>) -> QualifiedSignFailure
     }
 }
 
-fn read_minimal_emrtd_data_from_secure_channel<T: CardTransport + Pkcs15Ops + EmrtdOps>(
-    secure: &mut T,
-) {
+fn read_emrtd_data_from_secure_channel<T: CardTransport + Pkcs15Ops + EmrtdOps>(secure: &mut T) {
     set_last_read_face_photo(None);
     set_last_read_verification(VERIFICATION_NOT_PERFORMED);
-    if secure.select_emrtd_application().is_ok() {
+    set_last_read_document_number(None);
+
+    if secure.select_emrtd_application().is_err() {
+        return;
+    }
+
+    let mut face_photo = None;
+
+    if let Ok(files) = secure.read_passive_authentication_files() {
+        let mrz = ParsedMrzTd1::parse(files.mrz.as_bytes());
+        set_last_read_document_number(mrz.map(|parsed| parsed.document_number));
+
+        if let Some(anchors) = installed_csca_anchors() {
+            let verdict =
+                authenticate_document(&files.security_object, &files.mrz, &files.face, &anchors);
+            set_last_read_verification(if verdict.is_ok() {
+                VERIFICATION_PASSED
+            } else {
+                VERIFICATION_FAILED
+            });
+        }
+
+        face_photo = parse_card_face_image(files.face.as_bytes()).map(|image| image.into_bytes());
+    } else {
+        // Fallback: read MRZ and face photo individually
         if let Ok(Some(mrz)) = secure.read_mrz_td1() {
             set_last_read_document_number(Some(mrz.document_number));
-        } else {
-            set_last_read_document_number(None);
         }
-        let _ = secure.select_pkcs15_application();
-    } else {
-        set_last_read_document_number(None);
+        if let Ok(Some(image)) = secure.read_face_image() {
+            face_photo = Some(image.into_bytes());
+        }
     }
-}
 
-#[allow(dead_code)]
-fn read_face_photo_from_secure_channel<T: CardTransport + Pkcs15Ops + EmrtdOps>(
-    secure: &mut T,
-) -> Option<Vec<u8>> {
-    set_last_read_verification(VERIFICATION_NOT_PERFORMED);
-    if secure.select_emrtd_application().is_err() {
-        set_last_read_document_number(None);
-        return None;
-    }
-    let files = secure.read_passive_authentication_files().ok();
     let _ = secure.select_pkcs15_application();
-    let Some(files) = files else {
-        set_last_read_document_number(None);
-        return None;
-    };
-    let mrz = ParsedMrzTd1::parse(files.mrz.as_bytes());
-    set_last_read_document_number(mrz.map(|parsed| parsed.document_number));
-    // Passive authentication: the DSC comes from the card's own SOD,
-    // the CSCA anchor from the platform-installed set. Without anchors
-    // the verdict stays "not performed" -- never a fabricated pass.
-    if let Some(anchors) = installed_csca_anchors() {
-        let verdict =
-            authenticate_document(&files.security_object, &files.mrz, &files.face, &anchors);
-        set_last_read_verification(if verdict.is_ok() {
-            VERIFICATION_PASSED
-        } else {
-            VERIFICATION_FAILED
-        });
-    }
-    parse_card_face_image(files.face.as_bytes()).map(|image| image.into_bytes())
+    set_last_read_face_photo(face_photo);
 }
 
 #[cfg(test)]

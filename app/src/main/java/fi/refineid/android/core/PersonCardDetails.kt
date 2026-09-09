@@ -30,8 +30,16 @@ internal object CardPhotoStore {
      * the identity it was read with.
      */
     @Synchronized
-    fun getPhoto(holderKey: String?): ByteArray? =
-        holderKey?.let { key -> photos[key] ?: loadPersisted(key)?.also { photos[key] = it } }
+    fun getPhoto(holderKey: String?): ByteArray? {
+        if (holderKey == null) return null
+        photos[holderKey]?.let { return it }
+        val tokens = holderKey.split(" ").filter { it.isNotBlank() }
+        if (tokens.size > 1 && tokens.last().any { it.isDigit() }) {
+            val bareName = tokens.dropLast(1).joinToString(" ")
+            photos[bareName]?.let { return it }
+        }
+        return (loadPersisted(holderKey) ?: loadBarePersisted(holderKey))?.also { photos[holderKey] = it }
+    }
 
     @Synchronized
     fun savePhoto(
@@ -41,6 +49,11 @@ internal object CardPhotoStore {
     ) {
         if (holderKey != null) {
             photos[holderKey] = photoBytes
+            val tokens = holderKey.split(" ").filter { it.isNotBlank() }
+            if (tokens.size > 1 && tokens.last().any { it.isDigit() }) {
+                val bareName = tokens.dropLast(1).joinToString(" ")
+                photos[bareName] = photoBytes
+            }
             persist(holderKey, documentNumber, photoBytes)
         }
     }
@@ -84,6 +97,15 @@ internal object CardPhotoStore {
         } catch (_: IOException) {
             null
         }
+
+    private fun loadBarePersisted(holderKey: String): ByteArray? {
+        val tokens = holderKey.split(" ").filter { it.isNotBlank() }
+        if (tokens.size > 1 && tokens.last().any { it.isDigit() }) {
+            val bareName = tokens.dropLast(1).joinToString(" ")
+            return loadPersisted(bareName)
+        }
+        return null
+    }
 
     // A cache hit requires the whole holder key: either the bare stem
     // (no document number was known) or the stem followed by a space and
