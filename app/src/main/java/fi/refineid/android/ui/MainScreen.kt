@@ -96,6 +96,7 @@ private enum class MainDestination {
     SIGN,
     PAIRING,
     PERSON,
+    CARD_MANAGEMENT,
 }
 
 @Suppress("CyclomaticComplexMethod", "FunctionName", "ktlint:standard:function-naming")
@@ -107,6 +108,8 @@ internal fun MainScreen(
     browserCardService: AuthenticationCardService? = null,
     qualifiedCardService: QualifiedCardService? = null,
     nfcQualifiedCardService: QualifiedCardService? = null,
+    cardManagementService: fi.refineid.android.core.CardManagementService? = null,
+    nfcCardManagementService: fi.refineid.android.core.CardManagementService? = null,
     timestampAuthorityRepository: TimestampAuthorityRepository? = null,
     hasNfc: Boolean = true,
     nfcSnapshot: NfcReaderSnapshot = NfcReaderSnapshot(),
@@ -236,6 +239,7 @@ internal fun MainScreen(
                 onOpenVerify = { verifyPicker.launch(arrayOf("*/*")) },
                 onOpenSign = { destination = MainDestination.SIGN },
                 onOpenPairing = { destination = MainDestination.PAIRING },
+                onOpenCardManagement = { destination = MainDestination.CARD_MANAGEMENT },
             )
         }
 
@@ -322,6 +326,27 @@ internal fun MainScreen(
                 PersonScreen(details = details)
             }
         }
+
+        MainDestination.CARD_MANAGEMENT -> {
+            SubScreen(
+                title = stringResource(R.string.card_pins),
+                tag = "CardManagementScreen",
+                onBack = { destination = MainDestination.HOME },
+            ) {
+                CardManagementScreen(
+                    cardManagementService =
+                        if (usbCardReady) {
+                            cardManagementService
+                        } else {
+                            nfcCardManagementService
+                        },
+                    onConnectNfc = { can ->
+                        onNfcConnect(can, null)
+                    },
+                    isCardReady = usbCardReady || nfcSnapshot.status == NfcReaderStatus.CARD_READY,
+                )
+            }
+        }
     }
 }
 
@@ -348,6 +373,7 @@ private fun HomeScreen(
     onOpenVerify: () -> Unit,
     onOpenSign: () -> Unit,
     onOpenPairing: () -> Unit,
+    onOpenCardManagement: () -> Unit,
 ) {
     Scaffold(
         modifier =
@@ -398,33 +424,36 @@ private fun HomeScreen(
                 }
             }
 
-            Section(stringResource(R.string.section_browser)) {
-                BrowserHarness(
-                    cardService = browserCardService,
-                    pinCache = pinCache,
-                    nfcStatus = nfcStatus,
-                    nfcPrimed = nfcPrimed,
-                    onNfcConnect = { can, pin1 -> onNfcConnect(can, pin1) },
-                    launcher = { onOpen ->
-                        NavigationGroup {
+            Section(stringResource(R.string.card)) {
+                NavigationGroup {
+                    BrowserHarness(
+                        cardService = browserCardService,
+                        pinCache = pinCache,
+                        nfcStatus = nfcStatus,
+                        nfcPrimed = nfcPrimed,
+                        onNfcConnect = { can, pin1 -> onNfcConnect(can, pin1) },
+                        launcher = { onOpen ->
                             NavigationRow(
                                 icon = Icons.Outlined.Lock,
                                 label = stringResource(R.string.browser),
                                 tag = UiAutomationIds.BROWSER_ACTION,
                                 onClick = onOpen,
                             )
-                        }
-                    },
-                )
-            }
-
-            Section(stringResource(R.string.section_remote)) {
-                NavigationGroup {
+                        },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
                     NavigationRow(
                         icon = Icons.Outlined.Share,
                         label = stringResource(R.string.pair_computer),
                         tag = "RappPairingRow",
                         onClick = onOpenPairing,
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
+                    NavigationRow(
+                        icon = Icons.Outlined.Lock,
+                        label = stringResource(R.string.card_pins_full),
+                        tag = "manageCard",
+                        onClick = onOpenCardManagement,
                     )
                 }
             }

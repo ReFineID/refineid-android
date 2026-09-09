@@ -4,19 +4,25 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import fi.refineid.android.core.ActivationReport
 import fi.refineid.android.core.AtrValidation
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSignatureVerifier
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
+import fi.refineid.android.core.CardManagementResult
+import fi.refineid.android.core.CardManagementScheme
 import fi.refineid.android.core.CardPhotoStore
 import fi.refineid.android.core.CertificateHolderName
+import fi.refineid.android.core.CredentialHealth
+import fi.refineid.android.core.ManageOutcome
 import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignFailure
 import fi.refineid.android.core.NativeAuthenticationSignResult
 import fi.refineid.android.core.NativeCardExchangeLevel
 import fi.refineid.android.core.NativeCardKeyProfile
+import fi.refineid.android.core.NativeCardManagement
 import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativeCardSessionMaterial
 import fi.refineid.android.core.NativeCertificateReadFailure
@@ -529,6 +535,98 @@ internal class CcidUsbSession(
         } finally {
             AppTrace.ccidSessionClosed(interfaceReleased)
         }
+    }
+
+    fun probeCredentialHealth(): CardManagementResult<CredentialHealth> {
+        checkOwnerThread()
+        check(!isClosed) {
+            "CCID session is closed"
+        }
+        return NativeCardManagement.probeCredentialHealth(exchangeLevel, nativeExchange)
+    }
+
+    fun changePin1(
+        currentPin: ByteArray,
+        newPin: ByteArray,
+    ): CardManagementResult<ManageOutcome> {
+        checkOwnerThread()
+        check(!isClosed) {
+            "CCID session is closed"
+        }
+        return NativeCardManagement.changePin1(
+            exchangeLevel,
+            currentPin,
+            newPin,
+            nativeExchange,
+        )
+    }
+
+    fun changePin2(
+        currentPin: ByteArray,
+        newPin: ByteArray,
+    ): CardManagementResult<ManageOutcome> {
+        checkOwnerThread()
+        check(!isClosed) {
+            "CCID session is closed"
+        }
+        return NativeCardManagement.changePin2(
+            exchangeLevel,
+            currentPin,
+            newPin,
+            nativeExchange,
+        )
+    }
+
+    fun unblockPin1(
+        puk: ByteArray,
+        newPin: ByteArray,
+    ): CardManagementResult<ManageOutcome> {
+        checkOwnerThread()
+        check(!isClosed) {
+            "CCID session is closed"
+        }
+        return NativeCardManagement.unblockPin1(
+            exchangeLevel,
+            puk,
+            newPin,
+            nativeExchange,
+        )
+    }
+
+    fun unblockPin2(
+        puk: ByteArray,
+        newPin: ByteArray,
+    ): CardManagementResult<ManageOutcome> {
+        checkOwnerThread()
+        check(!isClosed) {
+            "CCID session is closed"
+        }
+        return NativeCardManagement.unblockPin2(
+            exchangeLevel,
+            puk,
+            newPin,
+            nativeExchange,
+        )
+    }
+
+    fun activateCard(
+        scheme: CardManagementScheme,
+        code: ByteArray,
+        newPin1: ByteArray?,
+        newPin2: ByteArray?,
+    ): CardManagementResult<ActivationReport> {
+        checkOwnerThread()
+        check(!isClosed) {
+            "CCID session is closed"
+        }
+        return NativeCardManagement.activateCard(
+            exchangeLevel,
+            scheme,
+            code,
+            newPin1,
+            newPin2,
+            nativeExchange,
+        )
     }
 
     override fun toString(): String = "CcidUsbSession(closed=" + isClosed + ")"

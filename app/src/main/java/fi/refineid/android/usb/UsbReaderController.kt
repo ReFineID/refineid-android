@@ -146,6 +146,22 @@ internal class UsbReaderController(
             activeSession = { activeSession },
         )
 
+    internal val cardManagementService =
+        UsbCardManagementService(
+            ioExecutor = ioExecutor,
+            mainHandler = mainHandler,
+            isReady = {
+                isStarted &&
+                    latestSnapshot.status == ReaderConnectionStatus.READY &&
+                    latestSnapshot.cardPresence == CardPresence.PRESENT
+            },
+            currentGeneration = { probeGeneration },
+            isCurrentGeneration = { generation ->
+                isStarted && generation == probeGeneration
+            },
+            activeSession = { activeSession },
+        )
+
     private val permissionReceiver =
         object : BroadcastReceiver() {
             override fun onReceive(

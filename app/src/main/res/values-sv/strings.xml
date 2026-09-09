@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="section_browser">Webbanvändning</string>
     <string name="section_document">Dokument</string>
     <string name="read_identity_card">Läs kort</string>
     <string name="pin1_optional" tools:ignore="Typos">PIN1 (valfritt)</string>
@@ -39,7 +38,6 @@
     <string name="wrong_pin">Fel PIN</string>
     <string name="pin_locked">PIN låst</string>
     <string name="unavailable">Inte tillgänglig</string>
-    <string name="section_remote">Fjärranvändning</string>
     <string name="pair_computer">Anslut</string>
     <string name="section_identity">Person</string>
     <string name="forget_identity_title">Glöm identitet?</string>
@@ -60,4 +58,33 @@
     <string name="connect_id_card">Anslut identitetskort</string>
     <string name="show_pairing_code">Visa kopplingskod</string>
     <string name="enter_pairing_code">Mata in kopplingskod</string>
+    <string name="card_pins">PIN-koder</string>
+    <string name="card_pins_full">Personliga identifieringsnummer (PIN)</string>
+    <string name="change_pin1">Ändra PIN 1</string>
+    <string name="change_pin2">Ändra PIN 2</string>
+    <string name="reset_pin1">Återställ PIN 1</string>
+    <string name="reset_pin2">Återställ PIN 2</string>
+    <string name="activate_card">Aktivera kort</string>
+    <string name="card_activation">Kortaktivering</string>
+    <string name="current_pin1">Nuvarande PIN 1</string>
+    <string name="current_pin2">Nuvarande PIN 2</string>
+    <string name="new_pin1">Ny PIN 1</string>
+    <string name="new_pin2">Ny PIN 2</string>
+    <string name="new_pin1_again">Ny PIN 1 igen</string>
+    <string name="new_pin2_again">Ny PIN 2 igen</string>
+    <string name="puk_code">PUK</string>
+    <string name="activation_pin">Aktiveringskod</string>
+    <string name="change_basic_pin1">Ändra grund-PIN 1</string>
+    <string name="change_signature_pin2">Ändra underskrifts-PIN 2</string>
+    <string name="attempts_left">Försök kvar:</string>
+    <string name="verified">verifierad</string>
+    <string name="blocked">blockerad</string>
+    <string name="pin_changed_success">PIN-koden har ändrats.</string>
+    <string name="pin_reset_success">PIN-koden har återställts.</string>
+    <string name="card_activated_success">Kortet har aktiverats.</string>
+    <string name="confirm_pin_operation_title">Bekräfta åtgärd</string>
+    <string name="confirm_pin_change_message">Ett felaktigt nuvarande PIN förbrukar ett försök på kortet.</string>
+    <string name="confirm_pin_reset_message">Ett felaktigt PUK förbrukar ett försök på kortet. Om alla PUK-försök förbrukas spärras kortet permanent.</string>
+    <string name="confirm_activation_message">Aktivera kortet med koden från ditt följebrev.</string>
+    <string name="proceed">Fortsätt</string>
 </resources>
