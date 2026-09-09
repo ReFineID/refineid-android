@@ -59,7 +59,6 @@
     <string name="show_pairing_code">Näytä pariliitoskoodi</string>
     <string name="enter_pairing_code">Syötä pariliitoskoodi</string>
     <string name="card_pins">Tunnusluvut</string>
-    <string name="card_pins_full">Tunnusluvut (PIN)</string>
     <string name="change_pin1">Vaihda PIN 1</string>
     <string name="change_pin2">Vaihda PIN 2</string>
     <string name="reset_pin1">Palauta PIN 1</string>
@@ -76,9 +75,6 @@
     <string name="activation_pin">Aktivointitunnusluku</string>
     <string name="change_basic_pin1">Vaihda perus-PIN 1</string>
     <string name="change_signature_pin2">Vaihda allekirjoitus-PIN 2</string>
-    <string name="attempts_left">Yrityksiä jäljellä:</string>
-    <string name="verified">vahvistettu</string>
-    <string name="blocked">lukittu</string>
     <string name="pin_changed_success">PIN vaihdettu onnistuneesti.</string>
     <string name="pin_reset_success">PIN palautettu onnistuneesti.</string>
     <string name="card_activated_success">Kortti aktivoitu onnistuneesti.</string>
@@ -87,4 +83,10 @@
     <string name="confirm_pin_reset_message">Väärä PUK kuluttaa kortin yrityskerran. PUK-koodin loppuun kuluttaminen lukitsee kortin pysyvästi.</string>
     <string name="confirm_activation_message">Aktivoi kortti lähetyskirjeen aktivointitunnusluvulla.</string>
     <string name="proceed">Jatka</string>
+    <string name="spent_attempts_notice">%1$s: %2$d/%3$d yritystä jäljellä.\nOikea koodi palauttaa kaikki yritykset.</string>
+    <string name="refuse_low_attempts_pin">RefineID ei käytä tunnuslukua, jossa on yksi tai kaksi yritystä jäljellä. Palauta se toisella ohjelmistolla tai poista sulku täällä, kun kortti on lukinnut sen.</string>
+    <string name="refuse_low_attempts_puk">RefineID ei käytä kumpaakaan kahdesta viimeisestä PUK-yrityksestä.</string>
+    <string name="recovery_guidance_pin1">PIN 1 on palautettava\nPalauta PIN 1 PUK-koodilla.</string>
+    <string name="recovery_guidance_pin2">PIN 2 on palautettava\nPalauta PIN 2 PUK-koodilla.</string>
+    <string name="unrecoverable_card">PUK on lukittu\nTätä korttia ei voi palauttaa ohjelmistolla.</string>
 </resources>

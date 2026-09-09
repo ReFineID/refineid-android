@@ -451,7 +451,7 @@ private fun HomeScreen(
                     HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
                     NavigationRow(
                         icon = Icons.Outlined.Lock,
-                        label = stringResource(R.string.card_pins_full),
+                        label = stringResource(R.string.card_pins),
                         tag = "manageCard",
                         onClick = onOpenCardManagement,
                     )

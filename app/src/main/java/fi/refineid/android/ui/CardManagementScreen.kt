@@ -11,19 +11,12 @@
 
 package fi.refineid.android.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
@@ -31,7 +24,6 @@ import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -134,6 +126,8 @@ internal fun CardManagementScreen(
                         selectedTask = ManagementTask.RESET_PIN1
                     } else if (result.value.pin2State is NativePin2State.Locked) {
                         selectedTask = ManagementTask.RESET_PIN2
+                    } else if (selectedTask == ManagementTask.ACTIVATE_CARD) {
+                        selectedTask = ManagementTask.CHANGE_PIN1
                     }
                 }
 
@@ -179,21 +173,98 @@ internal fun CardManagementScreen(
     val pukValid = pukBounds.contains(puk.length)
     val activationCodeValid = activationCode.length >= 4
 
-    val canExecute =
-        when (selectedTask) {
-            ManagementTask.CHANGE_PIN1, ManagementTask.CHANGE_PIN2 -> {
-                currentPinValid && newPinValid && confirmationValid &&
-                    pinsDiffer
+    val pin1Attempts = health?.pin1State?.let { getAttempts(it) }
+    val pin2Attempts = health?.pin2State?.let { getAttempts(it) }
+    val pukAttempts = health?.pukState?.let { getAttempts(it) }
+
+    val pukLocked = isLocked(health?.pukState)
+    val pukLow = isLowAttempts(pukAttempts)
+    val pukWarning = isWarningAttempts(pukAttempts)
+
+    val pin1Locked = isLocked(health?.pin1State)
+    val pin1Low = isLowAttempts(pin1Attempts)
+    val pin1Warning = isWarningAttempts(pin1Attempts)
+
+    val pin2Locked = isLocked(health?.pin2State)
+    val pin2Low = isLowAttempts(pin2Attempts)
+    val pin2Warning = isWarningAttempts(pin2Attempts)
+
+    val isRefusedByPolicy =
+        pukLocked ||
+            when (selectedTask) {
+                ManagementTask.CHANGE_PIN1 -> pin1Locked || pin1Low
+                ManagementTask.CHANGE_PIN2 -> pin2Locked || pin2Low
+                ManagementTask.RESET_PIN1, ManagementTask.RESET_PIN2 -> pukLow
+                ManagementTask.ACTIVATE_CARD -> false
             }
 
-            ManagementTask.RESET_PIN1, ManagementTask.RESET_PIN2 -> {
-                pukValid && newPinValid && confirmationValid
+    val (guidanceMessage, guidanceTone) =
+        when {
+            pukLocked -> {
+                stringResource(R.string.unrecoverable_card) to BannerTone.CRITICAL
             }
 
-            ManagementTask.ACTIVATE_CARD -> {
-                activationCodeValid && newPinValid && confirmationValid
+            selectedTask == ManagementTask.CHANGE_PIN1 && pin1Locked -> {
+                stringResource(R.string.recovery_guidance_pin1) to BannerTone.INFO
+            }
+
+            selectedTask == ManagementTask.CHANGE_PIN1 && pin1Low -> {
+                stringResource(R.string.refuse_low_attempts_pin) to BannerTone.CRITICAL
+            }
+
+            selectedTask == ManagementTask.CHANGE_PIN1 && pin1Warning -> {
+                stringResource(R.string.spent_attempts_notice, "PIN 1", pin1Attempts ?: 0, 5) to BannerTone.WARNING
+            }
+
+            selectedTask == ManagementTask.CHANGE_PIN2 && pin2Locked -> {
+                stringResource(R.string.recovery_guidance_pin2) to BannerTone.INFO
+            }
+
+            selectedTask == ManagementTask.CHANGE_PIN2 && pin2Low -> {
+                stringResource(R.string.refuse_low_attempts_pin) to BannerTone.CRITICAL
+            }
+
+            selectedTask == ManagementTask.CHANGE_PIN2 && pin2Warning -> {
+                stringResource(R.string.spent_attempts_notice, "PIN 2", pin2Attempts ?: 0, 5) to BannerTone.WARNING
+            }
+
+            (selectedTask == ManagementTask.RESET_PIN1 || selectedTask == ManagementTask.RESET_PIN2) && pukLow -> {
+                stringResource(R.string.refuse_low_attempts_puk) to BannerTone.CRITICAL
+            }
+
+            (selectedTask == ManagementTask.RESET_PIN1 || selectedTask == ManagementTask.RESET_PIN2) && pukWarning -> {
+                stringResource(R.string.spent_attempts_notice, "PUK", pukAttempts ?: 0, 5) to BannerTone.WARNING
+            }
+
+            selectedTask == ManagementTask.RESET_PIN1 && pin1Locked -> {
+                stringResource(R.string.recovery_guidance_pin1) to BannerTone.INFO
+            }
+
+            selectedTask == ManagementTask.RESET_PIN2 && pin2Locked -> {
+                stringResource(R.string.recovery_guidance_pin2) to BannerTone.INFO
+            }
+
+            else -> {
+                null to null
             }
         }
+
+    val canExecute =
+        !isRefusedByPolicy &&
+            when (selectedTask) {
+                ManagementTask.CHANGE_PIN1, ManagementTask.CHANGE_PIN2 -> {
+                    currentPinValid && newPinValid && confirmationValid &&
+                        pinsDiffer
+                }
+
+                ManagementTask.RESET_PIN1, ManagementTask.RESET_PIN2 -> {
+                    pukValid && newPinValid && confirmationValid
+                }
+
+                ManagementTask.ACTIVATE_CARD -> {
+                    activationCodeValid && newPinValid && confirmationValid
+                }
+            }
 
     fun executeOperation() {
         if (!canExecute || cardManagementService == null) return
@@ -369,16 +440,19 @@ internal fun CardManagementScreen(
             }
         }
 
-        // Attempts Bar
-        if (health != null) {
-            AttemptsBar(health = health!!)
-        }
-
         // Outcome Banner
         if (outcomeNoticeResId != null) {
             OutcomeBanner(
                 message = stringResource(outcomeNoticeResId!!),
                 isError = outcomeIsError,
+            )
+        }
+
+        // Guidance / Policy Banner
+        if (guidanceMessage != null && guidanceTone != null && outcomeNoticeResId == null) {
+            GuidanceBanner(
+                message = guidanceMessage,
+                tone = guidanceTone,
             )
         }
 
@@ -520,75 +594,78 @@ internal fun CardManagementScreen(
     }
 }
 
-@Composable
-private fun AttemptsBar(health: CredentialHealth) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.attempts_left),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                AttemptIndicator(name = "PIN 1", state = health.pin1State)
-                AttemptIndicator(name = "PIN 2", state = health.pin2State)
-                AttemptIndicator(name = "PUK", state = health.pukState)
-            }
-        }
-    }
+private enum class BannerTone {
+    INFO,
+    WARNING,
+    CRITICAL,
 }
 
+private fun getAttempts(state: Any): Int? =
+    when (state) {
+        is NativePin1State.Remaining -> state.attempts
+        is NativePin2State.Remaining -> state.attempts
+        is NativePin1State.Locked, is NativePin2State.Locked -> 0
+        is NativePin1State.Verified, is NativePin2State.Verified -> 5
+        else -> null
+    }
+
+private fun isLowAttempts(attempts: Int?): Boolean = attempts != null && (attempts == 1 || attempts == 2)
+
+private fun isWarningAttempts(attempts: Int?): Boolean = attempts != null && (attempts == 3 || attempts == 4)
+
+private fun isLocked(state: Any?): Boolean =
+    state is NativePin1State.Locked || state is NativePin2State.Locked || (state?.let { getAttempts(it) } == 0)
+
 @Composable
-private fun AttemptIndicator(
-    name: String,
-    state: Any,
+private fun GuidanceBanner(
+    message: String,
+    tone: BannerTone,
+    modifier: Modifier = Modifier,
 ) {
-    val (label, color) =
-        when (state) {
-            is NativePin1State.Verified, is NativePin2State.Verified -> {
-                stringResource(R.string.verified) to
-                    Color(0xFF168447)
+    val (containerColor, contentColor, icon) =
+        when (tone) {
+            BannerTone.CRITICAL -> {
+                Triple(
+                    MaterialTheme.colorScheme.errorContainer,
+                    MaterialTheme.colorScheme.onErrorContainer,
+                    Icons.Outlined.Warning,
+                )
             }
 
-            is NativePin1State.Remaining -> {
-                "${state.attempts}" to
-                    if (state.attempts > 1) Color(0xFF168447) else Color(0xFFD32F2F)
+            BannerTone.WARNING -> {
+                Triple(
+                    Color(0xFFFFF3E0),
+                    Color(0xFFE65100),
+                    Icons.Outlined.Warning,
+                )
             }
 
-            is NativePin2State.Remaining -> {
-                "${state.attempts}" to
-                    if (state.attempts > 1) Color(0xFF168447) else Color(0xFFD32F2F)
-            }
-
-            is NativePin1State.Locked, is NativePin2State.Locked -> {
-                stringResource(R.string.blocked) to Color(0xFF1976D2)
-            }
-
-            else -> {
-                "-" to MaterialTheme.colorScheme.onSurfaceVariant
+            BannerTone.INFO -> {
+                Triple(
+                    Color(0xFFE3F2FD),
+                    Color(0xFF0D47A1),
+                    Icons.Outlined.CheckCircle,
+                )
             }
         }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        shape = RoundedCornerShape(10.dp),
     ) {
-        Text(
-            text = "$name $label",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = color,
-        )
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+            )
+            Text(text = message, color = contentColor, style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 

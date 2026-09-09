@@ -131,17 +131,19 @@ pub(crate) fn encode_credential_health_reply(
                 PinReferenceScheme::Citizen => SCHEME_CITIZEN,
                 PinReferenceScheme::Organizational => SCHEME_ORGANIZATIONAL,
             };
-            let (act_scheme_byte, act_needs_byte) = match report.activation_needs {
-                Some(needs) => {
-                    let needs_byte = match (needs.pin1, needs.pin2) {
-                        (true, true) => ACTIVATION_NEEDS_BOTH,
-                        (true, false) => ACTIVATION_NEEDS_PIN1_ONLY,
-                        (false, true) => ACTIVATION_NEEDS_PIN2_ONLY,
-                        (false, false) => ACTIVATION_NEEDS_NONE,
-                    };
-                    (ACTIVATION_SCHEME_PRESET, needs_byte)
-                }
-                None => (ACTIVATION_SCHEME_UNKNOWN, ACTIVATION_NEEDS_NONE),
+            let act_scheme_byte = match report.activation_scheme {
+                Some(ActivationScheme::ActivationCodeIsPuk) => ACTIVATION_SCHEME_PUK,
+                Some(ActivationScheme::PresetActivationPin) => ACTIVATION_SCHEME_PRESET,
+                None => ACTIVATION_SCHEME_UNKNOWN,
+            };
+            let act_needs_byte = match report.activation_needs {
+                Some(needs) => match (needs.pin1, needs.pin2) {
+                    (true, true) => ACTIVATION_NEEDS_BOTH,
+                    (true, false) => ACTIVATION_NEEDS_PIN1_ONLY,
+                    (false, true) => ACTIVATION_NEEDS_PIN2_ONLY,
+                    (false, false) => ACTIVATION_NEEDS_NONE,
+                },
+                None => ACTIVATION_NEEDS_NONE,
             };
             vec![
                 MANAGEMENT_TAG_SUCCEEDED,
@@ -367,6 +369,7 @@ mod tests {
             pin2_status: PinStatus::Remaining(retries),
             puk_status: PinStatus::Remaining(retries),
             pin_reference_scheme: PinReferenceScheme::Citizen,
+            activation_scheme: Some(ActivationScheme::PresetActivationPin),
             activation_needs: Some(CardActivationNeeds {
                 pin1: true,
                 pin2: true,

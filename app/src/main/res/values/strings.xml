@@ -63,7 +63,6 @@
     <string name="show_pairing_code">Show pairing code</string>
     <string name="enter_pairing_code">Enter pairing code</string>
     <string name="card_pins">PINs</string>
-    <string name="card_pins_full">Personal Identification Numbers (PINs)</string>
     <string name="change_pin1">Change PIN 1</string>
     <string name="change_pin2">Change PIN 2</string>
     <string name="reset_pin1">Reset PIN 1</string>
@@ -80,9 +79,6 @@
     <string name="activation_pin">Activation PIN</string>
     <string name="change_basic_pin1">Change Basic PIN 1</string>
     <string name="change_signature_pin2">Change Signature PIN 2</string>
-    <string name="attempts_left">Attempts left:</string>
-    <string name="verified">verified</string>
-    <string name="blocked">blocked</string>
     <string name="pin_changed_success">PIN changed successfully.</string>
     <string name="pin_reset_success">PIN reset successfully.</string>
     <string name="card_activated_success">Card activated successfully.</string>
@@ -91,4 +87,10 @@
     <string name="confirm_pin_reset_message">A wrong PUK will spend an attempt on the card. Exhausting the PUK permanently locks the card.</string>
     <string name="confirm_activation_message">Activate the card with the code from your issuance letter.</string>
     <string name="proceed">Proceed</string>
+    <string name="spent_attempts_notice" tools:ignore="PluralsCandidate">%1$s: %2$d of %3$d attempts left.\nA correct entry restores the full count.</string>
+    <string name="refuse_low_attempts_pin">RefineID will not use a credential with one or two attempts left. Restore it with other software, or unblock it here once the card has blocked it.</string>
+    <string name="refuse_low_attempts_puk">RefineID will not use either of the final two PUK attempts.</string>
+    <string name="recovery_guidance_pin1">PIN 1 requires recovery\nReset PIN 1 with your PUK.</string>
+    <string name="recovery_guidance_pin2">PIN 2 requires recovery\nReset PIN 2 with your PUK.</string>
+    <string name="unrecoverable_card">The PUK is blocked\nThis card cannot be recovered with software.</string>
 </resources>
