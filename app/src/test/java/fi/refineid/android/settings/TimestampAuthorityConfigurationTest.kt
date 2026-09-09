@@ -9,6 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Base64
 
 class TimestampAuthorityConfigurationTest {
     @Test
@@ -84,9 +85,10 @@ class TimestampAuthorityConfigurationTest {
         const val PROTECTED_AUTHORITY_ADDRESS = "https://timestamp.example/request"
         const val PLAIN_AUTHORITY_ADDRESS = "http://timestamp.example/request"
         const val SYNTHETIC_USERNAME = "synthetic-account"
-        const val SYNTHETIC_AUTHORIZATION_HEADER =
-            "Basic c3ludGhldGljLWFjY291bnQ6c3ludGhldGljLXBhc3N3b3Jk"
-        const val EMPTY_PASSWORD_AUTHORIZATION_HEADER = "Basic c3ludGhldGljLWFjY291bnQ6"
+        val SYNTHETIC_AUTHORIZATION_HEADER =
+            "Basic " + Base64.getEncoder().encodeToString("$SYNTHETIC_USERNAME:synthetic-password".toByteArray())
+        val EMPTY_PASSWORD_AUTHORIZATION_HEADER =
+            "Basic " + Base64.getEncoder().encodeToString("$SYNTHETIC_USERNAME:".toByteArray())
         const val FIRST_CHARACTER_INDEX = 0
         const val CHANGED_CHARACTER = 'X'
         const val CLEARED_CHARACTER = '\u0000'
