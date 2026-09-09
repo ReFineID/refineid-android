@@ -42,7 +42,7 @@
     <string name="wrong_pin">Wrong PIN</string>
     <string name="pin_locked">PIN locked</string>
     <string name="unavailable">Unavailable</string>
-    <string name="pair_computer">Connect</string>
+    <string name="pair_computer">Remote access</string>
     <string name="section_identity">Person</string>
     <string name="forget_identity_title">Forget identity?</string>
     <string name="forget_identity">Forget identity</string>

@@ -110,6 +110,7 @@ internal enum class NativeCertificateReadFailure {
     INVALID_CERTIFICATE,
     PACE_REJECTED,
     BRIDGE_ERROR,
+    ACTIVATION_REQUIRED,
 }
 
 internal sealed interface NativeCertificateReadResult<out Certificate> {
@@ -521,6 +522,13 @@ internal object NativeCertificateReply {
                     )
                 }
 
+                CERTIFICATE_ACTIVATION_REQUIRED -> {
+                    decodeFailure(
+                        reply,
+                        NativeCertificateReadFailure.ACTIVATION_REQUIRED,
+                    )
+                }
+
                 else -> {
                     bridgeFailure()
                 }
@@ -574,6 +582,7 @@ internal object NativeCertificateReply {
     private const val CERTIFICATE_TRANSPORT_ERROR = 4
     private const val CERTIFICATE_INVALID = 5
     private const val CERTIFICATE_PACE_REJECTED = 6
+    private const val CERTIFICATE_ACTIVATION_REQUIRED = 7
 
     private const val KEY_PROFILE_RSA_2048 = 0
     private const val KEY_PROFILE_RSA_3072 = 1

@@ -63,6 +63,12 @@ internal sealed interface CcidSessionOpenResult {
         override fun toString(): String = "AccessNumberRequired"
     }
 
+    class ActivationRequired(
+        val session: CcidUsbSession,
+    ) : CcidSessionOpenResult {
+        override fun toString(): String = "ActivationRequired"
+    }
+
     data object NoCard : CcidSessionOpenResult
 
     data object CardError : CcidSessionOpenResult
@@ -816,6 +822,7 @@ internal class CcidUsbSessionOpener(
             when (val attempt = connection.openClaimed(endpoints)) {
                 is CcidSessionOpenResult.Ready,
                 is CcidSessionOpenResult.AccessNumberRequired,
+                is CcidSessionOpenResult.ActivationRequired,
                 -> {
                     return attempt
                 }
@@ -918,6 +925,31 @@ internal class CcidUsbSessionOpener(
         }
     }
 
+    /** After a certificate is read successfully, check activation needs then PIN1 preflight. */
+    private fun preparePastCertificate(session: CcidUsbSession): CcidSessionOpenResult {
+        val healthResult = session.probeCredentialHealth()
+        if (healthResult is fi.refineid.android.core.CardManagementResult.Success &&
+            healthResult.value.activationNeeds.any
+        ) {
+            return CcidSessionOpenResult.ActivationRequired(session)
+        }
+        return when (val preflight = session.cachePin1Preflight()) {
+            is NativePin1PreflightResult.Success -> {
+                CcidSessionOpenResult.Ready(session)
+            }
+
+            is NativePin1PreflightResult.Failure -> {
+                when (preflight.kind) {
+                    NativePin1PreflightFailure.CARD_UNAVAILABLE -> CcidSessionOpenResult.NoCard
+
+                    NativePin1PreflightFailure.TRANSPORT_ERROR,
+                    NativePin1PreflightFailure.BRIDGE_ERROR,
+                    -> CcidSessionOpenResult.TransportError
+                }
+            }
+        }
+    }
+
     private fun prepareSession(session: CcidUsbSession): CcidSessionOpenResult {
         var retainSession = false
         return try {
@@ -925,30 +957,22 @@ internal class CcidUsbSessionOpener(
                 NativeCardOperationResult.SUCCEEDED -> {
                     when (val result = session.cacheAuthenticationCertificate()) {
                         is NativeCertificateReadResult.Success -> {
-                            when (val preflight = session.cachePin1Preflight()) {
-                                is NativePin1PreflightResult.Success -> {
+                            preparePastCertificate(session).also { result ->
+                                if (result is CcidSessionOpenResult.Ready ||
+                                    result is CcidSessionOpenResult.ActivationRequired
+                                ) {
                                     retainSession = true
-                                    CcidSessionOpenResult.Ready(session)
-                                }
-
-                                is NativePin1PreflightResult.Failure -> {
-                                    when (preflight.kind) {
-                                        NativePin1PreflightFailure.CARD_UNAVAILABLE -> {
-                                            CcidSessionOpenResult.NoCard
-                                        }
-
-                                        NativePin1PreflightFailure.TRANSPORT_ERROR,
-                                        NativePin1PreflightFailure.BRIDGE_ERROR,
-                                        -> {
-                                            CcidSessionOpenResult.TransportError
-                                        }
-                                    }
                                 }
                             }
                         }
 
                         is NativeCertificateReadResult.Failure -> {
                             when (result.kind) {
+                                NativeCertificateReadFailure.ACTIVATION_REQUIRED -> {
+                                    retainSession = true
+                                    CcidSessionOpenResult.ActivationRequired(session)
+                                }
+
                                 NativeCertificateReadFailure.CARD_UNAVAILABLE -> {
                                     CcidSessionOpenResult.NoCard
                                 }

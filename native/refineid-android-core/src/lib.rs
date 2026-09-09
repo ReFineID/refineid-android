@@ -73,6 +73,7 @@ const CERTIFICATE_REJECTED: u8 = 3;
 const CERTIFICATE_TRANSPORT_ERROR: u8 = 4;
 const CERTIFICATE_INVALID: u8 = 5;
 const CERTIFICATE_PACE_REJECTED: u8 = 6;
+const CERTIFICATE_ACTIVATION_REQUIRED: u8 = 7;
 
 const CARD_ACCESS_BRIDGE_ERROR: u8 = 0;
 const CARD_ACCESS_SUCCEEDED: u8 = 1;
@@ -2019,6 +2020,7 @@ fn encode_certificate_reply(result: Result<CardCertificate, CertificateReadFailu
             CertificateReadFailure::InvalidCertificate => CERTIFICATE_INVALID,
             CertificateReadFailure::PaceRejected => CERTIFICATE_PACE_REJECTED,
             CertificateReadFailure::Bridge => CERTIFICATE_BRIDGE_ERROR,
+            CertificateReadFailure::ActivationRequired => CERTIFICATE_ACTIVATION_REQUIRED,
         }],
     }
 }

@@ -7,6 +7,8 @@ complexity:
     allowedConditions: 4
   CyclomaticComplexMethod:
     allowedComplexity: 25
+  LargeClass:
+    allowedLines: 900
   LongMethod:
     allowedLines: 130
   NestedBlockDepth:

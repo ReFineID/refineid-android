@@ -21,8 +21,8 @@ use crate::authentication_signer::{
     AuthenticationSigningInput, authenticate_and_sign,
 };
 use crate::card_certificate::{
-    CardCertificate, CertificateReadFailure, map_pkcs15_error, read_authentication_certificate,
-    read_qualified_certificate,
+    CardCertificate, CardKeyProfile, CertificateReadFailure, map_pkcs15_error,
+    read_authentication_certificate, read_qualified_certificate,
 };
 use crate::card_management::{
     CardManagementFailure, activate_card, change_pin1, change_pin2, probe_credential_health,
@@ -178,6 +178,29 @@ pub(crate) fn set_last_read_document_number(document_number: Option<String>) {
     }
 }
 
+fn check_activation_needs<T: CardTransport>(
+    transport: &mut T,
+    profile: CardKeyProfile,
+) -> Result<(), CertificateReadFailure> {
+    use refineid_auth::{ActivationScheme, PinManageOps};
+    let scheme = match profile {
+        CardKeyProfile::Rsa2048 | CardKeyProfile::Rsa3072 => {
+            Some(ActivationScheme::ActivationCodeIsPuk)
+        }
+        CardKeyProfile::EcdsaP256 | CardKeyProfile::EcdsaP384 => {
+            Some(ActivationScheme::PresetActivationPin)
+        }
+    };
+    if let Some(scheme) = scheme {
+        if let Ok(needs) = transport.activation_needs(scheme) {
+            if needs.any() {
+                return Err(CertificateReadFailure::ActivationRequired);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// One PACE handshake, then the PKCS#15 selection, authentication
 /// certificate read, and counter-safe PIN1 preflight inside the same
 /// secure-messaging session. This is the contactless session opener:
@@ -195,11 +218,13 @@ pub(crate) fn contactless_open<Exchange: SingleBlockExchange>(
             return (Err(certificate_channel_failure(failure)), exchange);
         }
     };
+
     let result = secure
         .select_pkcs15_application()
         .map_err(map_pkcs15_error)
         .and_then(|()| read_authentication_certificate(&mut secure))
         .and_then(|certificate| {
+            check_activation_needs(&mut secure, certificate.profile)?;
             probe_pin1_preflight(&mut secure)
                 .map(|preflight| (certificate, preflight))
                 .map_err(open_preflight_failure)
@@ -265,12 +290,13 @@ pub(crate) fn contactless_connect<Exchange: SingleBlockExchange>(
         .map_err(map_pkcs15_error)
         .and_then(|()| read_authentication_certificate(&mut secure))
         .and_then(|certificate| {
+            check_activation_needs(&mut secure, certificate.profile)?;
             probe_pin1_preflight(&mut secure)
                 .map(|preflight| (certificate, preflight))
                 .map_err(open_preflight_failure)
         });
     let (transport, session) = secure.into_parts();
-    if result.is_ok() {
+    if result.is_ok() || matches!(result, Err(CertificateReadFailure::ActivationRequired)) {
         store_held_session(session);
     }
     (result, transport.into_exchange())

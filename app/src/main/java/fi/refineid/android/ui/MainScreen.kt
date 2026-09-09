@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -152,6 +153,19 @@ internal fun MainScreen(
         snapshot.status == ReaderConnectionStatus.READY &&
             snapshot.cardPresence == CardPresence.PRESENT
     val usbReaderPresent = snapshot.status != ReaderConnectionStatus.NOT_CONNECTED
+
+    val isActivationRequired =
+        snapshot.status == ReaderConnectionStatus.ACTIVATION_REQUIRED ||
+            nfcSnapshot.status == NfcReaderStatus.ACTIVATION_REQUIRED
+
+    var destination by rememberSaveable { mutableStateOf(MainDestination.HOME) }
+
+    LaunchedEffect(isActivationRequired) {
+        if (isActivationRequired) {
+            destination = MainDestination.CARD_MANAGEMENT
+        }
+    }
+
     // Signing follows the one-transport rule: a wired reader signs on
     // its open session, while a contactless card is never assumed
     // present — the holder taps it when prompted.
@@ -170,7 +184,6 @@ internal fun MainScreen(
         RappCardTapDialog(prompt = prompt)
     }
 
-    var destination by rememberSaveable { mutableStateOf(MainDestination.HOME) }
     var validationUri by remember { mutableStateOf<Uri?>(null) }
     val verifyPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -361,7 +374,7 @@ internal fun MainScreen(
             ) {
                 CardManagementScreen(
                     cardManagementService =
-                        if (usbCardReady) {
+                        if (usbCardReady || snapshot.status == ReaderConnectionStatus.ACTIVATION_REQUIRED) {
                             cardManagementService
                         } else {
                             nfcCardManagementService
@@ -369,9 +382,14 @@ internal fun MainScreen(
                     onConnectNfc = { can ->
                         onNfcConnect(can, null)
                     },
-                    isCardReady = usbCardReady || nfcSnapshot.status == NfcReaderStatus.CARD_READY,
+                    isCardReady =
+                        usbCardReady || nfcSnapshot.status == NfcReaderStatus.CARD_READY || isActivationRequired,
+                    activationRequired = isActivationRequired,
                     pinCache = pinCache,
                     onPin1Changed = onPin1Changed,
+                    onActivationSucceeded = {
+                        destination = MainDestination.HOME
+                    },
                 )
             }
         }
@@ -477,7 +495,7 @@ private fun HomeScreen(
                         onWrongPin = onWrongPin,
                         launcher = { onOpen ->
                             NavigationRow(
-                                icon = Icons.Outlined.Lock,
+                                icon = painterResource(R.drawable.ic_globe),
                                 label = stringResource(R.string.browser),
                                 tag = UiAutomationIds.BROWSER_ACTION,
                                 onClick = onOpen,
@@ -785,6 +803,7 @@ private fun NfcCard(
 
             NfcReaderStatus.WAITING_FOR_CARD,
             NfcReaderStatus.NOT_AVAILABLE,
+            NfcReaderStatus.ACTIVATION_REQUIRED,
             -> MaterialTheme.colorScheme.onSurfaceVariant
         }
     val statusTitle =
@@ -821,6 +840,7 @@ private fun NfcCard(
 
             NfcReaderStatus.TURNED_OFF,
             NfcReaderStatus.NOT_AVAILABLE,
+            NfcReaderStatus.ACTIVATION_REQUIRED,
             -> {
                 stringResource(R.string.off)
             }
@@ -1056,6 +1076,7 @@ private fun readerStatusColor(status: ReaderConnectionStatus): Color =
         ReaderConnectionStatus.NOT_CONNECTED -> MaterialTheme.colorScheme.onSurfaceVariant
         ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED -> PERMISSION_STATUS_COLOR
         ReaderConnectionStatus.WRONG_ACCESS_NUMBER -> MaterialTheme.colorScheme.error
+        ReaderConnectionStatus.ACTIVATION_REQUIRED -> SUCCESS_STATUS_COLOR
     }
 
 @Composable
@@ -1095,6 +1116,10 @@ private fun readerStatusTitle(status: ReaderConnectionStatus): String =
 
         ReaderConnectionStatus.WRONG_ACCESS_NUMBER -> {
             stringResource(R.string.wrong_can)
+        }
+
+        ReaderConnectionStatus.ACTIVATION_REQUIRED -> {
+            stringResource(R.string.ready)
         }
     }
 

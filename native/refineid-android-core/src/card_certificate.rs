@@ -32,6 +32,8 @@ pub(crate) enum CertificateReadFailure {
     /// The contactless secure channel refused the CAN.
     PaceRejected,
     Bridge,
+    /// The card still awaits factory activation.
+    ActivationRequired,
 }
 
 /// Read EF.4331 and reconstruct its public key before returning its DER.
