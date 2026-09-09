@@ -123,6 +123,7 @@ internal fun MainScreen(
     rappPairingModel: RappPairingModel? = null,
     rappInbox: RappAuthorizationInbox? = null,
     remoteCardModel: fi.refineid.android.rapp.RemoteCardModel? = null,
+    onPin1Changed: () -> Unit = {},
 ) {
     val fallbackRemoteName = remember { kotlinx.coroutines.flow.MutableStateFlow<String?>(null) }
     val fallbackRemoteDetails = remember { kotlinx.coroutines.flow.MutableStateFlow<PersonCardDetails?>(null) }
@@ -183,19 +184,21 @@ internal fun MainScreen(
         } else {
             nfcSnapshot.cardDetails ?: snapshot.cardDetails ?: remoteDetails
         }
+    val performFullIdentityReset: () -> Unit = {
+        onForgetPrimedCard()
+        CanSessionStore.drop()
+        fi.refineid.android.core.CardPhotoStore
+            .clear()
+        pinCache?.clear()
+        onPin1Changed()
+        rappPairingModel?.terminate()
+        remoteCardModel?.forget()
+    }
     val forgetIdentity: (() -> Unit)? =
         if (usbCardReady) {
             null
         } else {
-            {
-                onForgetPrimedCard()
-                CanSessionStore.drop()
-                fi.refineid.android.core.CardPhotoStore
-                    .clear()
-                pinCache?.clear()
-                rappPairingModel?.reset()
-                remoteCardModel?.forget()
-            }
+            performFullIdentityReset
         }
 
     when (destination) {
@@ -205,6 +208,7 @@ internal fun MainScreen(
                 holderName = effectiveHolderName,
                 hasNfc = hasNfc,
                 onForgetIdentity = forgetIdentity,
+                onWrongPin = performFullIdentityReset,
                 onOpenPerson = { destination = MainDestination.PERSON },
                 browserCardService =
                     if (usbCardReady) {
@@ -344,6 +348,8 @@ internal fun MainScreen(
                         onNfcConnect(can, null)
                     },
                     isCardReady = usbCardReady || nfcSnapshot.status == NfcReaderStatus.CARD_READY,
+                    pinCache = pinCache,
+                    onPin1Changed = onPin1Changed,
                 )
             }
         }
@@ -362,6 +368,7 @@ private fun HomeScreen(
     holderName: String?,
     hasNfc: Boolean = true,
     onForgetIdentity: (() -> Unit)?,
+    onWrongPin: (() -> Unit)? = null,
     onOpenPerson: () -> Unit,
     browserCardService: AuthenticationCardService?,
     pinCache: AuthenticationPinCache?,
@@ -432,6 +439,7 @@ private fun HomeScreen(
                         nfcStatus = nfcStatus,
                         nfcPrimed = nfcPrimed,
                         onNfcConnect = { can, pin1 -> onNfcConnect(can, pin1) },
+                        onWrongPin = onWrongPin,
                         launcher = { onOpen ->
                             NavigationRow(
                                 icon = Icons.Outlined.Lock,

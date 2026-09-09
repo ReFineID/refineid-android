@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
                     onSignBeginTap = nfcReaderController.tapToSign::begin,
                     onSignEndTap = nfcReaderController.tapToSign::end,
                     pinCache = (application as ReFineIdApplication).authenticationPinCache,
+                    onPin1Changed = nfcReaderController::forgetPin1,
                     rappPairingModel = model,
                     rappInbox = rappInbox,
                     remoteCardModel = (application as ReFineIdApplication).remoteCardModel,

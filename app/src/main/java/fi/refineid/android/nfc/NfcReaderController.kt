@@ -642,6 +642,20 @@ internal class NfcReaderController(
         }
     }
 
+    /** Forget the cached PIN 1 so subsequent operations require PIN entry again. */
+    fun forgetPin1() {
+        checkMainThread()
+        pinCache.clear()
+        try {
+            probeExecutor.execute {
+                primedCanStore.forgetPin1()
+                pinCache.clear()
+            }
+        } catch (_: RejectedExecutionException) {
+            // The executor only stops when the process is terminating.
+        }
+    }
+
     private fun publishAsync(
         generation: Int,
         status: NfcReaderStatus,

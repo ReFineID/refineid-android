@@ -153,6 +153,11 @@ internal class BrowserPinCoordinator(
             }
 
             is AuthenticationSignResult.Failure -> {
+                if (result.kind == AuthenticationSignFailure.WRONG_PIN ||
+                    result.kind == AuthenticationSignFailure.PIN_LOCKED
+                ) {
+                    pinCache?.clear()
+                }
                 retainOutcome(
                     pinCopy,
                     if (result.kind == AuthenticationSignFailure.WRONG_PIN) {

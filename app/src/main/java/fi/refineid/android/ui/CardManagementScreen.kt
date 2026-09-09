@@ -80,6 +80,8 @@ internal fun CardManagementScreen(
     cardManagementService: CardManagementService?,
     onConnectNfc: ((CanSubmission) -> Unit)? = null,
     isCardReady: Boolean = false,
+    pinCache: fi.refineid.android.core.AuthenticationPinCache? = null,
+    onPin1Changed: (() -> Unit)? = null,
 ) {
     var health by remember { mutableStateOf<CredentialHealth?>(null) }
     var isProbing by remember { mutableStateOf(false) }
@@ -277,6 +279,10 @@ internal fun CardManagementScreen(
                 val curBytes = currentPin.toByteArray(Charsets.US_ASCII)
                 val newBytes = newPin.toByteArray(Charsets.US_ASCII)
                 val isPin1 = selectedTask == ManagementTask.CHANGE_PIN1
+                if (isPin1) {
+                    pinCache?.clear()
+                    onPin1Changed?.invoke()
+                }
                 val callback: (CardManagementResult<ManageOutcome>) -> Unit = { result ->
                     isOperating = false
                     clearEntries()
@@ -285,6 +291,10 @@ internal fun CardManagementScreen(
                             if (result.value is ManageOutcome.Succeeded) {
                                 outcomeNoticeResId = R.string.pin_changed_success
                                 outcomeIsError = false
+                                if (isPin1) {
+                                    pinCache?.clear()
+                                    onPin1Changed?.invoke()
+                                }
                             } else {
                                 outcomeNoticeResId = R.string.error
                                 outcomeIsError = true
@@ -309,6 +319,10 @@ internal fun CardManagementScreen(
                 val pukBytes = puk.toByteArray(Charsets.US_ASCII)
                 val newBytes = newPin.toByteArray(Charsets.US_ASCII)
                 val isPin1 = selectedTask == ManagementTask.RESET_PIN1
+                if (isPin1) {
+                    pinCache?.clear()
+                    onPin1Changed?.invoke()
+                }
                 val callback: (CardManagementResult<ManageOutcome>) -> Unit = { result ->
                     isOperating = false
                     clearEntries()
@@ -317,6 +331,10 @@ internal fun CardManagementScreen(
                             if (result.value is ManageOutcome.Succeeded) {
                                 outcomeNoticeResId = R.string.pin_reset_success
                                 outcomeIsError = false
+                                if (isPin1) {
+                                    pinCache?.clear()
+                                    onPin1Changed?.invoke()
+                                }
                             } else {
                                 outcomeNoticeResId = R.string.error
                                 outcomeIsError = true
@@ -356,6 +374,8 @@ internal fun CardManagementScreen(
                         null
                     }
                 val scheme = health?.activationScheme ?: CardManagementScheme.PUK
+                pinCache?.clear()
+                onPin1Changed?.invoke()
                 cardManagementService.activateCard(scheme, codeBytes, new1Bytes, new2Bytes) { result ->
                     isOperating = false
                     clearEntries()
@@ -367,6 +387,8 @@ internal fun CardManagementScreen(
                             ) {
                                 outcomeNoticeResId = R.string.card_activated_success
                                 outcomeIsError = false
+                                pinCache?.clear()
+                                onPin1Changed?.invoke()
                                 probe()
                             } else {
                                 outcomeNoticeResId = R.string.error
