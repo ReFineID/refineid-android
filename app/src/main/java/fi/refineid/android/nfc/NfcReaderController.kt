@@ -129,7 +129,8 @@ internal class NfcReaderController(
             probeExecutor = probeExecutor,
             mainHandler = mainHandler,
             isReady = {
-                latestSnapshot.status == NfcReaderStatus.CARD_READY
+                latestSnapshot.status == NfcReaderStatus.CARD_READY ||
+                    latestSnapshot.status == NfcReaderStatus.ACTIVATION_REQUIRED
             },
             currentGeneration = { probeGeneration },
             activeSession = { activeSession },
@@ -314,7 +315,9 @@ internal class NfcReaderController(
                 null,
             )
             AppTrace.nfcReaderModeChanged(isEnabled = true)
-            if (latestSnapshot.status != NfcReaderStatus.CARD_READY) {
+            if (latestSnapshot.status != NfcReaderStatus.CARD_READY &&
+                latestSnapshot.status != NfcReaderStatus.ACTIVATION_REQUIRED
+            ) {
                 probeGeneration += 1
                 publish(NfcReaderSnapshot(status = NfcReaderStatus.WAITING_FOR_CARD))
             }
@@ -341,7 +344,9 @@ internal class NfcReaderController(
         // Card substitution is safe here: every operation starts with
         // PACE against the session CAN, so a different card fails the
         // handshake before any credential could reach it.
-        val isSessionActive = latestSnapshot.status == NfcReaderStatus.CARD_READY
+        val isSessionActive =
+            latestSnapshot.status == NfcReaderStatus.CARD_READY ||
+                latestSnapshot.status == NfcReaderStatus.ACTIVATION_REQUIRED
         if (isoDep == null) {
             if (!isSessionActive) {
                 publishAsync(generation, NfcReaderStatus.CARD_NOT_SUPPORTED)
@@ -557,6 +562,22 @@ internal class NfcReaderController(
             activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
             feedback.onCardSuccess()
             publishAsync(generation, status, holderName = holderName, cardDetails = cardDetails)
+            return
+        } else if (status == NfcReaderStatus.ACTIVATION_REQUIRED && generation == probeGeneration) {
+            CanSessionStore.remember(String(canBytes, Charsets.US_ASCII))
+            pin1?.close()
+            primedCanStore.clear()
+            primedCardStored = false
+            activeSession =
+                ContactlessSession(
+                    isoDep = isoDep,
+                    can = canBytes,
+                    material = material,
+                    heldSession = true,
+                )
+            activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
+            feedback.onCardSuccess()
+            publishAsync(generation, status)
             return
         } else {
             pin1?.close()

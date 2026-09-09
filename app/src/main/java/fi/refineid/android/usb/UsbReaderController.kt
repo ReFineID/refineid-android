@@ -49,6 +49,9 @@ internal enum class ReaderConnectionStatus {
 
     /** The entered access number did not open the contactless card. */
     WRONG_ACCESS_NUMBER,
+
+    /** The card sits on the reader and requires factory activation. */
+    ACTIVATION_REQUIRED,
 }
 
 internal enum class CardPresence {
@@ -152,7 +155,10 @@ internal class UsbReaderController(
             mainHandler = mainHandler,
             isReady = {
                 isStarted &&
-                    latestSnapshot.status == ReaderConnectionStatus.READY &&
+                    (
+                        latestSnapshot.status == ReaderConnectionStatus.READY ||
+                            latestSnapshot.status == ReaderConnectionStatus.ACTIVATION_REQUIRED
+                    ) &&
                     latestSnapshot.cardPresence == CardPresence.PRESENT
             },
             currentGeneration = { probeGeneration },
@@ -664,6 +670,9 @@ internal class UsbReaderController(
                 // Hold the contactless session so a CAN entry can run PACE on it.
                 // No provider generation until connect() actually opens the card.
                 activeSession = result.session
+            } else if (result is CcidSessionOpenResult.ActivationRequired) {
+                activeSession = result.session
+                activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
             }
             mainHandler.post {
                 if (
@@ -686,6 +695,13 @@ internal class UsbReaderController(
                             is CcidSessionOpenResult.AccessNumberRequired -> {
                                 UsbReaderSnapshot(
                                     status = ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED,
+                                    cardPresence = CardPresence.PRESENT,
+                                )
+                            }
+
+                            is CcidSessionOpenResult.ActivationRequired -> {
+                                UsbReaderSnapshot(
+                                    status = ReaderConnectionStatus.ACTIVATION_REQUIRED,
                                     cardPresence = CardPresence.PRESENT,
                                 )
                             }
@@ -844,5 +860,9 @@ private fun NativeCertificateReadFailure.toContactlessConnectStatus(): ReaderCon
         NativeCertificateReadFailure.BRIDGE_ERROR,
         -> {
             ReaderConnectionStatus.TRANSPORT_ERROR
+        }
+
+        NativeCertificateReadFailure.ACTIVATION_REQUIRED -> {
+            ReaderConnectionStatus.ACTIVATION_REQUIRED
         }
     }

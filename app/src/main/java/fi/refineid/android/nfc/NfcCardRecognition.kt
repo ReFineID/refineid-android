@@ -16,6 +16,7 @@ internal enum class NfcReaderStatus {
     WRONG_CAN,
     CARD_NOT_SUPPORTED,
     TRANSPORT_ERROR,
+    ACTIVATION_REQUIRED,
 }
 
 internal data class NfcReaderSnapshot(
@@ -78,4 +79,6 @@ internal fun NativeCertificateReadFailure.toConnectStatus(): NfcReaderStatus =
         NativeCertificateReadFailure.TRANSPORT_ERROR,
         NativeCertificateReadFailure.BRIDGE_ERROR,
         -> NfcReaderStatus.TRANSPORT_ERROR
+
+        NativeCertificateReadFailure.ACTIVATION_REQUIRED -> NfcReaderStatus.ACTIVATION_REQUIRED
     }

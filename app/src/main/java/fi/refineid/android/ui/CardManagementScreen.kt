@@ -87,6 +87,8 @@ internal fun CardManagementScreen(
     isCardReady: Boolean = false,
     pinCache: fi.refineid.android.core.AuthenticationPinCache? = null,
     onPin1Changed: (() -> Unit)? = null,
+    activationRequired: Boolean = false,
+    onActivationSucceeded: (() -> Unit)? = null,
 ) {
     var health by remember { mutableStateOf<CredentialHealth?>(null) }
     var isProbing by remember { mutableStateOf(false) }
@@ -398,6 +400,7 @@ internal fun CardManagementScreen(
                                 outcomeIsError = false
                                 pinCache?.clear()
                                 onPin1Changed?.invoke()
+                                onActivationSucceeded?.invoke()
                                 probe()
                             } else {
                                 outcomeNotice = OutcomeNotice(R.string.error)
