@@ -191,12 +191,11 @@ fn check_activation_needs<T: CardTransport>(
             Some(ActivationScheme::PresetActivationPin)
         }
     };
-    if let Some(scheme) = scheme {
-        if let Ok(needs) = transport.activation_needs(scheme) {
-            if needs.any() {
-                return Err(CertificateReadFailure::ActivationRequired);
-            }
-        }
+    if let Some(scheme) = scheme
+        && let Ok(needs) = transport.activation_needs(scheme)
+        && needs.any()
+    {
+        return Err(CertificateReadFailure::ActivationRequired);
     }
     Ok(())
 }
