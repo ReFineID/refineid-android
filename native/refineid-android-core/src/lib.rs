@@ -1264,6 +1264,7 @@ fn unblock_pin2_native<'local>(
     java_reply
 }
 
+#[allow(clippy::too_many_arguments)]
 fn activate_card_native<'local>(
     env: &mut Env<'local>,
     _class: JClass<'local>,
@@ -1510,6 +1511,7 @@ fn contactless_unblock_pin2_native<'local>(
     java_reply
 }
 
+#[allow(clippy::too_many_arguments)]
 fn contactless_activate_card_native<'local>(
     env: &mut Env<'local>,
     _class: JClass<'local>,
