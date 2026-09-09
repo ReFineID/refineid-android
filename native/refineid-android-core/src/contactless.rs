@@ -24,6 +24,10 @@ use crate::card_certificate::{
     CardCertificate, CertificateReadFailure, map_pkcs15_error, read_authentication_certificate,
     read_qualified_certificate,
 };
+use crate::card_management::{
+    CardManagementFailure, activate_card, change_pin1, change_pin2, probe_credential_health,
+    unblock_pin1, unblock_pin2,
+};
 use crate::card_transport::{AndroidCardTransport, SingleBlockExchange};
 use crate::pin1_status::{Pin1Preflight, Pin1PreflightFailure, probe_pin1_preflight};
 use crate::pin2_status::{Pin2Preflight, Pin2PreflightFailure, probe_pin2_preflight};
@@ -31,6 +35,7 @@ use crate::qualified_signer::{
     QualifiedCertificateSource, QualifiedSignFailure, QualifiedSignature,
     QualifiedSigningAlgorithm, QualifiedSigningInput, qualified_sign,
 };
+use refineid_auth::{ActivationReport, CredentialHealthReport, ManageOutcome};
 
 /// Coarse failures of the secure-channel front door, before any
 /// operation-specific vocabulary applies.
@@ -403,6 +408,137 @@ pub(crate) fn contactless_qualified_sign<Exchange: SingleBlockExchange>(
     (result, secure.into_inner().into_exchange())
 }
 
+/// PACE, then the PKCS#15 selection and credential health probe inside secure messaging.
+pub(crate) fn contactless_probe_credential_health<Exchange: SingleBlockExchange>(
+    transport: AndroidCardTransport<Exchange>,
+    can_bytes: Vec<u8>,
+) -> (
+    Result<CredentialHealthReport, CardManagementFailure>,
+    Exchange,
+) {
+    let mut secure = match open_secure_channel(transport, can_bytes) {
+        Ok(secure) => secure,
+        Err((exchange, failure)) => {
+            return (Err(management_channel_failure(failure)), exchange);
+        }
+    };
+    let result = secure
+        .select_pkcs15_application()
+        .map_err(management_selection_failure)
+        .and_then(|()| probe_credential_health(&mut secure));
+    (result, secure.into_inner().into_exchange())
+}
+
+/// PACE, then the PKCS#15 selection and change PIN1 inside secure messaging.
+pub(crate) fn contactless_change_pin1<Exchange: SingleBlockExchange>(
+    transport: AndroidCardTransport<Exchange>,
+    can_bytes: Vec<u8>,
+    current_bytes: Vec<u8>,
+    new_bytes: Vec<u8>,
+) -> (Result<ManageOutcome, CardManagementFailure>, Exchange) {
+    let mut secure = match open_secure_channel(transport, can_bytes) {
+        Ok(secure) => secure,
+        Err((exchange, failure)) => {
+            return (Err(management_channel_failure(failure)), exchange);
+        }
+    };
+    let result = secure
+        .select_pkcs15_application()
+        .map_err(management_selection_failure)
+        .and_then(|()| change_pin1(&mut secure, current_bytes, new_bytes));
+    (result, secure.into_inner().into_exchange())
+}
+
+/// PACE, then the PKCS#15 selection and change PIN2 inside secure messaging.
+pub(crate) fn contactless_change_pin2<Exchange: SingleBlockExchange>(
+    transport: AndroidCardTransport<Exchange>,
+    can_bytes: Vec<u8>,
+    current_bytes: Vec<u8>,
+    new_bytes: Vec<u8>,
+) -> (Result<ManageOutcome, CardManagementFailure>, Exchange) {
+    let mut secure = match open_secure_channel(transport, can_bytes) {
+        Ok(secure) => secure,
+        Err((exchange, failure)) => {
+            return (Err(management_channel_failure(failure)), exchange);
+        }
+    };
+    let result = secure
+        .select_pkcs15_application()
+        .map_err(management_selection_failure)
+        .and_then(|()| change_pin2(&mut secure, current_bytes, new_bytes));
+    (result, secure.into_inner().into_exchange())
+}
+
+/// PACE, then the PKCS#15 selection and unblock PIN1 inside secure messaging.
+pub(crate) fn contactless_unblock_pin1<Exchange: SingleBlockExchange>(
+    transport: AndroidCardTransport<Exchange>,
+    can_bytes: Vec<u8>,
+    puk_bytes: Vec<u8>,
+    new_bytes: Vec<u8>,
+) -> (Result<ManageOutcome, CardManagementFailure>, Exchange) {
+    let mut secure = match open_secure_channel(transport, can_bytes) {
+        Ok(secure) => secure,
+        Err((exchange, failure)) => {
+            return (Err(management_channel_failure(failure)), exchange);
+        }
+    };
+    let result = secure
+        .select_pkcs15_application()
+        .map_err(management_selection_failure)
+        .and_then(|()| unblock_pin1(&mut secure, puk_bytes, new_bytes));
+    (result, secure.into_inner().into_exchange())
+}
+
+/// PACE, then the PKCS#15 selection and unblock PIN2 inside secure messaging.
+pub(crate) fn contactless_unblock_pin2<Exchange: SingleBlockExchange>(
+    transport: AndroidCardTransport<Exchange>,
+    can_bytes: Vec<u8>,
+    puk_bytes: Vec<u8>,
+    new_bytes: Vec<u8>,
+) -> (Result<ManageOutcome, CardManagementFailure>, Exchange) {
+    let mut secure = match open_secure_channel(transport, can_bytes) {
+        Ok(secure) => secure,
+        Err((exchange, failure)) => {
+            return (Err(management_channel_failure(failure)), exchange);
+        }
+    };
+    let result = secure
+        .select_pkcs15_application()
+        .map_err(management_selection_failure)
+        .and_then(|()| unblock_pin2(&mut secure, puk_bytes, new_bytes));
+    (result, secure.into_inner().into_exchange())
+}
+
+/// PACE, then the PKCS#15 selection and card activation inside secure messaging.
+pub(crate) fn contactless_activate_card<Exchange: SingleBlockExchange>(
+    transport: AndroidCardTransport<Exchange>,
+    can_bytes: Vec<u8>,
+    scheme_byte: u8,
+    code_bytes: Vec<u8>,
+    new_pin1_bytes: Option<Vec<u8>>,
+    new_pin2_bytes: Option<Vec<u8>>,
+) -> (Result<ActivationReport, CardManagementFailure>, Exchange) {
+    let mut secure = match open_secure_channel(transport, can_bytes) {
+        Ok(secure) => secure,
+        Err((exchange, failure)) => {
+            return (Err(management_channel_failure(failure)), exchange);
+        }
+    };
+    let result = secure
+        .select_pkcs15_application()
+        .map_err(management_selection_failure)
+        .and_then(|()| {
+            activate_card(
+                &mut secure,
+                scheme_byte,
+                code_bytes,
+                new_pin1_bytes,
+                new_pin2_bytes,
+            )
+        });
+    (result, secure.into_inner().into_exchange())
+}
+
 /// Reconstruct the typed CAN and run the PACE handshake. On failure the
 /// exchange is handed back so the JNI border can inspect it.
 fn open_secure_channel<Exchange: SingleBlockExchange>(
@@ -562,6 +698,30 @@ fn pin2_selection_failure<E>(error: Pkcs15Error<E>) -> Pin2PreflightFailure {
         | Pkcs15Error::Empty
         | Pkcs15Error::TooLarge
         | Pkcs15Error::InvalidData(_) => Pin2PreflightFailure::Transport,
+    }
+}
+
+fn management_channel_failure(failure: SecureChannelFailure) -> CardManagementFailure {
+    match failure {
+        SecureChannelFailure::CardUnavailable => CardManagementFailure::CardUnavailable,
+        SecureChannelFailure::PaceRejected => CardManagementFailure::PaceRejected,
+        SecureChannelFailure::Transport => CardManagementFailure::TransportError,
+        SecureChannelFailure::Bridge => CardManagementFailure::BridgeError,
+    }
+}
+
+fn management_selection_failure<E>(error: Pkcs15Error<E>) -> CardManagementFailure {
+    match error {
+        Pkcs15Error::Outcome(TransportOutcome::NoCard | TransportOutcome::ReaderRemoved) => {
+            CardManagementFailure::CardUnavailable
+        }
+        Pkcs15Error::Aid(_) | Pkcs15Error::Command(_) => CardManagementFailure::BridgeError,
+        Pkcs15Error::Status(_)
+        | Pkcs15Error::Transport(_)
+        | Pkcs15Error::Outcome(_)
+        | Pkcs15Error::Empty
+        | Pkcs15Error::TooLarge
+        | Pkcs15Error::InvalidData(_) => CardManagementFailure::TransportError,
     }
 }
 

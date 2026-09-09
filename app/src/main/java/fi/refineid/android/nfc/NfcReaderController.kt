@@ -124,6 +124,17 @@ internal class NfcReaderController(
             activeSession = { activeSession },
         )
 
+    internal val cardManagementService =
+        NfcCardManagementService(
+            probeExecutor = probeExecutor,
+            mainHandler = mainHandler,
+            isReady = {
+                latestSnapshot.status == NfcReaderStatus.CARD_READY
+            },
+            currentGeneration = { probeGeneration },
+            activeSession = { activeSession },
+        )
+
     internal val externalKeyCardSession =
         NfcExternalKeyCardSession(
             probeExecutor = probeExecutor,

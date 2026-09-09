@@ -76,6 +76,8 @@ class MainActivity : ComponentActivity() {
                     browserCardService = readerController,
                     qualifiedCardService = readerController.qualifiedCardService,
                     nfcQualifiedCardService = nfcReaderController.qualifiedCardService,
+                    cardManagementService = readerController.cardManagementService,
+                    nfcCardManagementService = nfcReaderController.cardManagementService,
                     timestampAuthorityRepository =
                         (application as ReFineIdApplication).timestampAuthorityStore,
                     hasNfc = nfcReaderController.hasNfc,

@@ -8,6 +8,7 @@
 mod authentication_signer;
 mod card_access;
 mod card_certificate;
+mod card_management;
 mod card_transport;
 mod contactless;
 mod jni_card_exchange;
@@ -347,6 +348,126 @@ const _: NativeMethod = jni::native_method! {
 const _: NativeMethod = jni::native_method! {
     java_type = "fi.refineid.android.core.NativeContactlessSession",
     static extern fn contactless_close_native() -> jint,
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn probe_credential_health_native(
+        exchange_level: jint,
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn change_pin1_native(
+        exchange_level: jint,
+        current_pin: [jbyte],
+        new_pin: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn change_pin2_native(
+        exchange_level: jint,
+        current_pin: [jbyte],
+        new_pin: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn unblock_pin1_native(
+        exchange_level: jint,
+        puk: [jbyte],
+        new_pin: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn unblock_pin2_native(
+        exchange_level: jint,
+        puk: [jbyte],
+        new_pin: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn activate_card_native(
+        exchange_level: jint,
+        scheme: jint,
+        code: [jbyte],
+        new_pin1: [jbyte],
+        new_pin2: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn contactless_probe_credential_health_native(
+        can: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn contactless_change_pin1_native(
+        can: [jbyte],
+        current_pin: [jbyte],
+        new_pin: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn contactless_change_pin2_native(
+        can: [jbyte],
+        current_pin: [jbyte],
+        new_pin: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn contactless_unblock_pin1_native(
+        can: [jbyte],
+        puk: [jbyte],
+        new_pin: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn contactless_unblock_pin2_native(
+        can: [jbyte],
+        puk: [jbyte],
+        new_pin: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
+};
+
+const _: NativeMethod = jni::native_method! {
+    java_type = "fi.refineid.android.core.NativeCardManagement",
+    static extern fn contactless_activate_card_native(
+        can: [jbyte],
+        scheme: jint,
+        code: [jbyte],
+        new_pin1: [jbyte],
+        new_pin2: [jbyte],
+        callback: JObject,
+    ) -> [jbyte],
 };
 
 fn validate_atr_native<'local>(
@@ -945,6 +1066,498 @@ fn probe_pin2_status_native<'local>(
         vec![PIN2_PREFLIGHT_BRIDGE_ERROR]
     } else {
         encode_pin2_preflight_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn probe_credential_health_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    exchange_level: jint,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let Some(level) = exchange_level_from_jint(exchange_level) else {
+        return env.byte_array_from_slice(&[card_management::MANAGEMENT_TAG_BRIDGE_ERROR]);
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let mut transport = AndroidCardTransport::new(exchange, level);
+        let result = card_management::probe_credential_health(&mut transport);
+        let exchange = transport.into_exchange();
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_credential_health_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn change_pin1_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    exchange_level: jint,
+    current_pin: JByteArray<'local>,
+    new_pin: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let mut current_bytes = take_secret_bytes(env, &current_pin)?;
+    let mut new_bytes = match take_secret_bytes(env, &new_pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            current_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let Some(level) = exchange_level_from_jint(exchange_level) else {
+        current_bytes.fill(0);
+        new_bytes.fill(0);
+        return env.byte_array_from_slice(&[card_management::MANAGEMENT_TAG_BRIDGE_ERROR]);
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let mut transport = AndroidCardTransport::new(exchange, level);
+        let result = card_management::change_pin1(&mut transport, current_bytes, new_bytes);
+        let exchange = transport.into_exchange();
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_manage_outcome_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn change_pin2_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    exchange_level: jint,
+    current_pin: JByteArray<'local>,
+    new_pin: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let mut current_bytes = take_secret_bytes(env, &current_pin)?;
+    let mut new_bytes = match take_secret_bytes(env, &new_pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            current_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let Some(level) = exchange_level_from_jint(exchange_level) else {
+        current_bytes.fill(0);
+        new_bytes.fill(0);
+        return env.byte_array_from_slice(&[card_management::MANAGEMENT_TAG_BRIDGE_ERROR]);
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let mut transport = AndroidCardTransport::new(exchange, level);
+        let result = card_management::change_pin2(&mut transport, current_bytes, new_bytes);
+        let exchange = transport.into_exchange();
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_manage_outcome_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn unblock_pin1_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    exchange_level: jint,
+    puk: JByteArray<'local>,
+    new_pin: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let mut puk_bytes = take_secret_bytes(env, &puk)?;
+    let mut new_bytes = match take_secret_bytes(env, &new_pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            puk_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let Some(level) = exchange_level_from_jint(exchange_level) else {
+        puk_bytes.fill(0);
+        new_bytes.fill(0);
+        return env.byte_array_from_slice(&[card_management::MANAGEMENT_TAG_BRIDGE_ERROR]);
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let mut transport = AndroidCardTransport::new(exchange, level);
+        let result = card_management::unblock_pin1(&mut transport, puk_bytes, new_bytes);
+        let exchange = transport.into_exchange();
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_manage_outcome_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn unblock_pin2_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    exchange_level: jint,
+    puk: JByteArray<'local>,
+    new_pin: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let mut puk_bytes = take_secret_bytes(env, &puk)?;
+    let mut new_bytes = match take_secret_bytes(env, &new_pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            puk_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let Some(level) = exchange_level_from_jint(exchange_level) else {
+        puk_bytes.fill(0);
+        new_bytes.fill(0);
+        return env.byte_array_from_slice(&[card_management::MANAGEMENT_TAG_BRIDGE_ERROR]);
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let mut transport = AndroidCardTransport::new(exchange, level);
+        let result = card_management::unblock_pin2(&mut transport, puk_bytes, new_bytes);
+        let exchange = transport.into_exchange();
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_manage_outcome_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+#[allow(clippy::too_many_arguments)]
+fn activate_card_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    exchange_level: jint,
+    scheme: jint,
+    code: JByteArray<'local>,
+    new_pin1: JByteArray<'local>,
+    new_pin2: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let mut code_bytes = take_secret_bytes(env, &code)?;
+    let mut new_pin1_bytes = if new_pin1.is_null() || new_pin1.len(env)? == 0 {
+        None
+    } else {
+        Some(take_secret_bytes(env, &new_pin1)?)
+    };
+    let mut new_pin2_bytes = if new_pin2.is_null() || new_pin2.len(env)? == 0 {
+        None
+    } else {
+        Some(take_secret_bytes(env, &new_pin2)?)
+    };
+
+    let Some(level) = exchange_level_from_jint(exchange_level) else {
+        code_bytes.fill(0);
+        if let Some(ref mut b) = new_pin1_bytes {
+            b.fill(0);
+        }
+        if let Some(ref mut b) = new_pin2_bytes {
+            b.fill(0);
+        }
+        return env.byte_array_from_slice(&[card_management::MANAGEMENT_TAG_BRIDGE_ERROR]);
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let mut transport = AndroidCardTransport::new(exchange, level);
+        let result = card_management::activate_card(
+            &mut transport,
+            scheme as u8,
+            code_bytes,
+            new_pin1_bytes,
+            new_pin2_bytes,
+        );
+        let exchange = transport.into_exchange();
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_activation_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn contactless_probe_credential_health_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    can: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let can_bytes = take_secret_bytes(env, &can)?;
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let (result, exchange) =
+            contactless::contactless_probe_credential_health(transport, can_bytes);
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_credential_health_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn contactless_change_pin1_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    can: JByteArray<'local>,
+    current_pin: JByteArray<'local>,
+    new_pin: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let can_bytes = take_secret_bytes(env, &can)?;
+    let mut current_bytes = match take_secret_bytes(env, &current_pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return Err(error);
+        }
+    };
+    let new_bytes = match take_secret_bytes(env, &new_pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            current_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let (result, exchange) =
+            contactless::contactless_change_pin1(transport, can_bytes, current_bytes, new_bytes);
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_manage_outcome_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn contactless_change_pin2_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    can: JByteArray<'local>,
+    current_pin: JByteArray<'local>,
+    new_pin: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let can_bytes = take_secret_bytes(env, &can)?;
+    let mut current_bytes = match take_secret_bytes(env, &current_pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return Err(error);
+        }
+    };
+    let new_bytes = match take_secret_bytes(env, &new_pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            current_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let (result, exchange) =
+            contactless::contactless_change_pin2(transport, can_bytes, current_bytes, new_bytes);
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_manage_outcome_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn contactless_unblock_pin1_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    can: JByteArray<'local>,
+    puk: JByteArray<'local>,
+    new_pin: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let can_bytes = take_secret_bytes(env, &can)?;
+    let mut puk_bytes = match take_secret_bytes(env, &puk) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return Err(error);
+        }
+    };
+    let new_bytes = match take_secret_bytes(env, &new_pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            puk_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let (result, exchange) =
+            contactless::contactless_unblock_pin1(transport, can_bytes, puk_bytes, new_bytes);
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_manage_outcome_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+fn contactless_unblock_pin2_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    can: JByteArray<'local>,
+    puk: JByteArray<'local>,
+    new_pin: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let can_bytes = take_secret_bytes(env, &can)?;
+    let mut puk_bytes = match take_secret_bytes(env, &puk) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return Err(error);
+        }
+    };
+    let new_bytes = match take_secret_bytes(env, &new_pin) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            puk_bytes.fill(0);
+            return Err(error);
+        }
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let (result, exchange) =
+            contactless::contactless_unblock_pin2(transport, can_bytes, puk_bytes, new_bytes);
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_manage_outcome_reply(result)
+    };
+    let java_reply = env.byte_array_from_slice(&reply);
+    reply.fill(0);
+    java_reply
+}
+
+#[allow(clippy::too_many_arguments)]
+fn contactless_activate_card_native<'local>(
+    env: &mut Env<'local>,
+    _class: JClass<'local>,
+    can: JByteArray<'local>,
+    scheme: jint,
+    code: JByteArray<'local>,
+    new_pin1: JByteArray<'local>,
+    new_pin2: JByteArray<'local>,
+    callback: JObject<'local>,
+) -> Result<JByteArray<'local>, jni::errors::Error> {
+    let can_bytes = take_secret_bytes(env, &can)?;
+    let code_bytes = match take_secret_bytes(env, &code) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return Err(error);
+        }
+    };
+    let new_pin1_bytes = if new_pin1.is_null() || new_pin1.len(env)? == 0 {
+        None
+    } else {
+        Some(take_secret_bytes(env, &new_pin1)?)
+    };
+    let new_pin2_bytes = if new_pin2.is_null() || new_pin2.len(env)? == 0 {
+        None
+    } else {
+        Some(take_secret_bytes(env, &new_pin2)?)
+    };
+
+    let (result, bridge_failed) = {
+        let exchange = JniBlockExchange::new(env, callback);
+        let transport = AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu);
+        let (result, exchange) = contactless::contactless_activate_card(
+            transport,
+            can_bytes,
+            scheme as u8,
+            code_bytes,
+            new_pin1_bytes,
+            new_pin2_bytes,
+        );
+        (result, exchange.bridge_failed())
+    };
+
+    let mut reply = if bridge_failed {
+        vec![card_management::MANAGEMENT_TAG_BRIDGE_ERROR]
+    } else {
+        card_management::encode_activation_reply(result)
     };
     let java_reply = env.byte_array_from_slice(&reply);
     reply.fill(0);

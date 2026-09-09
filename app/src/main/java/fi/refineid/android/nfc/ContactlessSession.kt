@@ -1,14 +1,23 @@
+@file:Suppress("TooManyFunctions")
+
 package fi.refineid.android.nfc
 
 import android.nfc.tech.IsoDep
+import fi.refineid.android.core.ActivationReport
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSignatureVerifier
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
+import fi.refineid.android.core.CardManagementFailure
+import fi.refineid.android.core.CardManagementResult
+import fi.refineid.android.core.CardManagementScheme
+import fi.refineid.android.core.CredentialHealth
+import fi.refineid.android.core.ManageOutcome
 import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignFailure
 import fi.refineid.android.core.NativeAuthenticationSignResult
+import fi.refineid.android.core.NativeCardManagement
 import fi.refineid.android.core.NativeCardSessionMaterial
 import fi.refineid.android.core.NativeCertificateReadFailure
 import fi.refineid.android.core.NativeCertificateReadResult
@@ -350,6 +359,136 @@ internal class ContactlessSession(
             // Tag service unavailable.
         }
         AppTrace.nfcSessionClosed()
+    }
+
+    fun probeCredentialHealth(): CardManagementResult<CredentialHealth> {
+        checkOwnerThread()
+        check(!isClosed) { "contactless session is closed" }
+        if (!reconnect()) {
+            return CardManagementResult.Failure(CardManagementFailure.CARD_UNAVAILABLE)
+        }
+        val result =
+            NativeCardManagement.contactlessProbeCredentialHealth(
+                can = can.copyOf(),
+                exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        closeIsoDep()
+        return result
+    }
+
+    fun changePin1(
+        currentPin: ByteArray,
+        newPin: ByteArray,
+    ): CardManagementResult<ManageOutcome> {
+        checkOwnerThread()
+        check(!isClosed) { "contactless session is closed" }
+        if (!reconnect()) {
+            currentPin.fill(0)
+            newPin.fill(0)
+            return CardManagementResult.Failure(CardManagementFailure.CARD_UNAVAILABLE)
+        }
+        val result =
+            NativeCardManagement.contactlessChangePin1(
+                can = can.copyOf(),
+                currentPin = currentPin,
+                newPin = newPin,
+                exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        closeIsoDep()
+        return result
+    }
+
+    fun changePin2(
+        currentPin: ByteArray,
+        newPin: ByteArray,
+    ): CardManagementResult<ManageOutcome> {
+        checkOwnerThread()
+        check(!isClosed) { "contactless session is closed" }
+        if (!reconnect()) {
+            currentPin.fill(0)
+            newPin.fill(0)
+            return CardManagementResult.Failure(CardManagementFailure.CARD_UNAVAILABLE)
+        }
+        val result =
+            NativeCardManagement.contactlessChangePin2(
+                can = can.copyOf(),
+                currentPin = currentPin,
+                newPin = newPin,
+                exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        closeIsoDep()
+        return result
+    }
+
+    fun unblockPin1(
+        puk: ByteArray,
+        newPin: ByteArray,
+    ): CardManagementResult<ManageOutcome> {
+        checkOwnerThread()
+        check(!isClosed) { "contactless session is closed" }
+        if (!reconnect()) {
+            puk.fill(0)
+            newPin.fill(0)
+            return CardManagementResult.Failure(CardManagementFailure.CARD_UNAVAILABLE)
+        }
+        val result =
+            NativeCardManagement.contactlessUnblockPin1(
+                can = can.copyOf(),
+                puk = puk,
+                newPin = newPin,
+                exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        closeIsoDep()
+        return result
+    }
+
+    fun unblockPin2(
+        puk: ByteArray,
+        newPin: ByteArray,
+    ): CardManagementResult<ManageOutcome> {
+        checkOwnerThread()
+        check(!isClosed) { "contactless session is closed" }
+        if (!reconnect()) {
+            puk.fill(0)
+            newPin.fill(0)
+            return CardManagementResult.Failure(CardManagementFailure.CARD_UNAVAILABLE)
+        }
+        val result =
+            NativeCardManagement.contactlessUnblockPin2(
+                can = can.copyOf(),
+                puk = puk,
+                newPin = newPin,
+                exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        closeIsoDep()
+        return result
+    }
+
+    fun activateCard(
+        scheme: CardManagementScheme,
+        code: ByteArray,
+        newPin1: ByteArray?,
+        newPin2: ByteArray?,
+    ): CardManagementResult<ActivationReport> {
+        checkOwnerThread()
+        check(!isClosed) { "contactless session is closed" }
+        if (!reconnect()) {
+            code.fill(0)
+            newPin1?.fill(0)
+            newPin2?.fill(0)
+            return CardManagementResult.Failure(CardManagementFailure.CARD_UNAVAILABLE)
+        }
+        val result =
+            NativeCardManagement.contactlessActivateCard(
+                can = can.copyOf(),
+                scheme = scheme,
+                code = code,
+                newPin1 = newPin1,
+                newPin2 = newPin2,
+                exchange = NfcNativeBlockExchange(IsoDepCardChannel(isoDep)),
+            )
+        closeIsoDep()
+        return result
     }
 
     override fun close() {
