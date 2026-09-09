@@ -561,12 +561,12 @@ private fun AttemptIndicator(
             }
 
             is NativePin1State.Remaining -> {
-                "${state.attempts}/3" to
+                "${state.attempts}" to
                     if (state.attempts > 1) Color(0xFF168447) else Color(0xFFD32F2F)
             }
 
             is NativePin2State.Remaining -> {
-                "${state.attempts}/3" to
+                "${state.attempts}" to
                     if (state.attempts > 1) Color(0xFF168447) else Color(0xFFD32F2F)
             }
 
