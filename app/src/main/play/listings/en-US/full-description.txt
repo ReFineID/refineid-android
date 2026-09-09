@@ -1,0 +1,8 @@
+RefineID enables secure usage of Finnish national identity cards and citizen certificates on Android via contactless NFC or external USB smartcard readers.
+
+Key Features:
+• Strong electronic authentication (PIN1) for online services
+• Qualified electronic digital signatures (PIN2 / QES)
+• Card certificate verification and official portrait retrieval
+• Support for contactless NFC reading and USB CCID hardware readers
+• Fully local, on-device cryptographic processing with strict privacy – no personal data is transmitted to external servers

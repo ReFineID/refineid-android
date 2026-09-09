@@ -1,0 +1,1 @@
+Suomalaisen henkilökortin NFC-luku, tunnistus ja sähköinen allekirjoitus.

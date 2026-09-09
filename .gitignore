@@ -1,0 +1,72 @@
+# Gradle files
+.gradle/
+.kotlin/
+build/
+**/build/
+**/target/
+/tmp/
+
+# Local configuration file (sdk path, etc)
+local.properties
+secrets.properties
+keystore.properties
+play.properties
+play-service-account.json
+.env
+.env.*
+!.env.example
+
+# Log/OS Files
+*.log
+.DS_Store
+
+# Android Studio generated files and folders
+captures/
+.externalNativeBuild/
+.cxx/
+*.aab
+*.apk
+output-metadata.json
+
+# IntelliJ
+*.iml
+.idea/
+misc.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
+
+# Keystore files
+*.jks
+*.keystore
+*.p12
+*.pfx
+
+# Google Services (e.g. APIs or Firebase)
+google-services.json
+
+# Android Profiling
+*.hprof
+
+# Smart-card material and transport captures
+*.apdu
+*.cer
+*.crt
+*.der
+*.pcap
+*.pcapng
+*.pem
+*.trace
+card-dumps/
+certificates-from-smart-card/
+device-dumps/
+traces/
+
+# Explicitly synthetic test material may be committed.
+!app/src/test/resources/synthetic/**
+
+# Public, fingerprint-pinned issuer certificates may be committed.
+!app/src/main/res/raw/fineid_intermediate_*.pem
+!app/src/debug/res/raw/sectigo_qualified_timestamping_root_*.pem
+
+# Public CSCA trust anchors ship with the application.
+!app/src/main/assets/csca/**/*.der

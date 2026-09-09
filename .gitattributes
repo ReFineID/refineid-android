@@ -1,0 +1,2 @@
+# Unified diff context lines can consist solely of the required context marker.
+*.patch -whitespace

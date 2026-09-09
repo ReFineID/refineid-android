@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="section_browser">Webbanvändning</string>
+    <string name="section_document">Dokument</string>
+    <string name="read_identity_card">Läs kort</string>
+    <string name="pin1_optional" tools:ignore="Typos">PIN1 (valfritt)</string>
+    <string name="usb_reader">USB-läsare</string>
+    <string name="not_connected">Inte ansluten</string>
+    <string name="permission_required">Behörighet krävs</string>
+    <string name="access_failed">Åtkomst misslyckades</string>
+    <string name="checking">Kontrollerar</string>
+    <string name="error">Fel</string>
+    <string name="ready">Klar</string>
+    <string name="allow">Tillåt</string>
+    <string name="retry">Försök igen</string>
+    <string name="card" tools:ignore="DuplicateStrings">Kort</string>
+    <string name="off">Av</string>
+    <string name="turn_on">Slå på</string>
+    <string name="card_recognized">Kortet igenkänt</string>
+    <string name="card_not_supported">Kortet stöds inte</string>
+    <string name="sign_in">Logga in</string>
+    <string name="unlock">Lås upp</string>
+    <string name="wrong_can" tools:ignore="Typos">Fel CAN</string>
+    <string name="access_number_required" tools:ignore="Typos">CAN krävs</string>
+    <string name="card_primed">Kort sparat för tryck</string>
+    <string name="forget">Glöm</string>
+    <string name="present">Närvarande</string>
+    <string name="not_present">Inte närvarande</string>
+    <string name="authentication">Autentisering</string>
+    <string name="sign">Signera</string>
+    <string name="verify">Verifiera</string>
+    <string name="back">Tillbaka</string>
+    <string name="browser">Webbläsare</string>
+    <string name="timestamp_authorities">Tidsstämpeltjänster</string>
+    <string name="authenticate">Identifiera dig</string>
+    <string name="cancel">Avbryt</string>
+    <string name="signing">Signerar</string>
+    <string name="signed">Signerat</string>
+    <string name="wrong_pin">Fel PIN</string>
+    <string name="pin_locked">PIN låst</string>
+    <string name="unavailable">Inte tillgänglig</string>
+    <string name="section_remote">Fjärranvändning</string>
+    <string name="pair_computer">Anslut</string>
+    <string name="section_identity">Person</string>
+    <string name="forget_identity_title">Glöm identitet?</string>
+    <string name="forget_identity">Glöm identitet</string>
+    <string name="card_untampered">Kortet är äkta och orört.</string>
+    <string name="copy_photo">Kopiera bild</string>
+    <string name="share_photo">Dela bild</string>
+    <string name="photo_copied">Bilden kopierades till urklipp</string>
+    <string name="connected_to_computer">Ansluten till dator</string>
+    <string name="disconnect">Koppla från</string>
+    <string name="pairing_failed">Anslutning misslyckades</string>
+    <string name="peer_connected">%1$s ansluten.</string>
+    <string name="pairing_code">Kopplingskod</string>
+    <string name="hold_card_to_phone">Håll ditt ID-kort mot baksidan av telefonen…</string>
+    <string name="remote_auth_title">Fjärridentifiering</string>
+    <string name="hold_card_to_approve">Håll ditt ID-kort mot telefonen för att godkänna.</string>
+    <string name="sign_document_title">Signera dokument</string>
+    <string name="connect_id_card">Anslut identitetskort</string>
+    <string name="show_pairing_code">Visa kopplingskod</string>
+    <string name="enter_pairing_code">Mata in kopplingskod</string>
+</resources>

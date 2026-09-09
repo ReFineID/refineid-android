@@ -1,0 +1,4 @@
+# Build outputs. The generated binding under generated/ is deliberately
+# committed; these are not.
+/target/
+/jniLibs/
