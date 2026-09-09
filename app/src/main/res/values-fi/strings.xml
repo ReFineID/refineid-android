@@ -78,8 +78,8 @@
     <string name="pin_changed_success">PIN vaihdettu onnistuneesti.</string>
     <string name="pin_reset_success">PIN palautettu onnistuneesti.</string>
     <string name="card_activated_success">Kortti aktivoitu onnistuneesti.</string>
-    <string name="confirm_change_title">Vahvista koodin %1$s vaihto</string>
-    <string name="confirm_reset_title">Vahvista koodin %1$s palautus</string>
+    <string name="confirm_change_title">Vahvista %1$s vaihto</string>
+    <string name="confirm_reset_title">Vahvista %1$s palautus</string>
     <string name="confirm_activation_title">Vahvista kortin aktivointi</string>
     <string name="confirm_pin_change_warning" tools:ignore="PluralsCandidate">Väärä nykyinen %1$s kuluttaa yhden yrityksen. Yrityksiä on jäljellä %2$d.</string>
     <string name="confirm_pin_reset_warning" tools:ignore="PluralsCandidate">Väärä %1$s kuluttaa yhden yrityksen. Yrityksiä on jäljellä %2$d. Loppuun kulunutta koodia %1$s ei voi palauttaa ohjelmistolla.</string>
