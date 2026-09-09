@@ -12,9 +12,7 @@
 use std::sync::Mutex;
 
 use refineid_apdu::{CardTransport, TransportOutcome};
-use refineid_emrtd::{
-    CscaAnchor, CscaAnchors, EmrtdOps, ParsedMrzTd1, authenticate_document, parse_card_face_image,
-};
+use refineid_emrtd::{CscaAnchor, CscaAnchors, EmrtdOps};
 use refineid_pace::{Can, PaceError, PaceSession, SmTransport, UnvalidatedCan, run_pace_with_can};
 use refineid_pkcs15::{Pkcs15Error, Pkcs15Ops};
 
@@ -599,39 +597,18 @@ fn read_emrtd_data_from_secure_channel<T: CardTransport + Pkcs15Ops + EmrtdOps>(
     set_last_read_verification(VERIFICATION_NOT_PERFORMED);
     set_last_read_document_number(None);
 
-    if secure.select_emrtd_application().is_err() {
-        return;
-    }
-
-    let mut face_photo = None;
-
-    if let Ok(files) = secure.read_passive_authentication_files() {
-        let mrz = ParsedMrzTd1::parse(files.mrz.as_bytes());
-        set_last_read_document_number(mrz.map(|parsed| parsed.document_number));
-
-        if let Some(anchors) = installed_csca_anchors() {
-            let verdict =
-                authenticate_document(&files.security_object, &files.mrz, &files.face, &anchors);
-            set_last_read_verification(if verdict.is_ok() {
-                VERIFICATION_PASSED
-            } else {
-                VERIFICATION_FAILED
-            });
+    let anchors = installed_csca_anchors();
+    if let Ok(profile) = secure.read_card_emrtd_profile(anchors.as_ref()) {
+        set_last_read_document_number(profile.document_number);
+        match profile.passive_authentication_passed {
+            Some(true) => set_last_read_verification(VERIFICATION_PASSED),
+            Some(false) => set_last_read_verification(VERIFICATION_FAILED),
+            None => set_last_read_verification(VERIFICATION_NOT_PERFORMED),
         }
-
-        face_photo = parse_card_face_image(files.face.as_bytes()).map(|image| image.into_bytes());
-    } else {
-        // Fallback: read MRZ and face photo individually
-        if let Ok(Some(mrz)) = secure.read_mrz_td1() {
-            set_last_read_document_number(Some(mrz.document_number));
-        }
-        if let Ok(Some(image)) = secure.read_face_image() {
-            face_photo = Some(image.into_bytes());
-        }
+        set_last_read_face_photo(profile.face_image.map(|image| image.into_bytes()));
     }
 
     let _ = secure.select_pkcs15_application();
-    set_last_read_face_photo(face_photo);
 }
 
 #[cfg(test)]
