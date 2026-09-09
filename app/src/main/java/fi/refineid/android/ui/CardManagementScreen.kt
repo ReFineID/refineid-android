@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -388,6 +389,7 @@ internal fun CardManagementScreen(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .imePadding()
                 .testTag("CardManagementScreen"),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -470,18 +472,6 @@ internal fun CardManagementScreen(
                 )
             }
         } else {
-            // Task Selector
-            Section(stringResource(R.string.card_pins)) {
-                TaskSelector(
-                    selectedTask = selectedTask,
-                    onSelect = { task ->
-                        selectedTask = task
-                        outcomeNoticeResId = null
-                        clearEntries()
-                    },
-                )
-            }
-
             // Task Form
             Section(
                 when (selectedTask) {
@@ -549,6 +539,18 @@ internal fun CardManagementScreen(
                     }
                 }
             }
+
+            // Task Selector (at the bottom)
+            Section(stringResource(R.string.card_pins)) {
+                TaskSelector(
+                    selectedTask = selectedTask,
+                    onSelect = { task ->
+                        selectedTask = task
+                        outcomeNoticeResId = null
+                        clearEntries()
+                    },
+                )
+            }
         }
     }
 
@@ -556,24 +558,42 @@ internal fun CardManagementScreen(
         val (dialogTitle, dialogMsg) =
             when (selectedTask) {
                 ManagementTask.CHANGE_PIN1, ManagementTask.CHANGE_PIN2 -> {
-                    stringResource(R.string.confirm_pin_operation_title) to
-                        stringResource(R.string.confirm_pin_change_message)
+                    val isPin1 = selectedTask == ManagementTask.CHANGE_PIN1
+                    val pinName = if (isPin1) "PIN 1" else "PIN 2"
+                    val attempts = if (isPin1) pin1Attempts else pin2Attempts
+                    val title = stringResource(R.string.confirm_change_title, pinName)
+                    val msg =
+                        if (attempts != null && (attempts == 3 || attempts == 4)) {
+                            stringResource(R.string.confirm_pin_change_warning, pinName, attempts)
+                        } else {
+                            null
+                        }
+                    title to msg
                 }
 
                 ManagementTask.RESET_PIN1, ManagementTask.RESET_PIN2 -> {
-                    stringResource(R.string.confirm_pin_operation_title) to
-                        stringResource(R.string.confirm_pin_reset_message)
+                    val isPin1 = selectedTask == ManagementTask.RESET_PIN1
+                    val pinName = if (isPin1) "PIN 1" else "PIN 2"
+                    val attempts = pukAttempts
+                    val title = stringResource(R.string.confirm_reset_title, pinName)
+                    val msg =
+                        if (attempts != null && (attempts == 3 || attempts == 4)) {
+                            stringResource(R.string.confirm_pin_reset_warning, "PUK", attempts)
+                        } else {
+                            null
+                        }
+                    title to msg
                 }
 
                 ManagementTask.ACTIVATE_CARD -> {
-                    stringResource(R.string.card_activation) to stringResource(R.string.confirm_activation_message)
+                    stringResource(R.string.confirm_activation_title) to null
                 }
             }
 
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
             title = { Text(dialogTitle) },
-            text = { Text(dialogMsg) },
+            text = dialogMsg?.let { msg -> { Text(msg) } },
             confirmButton = {
                 Button(
                     onClick = {
