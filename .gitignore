@@ -66,6 +66,7 @@ traces/
 
 # Public, fingerprint-pinned issuer certificates may be committed.
 !app/src/main/res/raw/fineid_intermediate_*.pem
+!app/src/main/res/raw/telia_root_ca_v2.pem
 !app/src/debug/res/raw/sectigo_qualified_timestamping_root_*.pem
 
 # Public CSCA trust anchors ship with the application.
