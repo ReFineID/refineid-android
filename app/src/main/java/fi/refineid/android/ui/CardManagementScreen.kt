@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -73,18 +74,25 @@ private enum class ManagementTask {
     ACTIVATE_CARD,
 }
 
+private data class OutcomeNotice(
+    val resId: Int,
+    val arg: String? = null,
+)
+
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun CardManagementScreen(
     cardManagementService: CardManagementService?,
     onConnectNfc: ((CanSubmission) -> Unit)? = null,
     isCardReady: Boolean = false,
+    pinCache: fi.refineid.android.core.AuthenticationPinCache? = null,
+    onPin1Changed: (() -> Unit)? = null,
 ) {
     var health by remember { mutableStateOf<CredentialHealth?>(null) }
     var isProbing by remember { mutableStateOf(false) }
     var isOperating by remember { mutableStateOf(false) }
     var selectedTask by remember { mutableStateOf(ManagementTask.CHANGE_PIN1) }
-    var outcomeNoticeResId by remember { mutableStateOf<Int?>(null) }
+    var outcomeNotice by remember { mutableStateOf<OutcomeNotice?>(null) }
     var outcomeIsError by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
@@ -132,11 +140,13 @@ internal fun CardManagementScreen(
                 }
 
                 is CardManagementResult.Failure -> {
-                    outcomeNoticeResId =
-                        when (result.kind) {
-                            CardManagementFailure.CARD_UNAVAILABLE -> R.string.unavailable
-                            else -> R.string.error
-                        }
+                    outcomeNotice =
+                        OutcomeNotice(
+                            when (result.kind) {
+                                CardManagementFailure.CARD_UNAVAILABLE -> R.string.unavailable
+                                else -> R.string.error
+                            },
+                        )
                     outcomeIsError = true
                 }
             }
@@ -269,30 +279,39 @@ internal fun CardManagementScreen(
     fun executeOperation() {
         if (!canExecute || cardManagementService == null) return
         isOperating = true
-        outcomeNoticeResId = null
+        outcomeNotice = null
 
         when (selectedTask) {
             ManagementTask.CHANGE_PIN1, ManagementTask.CHANGE_PIN2 -> {
                 val curBytes = currentPin.toByteArray(Charsets.US_ASCII)
                 val newBytes = newPin.toByteArray(Charsets.US_ASCII)
                 val isPin1 = selectedTask == ManagementTask.CHANGE_PIN1
+                val pinName = if (isPin1) "PIN 1" else "PIN 2"
+                if (isPin1) {
+                    pinCache?.clear()
+                    onPin1Changed?.invoke()
+                }
                 val callback: (CardManagementResult<ManageOutcome>) -> Unit = { result ->
                     isOperating = false
                     clearEntries()
                     when (result) {
                         is CardManagementResult.Success -> {
                             if (result.value is ManageOutcome.Succeeded) {
-                                outcomeNoticeResId = R.string.pin_changed_success
+                                outcomeNotice = OutcomeNotice(R.string.pin_changed_success, pinName)
                                 outcomeIsError = false
+                                if (isPin1) {
+                                    pinCache?.clear()
+                                    onPin1Changed?.invoke()
+                                }
                             } else {
-                                outcomeNoticeResId = R.string.error
+                                outcomeNotice = OutcomeNotice(R.string.error)
                                 outcomeIsError = true
                             }
                             probe()
                         }
 
                         is CardManagementResult.Failure -> {
-                            outcomeNoticeResId = R.string.error
+                            outcomeNotice = OutcomeNotice(R.string.error)
                             outcomeIsError = true
                         }
                     }
@@ -308,23 +327,32 @@ internal fun CardManagementScreen(
                 val pukBytes = puk.toByteArray(Charsets.US_ASCII)
                 val newBytes = newPin.toByteArray(Charsets.US_ASCII)
                 val isPin1 = selectedTask == ManagementTask.RESET_PIN1
+                val pinName = if (isPin1) "PIN 1" else "PIN 2"
+                if (isPin1) {
+                    pinCache?.clear()
+                    onPin1Changed?.invoke()
+                }
                 val callback: (CardManagementResult<ManageOutcome>) -> Unit = { result ->
                     isOperating = false
                     clearEntries()
                     when (result) {
                         is CardManagementResult.Success -> {
                             if (result.value is ManageOutcome.Succeeded) {
-                                outcomeNoticeResId = R.string.pin_reset_success
+                                outcomeNotice = OutcomeNotice(R.string.pin_reset_success, pinName)
                                 outcomeIsError = false
+                                if (isPin1) {
+                                    pinCache?.clear()
+                                    onPin1Changed?.invoke()
+                                }
                             } else {
-                                outcomeNoticeResId = R.string.error
+                                outcomeNotice = OutcomeNotice(R.string.error)
                                 outcomeIsError = true
                             }
                             probe()
                         }
 
                         is CardManagementResult.Failure -> {
-                            outcomeNoticeResId = R.string.error
+                            outcomeNotice = OutcomeNotice(R.string.error)
                             outcomeIsError = true
                         }
                     }
@@ -355,6 +383,8 @@ internal fun CardManagementScreen(
                         null
                     }
                 val scheme = health?.activationScheme ?: CardManagementScheme.PUK
+                pinCache?.clear()
+                onPin1Changed?.invoke()
                 cardManagementService.activateCard(scheme, codeBytes, new1Bytes, new2Bytes) { result ->
                     isOperating = false
                     clearEntries()
@@ -364,18 +394,20 @@ internal fun CardManagementScreen(
                             if (actReport.pin1Outcome is ManageOutcome.Succeeded &&
                                 actReport.pin2Outcome is ManageOutcome.Succeeded
                             ) {
-                                outcomeNoticeResId = R.string.card_activated_success
+                                outcomeNotice = OutcomeNotice(R.string.card_activated_success)
                                 outcomeIsError = false
+                                pinCache?.clear()
+                                onPin1Changed?.invoke()
                                 probe()
                             } else {
-                                outcomeNoticeResId = R.string.error
+                                outcomeNotice = OutcomeNotice(R.string.error)
                                 outcomeIsError = true
                                 probe()
                             }
                         }
 
                         is CardManagementResult.Failure -> {
-                            outcomeNoticeResId = R.string.error
+                            outcomeNotice = OutcomeNotice(R.string.error)
                             outcomeIsError = true
                         }
                     }
@@ -388,6 +420,7 @@ internal fun CardManagementScreen(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .imePadding()
                 .testTag("CardManagementScreen"),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -441,15 +474,22 @@ internal fun CardManagementScreen(
         }
 
         // Outcome Banner
-        if (outcomeNoticeResId != null) {
+        if (outcomeNotice != null) {
+            val notice = outcomeNotice!!
+            val message =
+                if (notice.arg != null) {
+                    stringResource(notice.resId, notice.arg)
+                } else {
+                    stringResource(notice.resId)
+                }
             OutcomeBanner(
-                message = stringResource(outcomeNoticeResId!!),
+                message = message,
                 isError = outcomeIsError,
             )
         }
 
         // Guidance / Policy Banner
-        if (guidanceMessage != null && guidanceTone != null && outcomeNoticeResId == null) {
+        if (guidanceMessage != null && guidanceTone != null && outcomeNotice == null) {
             GuidanceBanner(
                 message = guidanceMessage,
                 tone = guidanceTone,
@@ -470,18 +510,6 @@ internal fun CardManagementScreen(
                 )
             }
         } else {
-            // Task Selector
-            Section(stringResource(R.string.card_pins)) {
-                TaskSelector(
-                    selectedTask = selectedTask,
-                    onSelect = { task ->
-                        selectedTask = task
-                        outcomeNoticeResId = null
-                        clearEntries()
-                    },
-                )
-            }
-
             // Task Form
             Section(
                 when (selectedTask) {
@@ -549,6 +577,18 @@ internal fun CardManagementScreen(
                     }
                 }
             }
+
+            // Task Selector (at the bottom)
+            Section(stringResource(R.string.card_pins)) {
+                TaskSelector(
+                    selectedTask = selectedTask,
+                    onSelect = { task ->
+                        selectedTask = task
+                        outcomeNotice = null
+                        clearEntries()
+                    },
+                )
+            }
         }
     }
 
@@ -556,24 +596,42 @@ internal fun CardManagementScreen(
         val (dialogTitle, dialogMsg) =
             when (selectedTask) {
                 ManagementTask.CHANGE_PIN1, ManagementTask.CHANGE_PIN2 -> {
-                    stringResource(R.string.confirm_pin_operation_title) to
-                        stringResource(R.string.confirm_pin_change_message)
+                    val isPin1 = selectedTask == ManagementTask.CHANGE_PIN1
+                    val pinName = if (isPin1) "PIN 1" else "PIN 2"
+                    val attempts = if (isPin1) pin1Attempts else pin2Attempts
+                    val title = stringResource(R.string.confirm_change_title, pinName)
+                    val msg =
+                        if (attempts != null && (attempts == 3 || attempts == 4)) {
+                            stringResource(R.string.confirm_pin_change_warning, pinName, attempts)
+                        } else {
+                            null
+                        }
+                    title to msg
                 }
 
                 ManagementTask.RESET_PIN1, ManagementTask.RESET_PIN2 -> {
-                    stringResource(R.string.confirm_pin_operation_title) to
-                        stringResource(R.string.confirm_pin_reset_message)
+                    val isPin1 = selectedTask == ManagementTask.RESET_PIN1
+                    val pinName = if (isPin1) "PIN 1" else "PIN 2"
+                    val attempts = pukAttempts
+                    val title = stringResource(R.string.confirm_reset_title, pinName)
+                    val msg =
+                        if (attempts != null && (attempts == 3 || attempts == 4)) {
+                            stringResource(R.string.confirm_pin_reset_warning, "PUK", attempts)
+                        } else {
+                            null
+                        }
+                    title to msg
                 }
 
                 ManagementTask.ACTIVATE_CARD -> {
-                    stringResource(R.string.card_activation) to stringResource(R.string.confirm_activation_message)
+                    stringResource(R.string.confirm_activation_title) to null
                 }
             }
 
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
             title = { Text(dialogTitle) },
-            text = { Text(dialogMsg) },
+            text = dialogMsg?.let { msg -> { Text(msg) } },
             confirmButton = {
                 Button(
                     onClick = {

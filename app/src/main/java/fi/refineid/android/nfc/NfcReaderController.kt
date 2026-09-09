@@ -46,7 +46,7 @@ import kotlin.coroutines.resume
  * opens a contactless session whose every operation re-runs PACE inside
  * one bounded ISO-DEP connection on a dedicated worker thread.
  */
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LargeClass")
 internal class NfcReaderController(
     context: Context,
     private val primedCanStore: PrimedCanStore,
@@ -586,7 +586,13 @@ internal class NfcReaderController(
     }
 
     private fun extractCardDetails(opened: NativeContactlessOpenResult): Pair<PersonCardDetails?, String?> {
-        val photoBytes = NativeCore.readCardFacePhoto()
+        val holderNameFromCert =
+            if (opened is NativeContactlessOpenResult.Success) {
+                CertificateHolderName.fromCertificate(opened.certificate)
+            } else {
+                null
+            }
+        val photoBytes = CardPhotoStore.getPhoto(holderNameFromCert) ?: NativeCore.readCardFacePhoto()
         val documentNumber = NativeCore.readCardDocumentNumber()
         val tamperProofVerified = NativeVerification.readCardVerificationPassed()
         val cardDetails: PersonCardDetails? =
@@ -604,16 +610,67 @@ internal class NfcReaderController(
             } else {
                 null
             }
-        val holderName =
-            cardDetails?.holderName ?: if (opened is NativeContactlessOpenResult.Success) {
-                CertificateHolderName.fromCertificate(opened.certificate)
-            } else {
-                null
-            }
+        val holderName = cardDetails?.holderName ?: holderNameFromCert
         if (photoBytes != null && photoBytes.isNotEmpty() && holderName != null) {
             CardPhotoStore.savePhoto(photoBytes, holderName, documentNumber)
         }
         return Pair(cardDetails, holderName)
+    }
+
+    /**
+     * Read the face photo from the card on demand.
+     * Uses the active held session if present, or connects with primed CAN if a tag is resting.
+     */
+    fun readPhoto(onResult: (ByteArray?) -> Unit) {
+        val session = activeSession
+        if (session != null) {
+            probeExecutor.execute {
+                val photo =
+                    try {
+                        session.readFacePhoto()
+                    } catch (_: Exception) {
+                        null
+                    }
+                val holderName = latestSnapshot.holderName
+                val docNum = NativeCore.readCardDocumentNumber()
+                if (photo != null && holderName != null) {
+                    CardPhotoStore.savePhoto(photo, holderName, docNum)
+                }
+                mainHandler.post {
+                    onResult(photo)
+                }
+            }
+            return
+        }
+        val resting = latestIsoDep
+        val canBytes = primedCanStore.read()
+        if (resting != null && canBytes != null) {
+            probeExecutor.execute {
+                val photo =
+                    try {
+                        if (!resting.isConnected) {
+                            resting.connect()
+                            resting.timeout = TRANSCEIVE_TIMEOUT_MILLISECONDS
+                        }
+                        val exchange = NfcNativeBlockExchange(IsoDepCardChannel(resting))
+                        NativeContactlessSession.readFacePhotoWithCan(canBytes, exchange)
+                    } catch (_: Exception) {
+                        null
+                    }
+                val holderName = latestSnapshot.holderName
+                val docNum = NativeCore.readCardDocumentNumber()
+                if (photo != null && holderName != null) {
+                    CardPhotoStore.savePhoto(photo, holderName, docNum)
+                }
+                mainHandler.post {
+                    onResult(photo)
+                }
+            }
+            return
+        }
+        mainHandler.post {
+            onResult(null)
+        }
     }
 
     private fun closeActiveSession() {
@@ -636,6 +693,20 @@ internal class NfcReaderController(
                 closeActiveSession()
                 probeGeneration += 1
                 mainHandler.post { publish(NfcReaderSnapshot(status = NfcReaderStatus.WAITING_FOR_CARD)) }
+            }
+        } catch (_: RejectedExecutionException) {
+            // The executor only stops when the process is terminating.
+        }
+    }
+
+    /** Forget the cached PIN 1 so subsequent operations require PIN entry again. */
+    fun forgetPin1() {
+        checkMainThread()
+        pinCache.clear()
+        try {
+            probeExecutor.execute {
+                primedCanStore.forgetPin1()
+                pinCache.clear()
             }
         } catch (_: RejectedExecutionException) {
             // The executor only stops when the process is terminating.

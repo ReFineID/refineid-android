@@ -75,15 +75,16 @@
     <string name="activation_pin">Aktivointitunnusluku</string>
     <string name="change_basic_pin1">Vaihda perus-PIN 1</string>
     <string name="change_signature_pin2">Vaihda allekirjoitus-PIN 2</string>
-    <string name="pin_changed_success">PIN vaihdettu onnistuneesti.</string>
-    <string name="pin_reset_success">PIN palautettu onnistuneesti.</string>
+    <string name="pin_changed_success">%1$s vaihdettiin</string>
+    <string name="pin_reset_success">%1$s palautettiin</string>
     <string name="card_activated_success">Kortti aktivoitu onnistuneesti.</string>
-    <string name="confirm_pin_operation_title">Vahvista toiminto</string>
-    <string name="confirm_pin_change_message">Väärä nykyinen PIN kuluttaa kortin yrityskerran.</string>
-    <string name="confirm_pin_reset_message">Väärä PUK kuluttaa kortin yrityskerran. PUK-koodin loppuun kuluttaminen lukitsee kortin pysyvästi.</string>
-    <string name="confirm_activation_message">Aktivoi kortti lähetyskirjeen aktivointitunnusluvulla.</string>
+    <string name="confirm_change_title">Vahvista %1$s vaihto</string>
+    <string name="confirm_reset_title">Vahvista %1$s palautus</string>
+    <string name="confirm_activation_title">Vahvista kortin aktivointi</string>
+    <string name="confirm_pin_change_warning" tools:ignore="PluralsCandidate">Väärä nykyinen %1$s kuluttaa yhden yrityksen. Yrityksiä on jäljellä %2$d.</string>
+    <string name="confirm_pin_reset_warning" tools:ignore="PluralsCandidate">Väärä %1$s kuluttaa yhden yrityksen. Yrityksiä on jäljellä %2$d.</string>
     <string name="proceed">Jatka</string>
-    <string name="spent_attempts_notice">%1$s: %2$d/%3$d yritystä jäljellä.\nOikea koodi palauttaa kaikki yritykset.</string>
+    <string name="spent_attempts_notice">%1$s: %2$d/%3$d yritystä jäljellä.</string>
     <string name="refuse_low_attempts_pin">RefineID ei käytä tunnuslukua, jossa on yksi tai kaksi yritystä jäljellä. Palauta se toisella ohjelmistolla tai poista sulku täällä, kun kortti on lukinnut sen.</string>
     <string name="refuse_low_attempts_puk">RefineID ei käytä kumpaakaan kahdesta viimeisestä PUK-yrityksestä.</string>
     <string name="recovery_guidance_pin1">PIN 1 on palautettava\nPalauta PIN 1 PUK-koodilla.</string>

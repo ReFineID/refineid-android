@@ -204,9 +204,6 @@ pub(crate) fn contactless_open<Exchange: SingleBlockExchange>(
                 .map(|preflight| (certificate, preflight))
                 .map_err(open_preflight_failure)
         });
-    if result.is_ok() {
-        read_emrtd_data_from_secure_channel(&mut secure);
-    }
     (result, secure.into_inner().into_exchange())
 }
 
@@ -272,9 +269,6 @@ pub(crate) fn contactless_connect<Exchange: SingleBlockExchange>(
                 .map(|preflight| (certificate, preflight))
                 .map_err(open_preflight_failure)
         });
-    if result.is_ok() {
-        read_emrtd_data_from_secure_channel(&mut secure);
-    }
     let (transport, session) = secure.into_parts();
     if result.is_ok() {
         store_held_session(session);
@@ -371,6 +365,39 @@ pub(crate) fn contactless_probe_pin2<Exchange: SingleBlockExchange>(
         .map_err(pin2_selection_failure)
         .and_then(|()| probe_pin2_preflight(&mut secure));
     (result, secure.into_inner().into_exchange())
+}
+
+/// Read the eMRTD face photo and document number on the currently-held
+/// secure-messaging session. Re-selects the PKCS#15 application before
+/// returning so following operations are unaffected.
+pub(crate) fn contactless_read_face_photo_on_session<Exchange: SingleBlockExchange>(
+    transport: AndroidCardTransport<Exchange>,
+) -> (Option<Vec<u8>>, Exchange) {
+    let Some(session) = take_held_session() else {
+        return (None, transport.into_exchange());
+    };
+    let mut secure = SmTransport::new(transport, session);
+    read_emrtd_data_from_secure_channel(&mut secure);
+    let photo = get_last_read_face_photo();
+    let (transport, session) = secure.into_parts();
+    store_held_session(session);
+    (photo, transport.into_exchange())
+}
+
+/// One PACE handshake, then reads the eMRTD face photo and document number.
+pub(crate) fn contactless_read_face_photo<Exchange: SingleBlockExchange>(
+    transport: AndroidCardTransport<Exchange>,
+    can_bytes: Vec<u8>,
+) -> (Option<Vec<u8>>, Exchange) {
+    let mut secure = match open_secure_channel(transport, can_bytes) {
+        Ok(secure) => secure,
+        Err((exchange, _)) => return (None, exchange),
+    };
+    read_emrtd_data_from_secure_channel(&mut secure);
+    let photo = get_last_read_face_photo();
+    let (transport, session) = secure.into_parts();
+    store_held_session(session);
+    (photo, transport.into_exchange())
 }
 
 /// PACE, then the PKCS#15 selection and one qualified signature inside

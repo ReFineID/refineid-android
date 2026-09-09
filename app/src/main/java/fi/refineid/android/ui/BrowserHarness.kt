@@ -82,6 +82,7 @@ internal fun BrowserHarness(
     nfcStatus: NfcReaderStatus? = null,
     nfcPrimed: Boolean = false,
     onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit = { _, _ -> },
+    onWrongPin: (() -> Unit)? = null,
     launcher: (@Composable (onOpen: () -> Unit) -> Unit)? = null,
 ) {
     if (cardService == null) {
@@ -112,6 +113,7 @@ internal fun BrowserHarness(
             nfcStatus = nfcStatus,
             nfcPrimed = nfcPrimed,
             onNfcConnect = onNfcConnect,
+            onWrongPin = onWrongPin,
             onClose = {
                 AppTrace.browserClosed()
                 isOpen = false
@@ -131,6 +133,7 @@ private fun BrowserDialog(
     nfcStatus: NfcReaderStatus?,
     nfcPrimed: Boolean,
     onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit,
+    onWrongPin: (() -> Unit)? = null,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -140,6 +143,14 @@ private fun BrowserDialog(
     var unlockRequest by remember { mutableStateOf<BrowserCardUnlockRequest?>(null) }
     var unlockWaiting by remember { mutableStateOf(false) }
     var signatureStatus by remember { mutableStateOf(BrowserSignatureStatus.IDLE) }
+    LaunchedEffect(signatureStatus) {
+        if (signatureStatus == BrowserSignatureStatus.WRONG_PIN ||
+            signatureStatus == BrowserSignatureStatus.PIN_LOCKED
+        ) {
+            onWrongPin?.invoke()
+            onClose()
+        }
+    }
     // Once the holder unlocked and the session opened, resolve the held
     // certificate request; the handshake then proceeds with the card.
     LaunchedEffect(nfcStatus, unlockRequest) {

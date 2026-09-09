@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -15,6 +16,7 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,11 +33,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,9 +67,59 @@ import java.io.FileOutputStream
 internal fun PersonScreen(
     details: PersonCardDetails,
     modifier: Modifier = Modifier,
+    onReadPhoto: (((ByteArray?) -> Unit) -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val photoBitmap = details.getPhotoBitmap()
+    var currentPhotoBytes by remember(details.holderName) {
+        mutableStateOf(details.photoBytes ?: CardPhotoStore.getPhoto(details.holderName))
+    }
+    var isLoadingPhoto by remember { mutableStateOf(false) }
+
+    val photoBitmap =
+        remember(currentPhotoBytes) {
+            currentPhotoBytes?.let { bytes ->
+                try {
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+
+    fun requestPhoto(andAction: ((Bitmap, ByteArray) -> Unit)? = null) {
+        val existingBytes = currentPhotoBytes ?: CardPhotoStore.getPhoto(details.holderName)
+        if (existingBytes != null) {
+            currentPhotoBytes = existingBytes
+            val bitmap =
+                photoBitmap ?: try {
+                    BitmapFactory.decodeByteArray(existingBytes, 0, existingBytes.size)
+                } catch (_: Exception) {
+                    null
+                }
+            if (bitmap != null && andAction != null) {
+                andAction(bitmap, existingBytes)
+            }
+            return
+        }
+        if (isLoadingPhoto) return
+        isLoadingPhoto = true
+        onReadPhoto?.invoke { bytes ->
+            isLoadingPhoto = false
+            if (bytes != null && bytes.isNotEmpty()) {
+                CardPhotoStore.savePhoto(bytes, details.holderName, details.documentNumber)
+                currentPhotoBytes = bytes
+                val bitmap =
+                    try {
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    } catch (_: Exception) {
+                        null
+                    }
+                if (bitmap != null && andAction != null) {
+                    andAction(bitmap, bytes)
+                }
+            }
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -103,35 +160,45 @@ internal fun PersonScreen(
                                     width = 1.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant,
                                     shape = RoundedCornerShape(PHOTO_CORNER_RADIUS),
-                                ),
+                                ).clickable(enabled = !isLoadingPhoto) {
+                                    requestPhoto()
+                                },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .size(AVATAR_CONTAINER_SIZE)
-                                        .background(
-                                            color = MaterialTheme.colorScheme.primaryContainer,
-                                            shape = CircleShape,
-                                        ),
-                                contentAlignment = Alignment.Center,
+                        if (isLoadingPhoto) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(36.dp),
+                                strokeWidth = 3.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Person,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(AVATAR_ICON_SIZE),
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(AVATAR_CONTAINER_SIZE)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.primaryContainer,
+                                                shape = CircleShape,
+                                            ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Person,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(AVATAR_ICON_SIZE),
+                                    )
+                                }
+                                Text(
+                                    text = details.fullName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Text(
-                                text = details.fullName,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                     }
                 }
@@ -142,7 +209,13 @@ internal fun PersonScreen(
                 ) {
                     OutlinedButton(
                         onClick = {
-                            copyPhotoToClipboard(context, details, photoBitmap)
+                            if (photoBitmap != null) {
+                                copyPhotoToClipboard(context, details, photoBitmap)
+                            } else {
+                                requestPhoto { bitmap, _ ->
+                                    copyPhotoToClipboard(context, details, bitmap)
+                                }
+                            }
                         },
                         colors = ButtonDefaults.outlinedButtonColors(),
                     ) {
@@ -159,7 +232,13 @@ internal fun PersonScreen(
 
                     OutlinedButton(
                         onClick = {
-                            sharePhoto(context, details, photoBitmap)
+                            if (photoBitmap != null) {
+                                sharePhoto(context, details, photoBitmap)
+                            } else {
+                                requestPhoto { bitmap, _ ->
+                                    sharePhoto(context, details, bitmap)
+                                }
+                            }
                         },
                         colors = ButtonDefaults.outlinedButtonColors(),
                     ) {

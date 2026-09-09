@@ -495,6 +495,28 @@ internal class RappPairingModel(
         pairedDevices = catalog.listPairs()
     }
 
+    fun terminate() {
+        reset()
+        val app = context.applicationContext as? fi.refineid.android.ReFineIdApplication
+        app?.rappProxyDispatcher?.disconnectClient()
+        app?.rappProxyDispatcher?.stopListening()
+        val vault = app?.rappVault ?: AndroidRappVault(context)
+        for (pair in catalog.listPairs()) {
+            try {
+                val pairIdBytes =
+                    pair.pairIdHex
+                        .chunked(2)
+                        .map { it.toInt(16).toByte() }
+                        .toByteArray()
+                vault.revokeDeviceOnly(pairIdBytes, RappClock.wallMs())
+            } catch (_: Exception) {
+            }
+        }
+        catalog.clearAll()
+        pairedDevices = emptyList()
+        activeConnectedPeer = null
+    }
+
     private fun localDeviceDisplayName(): String {
         val deviceName =
             try {

@@ -79,15 +79,16 @@
     <string name="activation_pin">Activation PIN</string>
     <string name="change_basic_pin1">Change Basic PIN 1</string>
     <string name="change_signature_pin2">Change Signature PIN 2</string>
-    <string name="pin_changed_success">PIN changed successfully.</string>
-    <string name="pin_reset_success">PIN reset successfully.</string>
+    <string name="pin_changed_success">%1$s changed</string>
+    <string name="pin_reset_success">%1$s reset</string>
     <string name="card_activated_success">Card activated successfully.</string>
-    <string name="confirm_pin_operation_title">Confirm Operation</string>
-    <string name="confirm_pin_change_message">A wrong current PIN will spend an attempt on the card.</string>
-    <string name="confirm_pin_reset_message">A wrong PUK will spend an attempt on the card. Exhausting the PUK permanently locks the card.</string>
-    <string name="confirm_activation_message">Activate the card with the code from your issuance letter.</string>
+    <string name="confirm_change_title">Confirm %1$s change</string>
+    <string name="confirm_reset_title">Confirm %1$s reset</string>
+    <string name="confirm_activation_title">Confirm card activation</string>
+    <string name="confirm_pin_change_warning" tools:ignore="PluralsCandidate">A wrong current %1$s spends one attempt. %2$d attempts remain.</string>
+    <string name="confirm_pin_reset_warning" tools:ignore="PluralsCandidate">A wrong %1$s spends one attempt. %2$d attempts remain.</string>
     <string name="proceed">Proceed</string>
-    <string name="spent_attempts_notice" tools:ignore="PluralsCandidate">%1$s: %2$d of %3$d attempts left.\nA correct entry restores the full count.</string>
+    <string name="spent_attempts_notice" tools:ignore="PluralsCandidate">%1$s: %2$d of %3$d attempts left.</string>
     <string name="refuse_low_attempts_pin">RefineID will not use a credential with one or two attempts left. Restore it with other software, or unblock it here once the card has blocked it.</string>
     <string name="refuse_low_attempts_puk">RefineID will not use either of the final two PUK attempts.</string>
     <string name="recovery_guidance_pin1">PIN 1 requires recovery\nReset PIN 1 with your PUK.</string>
