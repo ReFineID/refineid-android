@@ -36,6 +36,7 @@ class NativeContactlessOpenReplyTest {
                 CERTIFICATE_INVALID to NativeCertificateReadFailure.INVALID_CERTIFICATE,
                 CERTIFICATE_PACE_REJECTED to NativeCertificateReadFailure.PACE_REJECTED,
                 CERTIFICATE_BRIDGE_ERROR to NativeCertificateReadFailure.BRIDGE_ERROR,
+                CERTIFICATE_ACTIVATION_REQUIRED to NativeCertificateReadFailure.ACTIVATION_REQUIRED,
             )
         expected.forEach { (tag, kind) ->
             assertEquals(
@@ -98,6 +99,7 @@ class NativeContactlessOpenReplyTest {
         const val CERTIFICATE_TRANSPORT_ERROR: Byte = 4
         const val CERTIFICATE_INVALID: Byte = 5
         const val CERTIFICATE_PACE_REJECTED: Byte = 6
+        const val CERTIFICATE_ACTIVATION_REQUIRED: Byte = 7
         const val PREFLIGHT_SUCCEEDED: Byte = 1
         const val PIN_REFERENCE_CITIZEN: Byte = 0
         const val PIN1_STATE_REMAINING: Byte = 1
@@ -108,7 +110,7 @@ class NativeContactlessOpenReplyTest {
         const val PREFLIGHT_LENGTH_OFFSET = 1
         const val WRAPPER_HEADER_LENGTH = 2
         const val SYNTHETIC_RETRY_COUNT: Byte = 3
-        const val UNKNOWN_TAG: Byte = 7
+        const val UNKNOWN_TAG: Byte = 8
         const val TRAILING_GARBAGE: Byte = 0x7F
         const val ZERO_BYTE: Byte = 0
         val SYNTHETIC_DER = byteArrayOf(0x30, 0x00)
