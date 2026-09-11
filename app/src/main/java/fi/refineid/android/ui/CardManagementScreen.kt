@@ -733,16 +733,16 @@ private fun GuidanceBanner(
 
             BannerTone.WARNING -> {
                 Triple(
-                    Color(0xFFFFF3E0),
-                    Color(0xFFE65100),
+                    MaterialTheme.colorScheme.tertiaryContainer,
+                    MaterialTheme.colorScheme.onTertiaryContainer,
                     Icons.Outlined.Warning,
                 )
             }
 
             BannerTone.INFO -> {
                 Triple(
-                    Color(0xFFE3F2FD),
-                    Color(0xFF0D47A1),
+                    MaterialTheme.colorScheme.secondaryContainer,
+                    MaterialTheme.colorScheme.onSecondaryContainer,
                     Icons.Outlined.CheckCircle,
                 )
             }
@@ -846,8 +846,18 @@ private fun OutcomeBanner(
     message: String,
     isError: Boolean,
 ) {
-    val containerColor = if (isError) MaterialTheme.colorScheme.errorContainer else Color(0xFFE8F5E9)
-    val contentColor = if (isError) MaterialTheme.colorScheme.onErrorContainer else Color(0xFF1B5E20)
+    val containerColor =
+        if (isError) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.tertiaryContainer
+        }
+    val contentColor =
+        if (isError) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onTertiaryContainer
+        }
 
     Card(
         modifier = Modifier.fillMaxWidth(),

@@ -536,18 +536,6 @@ private fun HomeScreen(
                     ),
             verticalArrangement = Arrangement.spacedBy(SCREEN_ITEM_SPACING),
         ) {
-            val appTitle =
-                if (BuildConfig.DEBUG) {
-                    "RID - ${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_NUMBER})"
-                } else {
-                    stringResource(R.string.app_name)
-                }
-            Text(
-                text = appTitle,
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-
             if (isActivationRequired) {
                 ActivationBanner(
                     onActivate = onOpenCardManagement,
@@ -957,9 +945,9 @@ private fun NfcCard(
 ) {
     val statusColor =
         when (snapshot.status) {
-            NfcReaderStatus.CARD_RECOGNIZED -> SUCCESS_STATUS_COLOR
+            NfcReaderStatus.CARD_RECOGNIZED -> successStatusColor()
 
-            NfcReaderStatus.CARD_READY -> SUCCESS_STATUS_COLOR
+            NfcReaderStatus.CARD_READY -> successStatusColor()
 
             NfcReaderStatus.CARD_NOT_SUPPORTED -> MaterialTheme.colorScheme.error
 
@@ -967,7 +955,7 @@ private fun NfcCard(
 
             NfcReaderStatus.TRANSPORT_ERROR -> MaterialTheme.colorScheme.error
 
-            NfcReaderStatus.TURNED_OFF -> PERMISSION_STATUS_COLOR
+            NfcReaderStatus.TURNED_OFF -> permissionStatusColor()
 
             NfcReaderStatus.CHECKING -> MaterialTheme.colorScheme.primary
 
@@ -1113,7 +1101,7 @@ private fun NfcPrimedRow(onForgetPrimedCard: () -> Unit) {
     ) {
         Text(
             text = stringResource(R.string.card_primed),
-            color = SUCCESS_STATUS_COLOR,
+            color = successStatusColor(),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(WEIGHT_FILL),
         )
@@ -1239,16 +1227,16 @@ internal val CanInputTransformation =
 @Composable
 private fun readerStatusColor(status: ReaderConnectionStatus): Color =
     when (status) {
-        ReaderConnectionStatus.READY -> SUCCESS_STATUS_COLOR
+        ReaderConnectionStatus.READY -> successStatusColor()
         ReaderConnectionStatus.PERMISSION_REQUEST_FAILED -> MaterialTheme.colorScheme.error
         ReaderConnectionStatus.CARD_ERROR -> MaterialTheme.colorScheme.error
         ReaderConnectionStatus.TRANSPORT_ERROR -> MaterialTheme.colorScheme.error
-        ReaderConnectionStatus.PERMISSION_REQUIRED -> PERMISSION_STATUS_COLOR
+        ReaderConnectionStatus.PERMISSION_REQUIRED -> permissionStatusColor()
         ReaderConnectionStatus.CHECKING -> MaterialTheme.colorScheme.primary
         ReaderConnectionStatus.NOT_CONNECTED -> MaterialTheme.colorScheme.onSurfaceVariant
-        ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED -> PERMISSION_STATUS_COLOR
+        ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED -> permissionStatusColor()
         ReaderConnectionStatus.WRONG_ACCESS_NUMBER -> MaterialTheme.colorScheme.error
-        ReaderConnectionStatus.ACTIVATION_REQUIRED -> SUCCESS_STATUS_COLOR
+        ReaderConnectionStatus.ACTIVATION_REQUIRED -> successStatusColor()
     }
 
 @Composable
@@ -1489,8 +1477,6 @@ private val CARD_CORNER_RADIUS = 22.dp
 private val CARD_ELEVATION = 2.dp
 private val READER_STATUS_ITEM_SPACING = 12.dp
 private val READER_STATUS_INDICATOR_SIZE = 12.dp
-private val SUCCESS_STATUS_COLOR = Color(0xFF168447)
-private val PERMISSION_STATUS_COLOR = Color(0xFFE18400)
 
 private val MinusCircleIcon: ImageVector by lazy {
     ImageVector

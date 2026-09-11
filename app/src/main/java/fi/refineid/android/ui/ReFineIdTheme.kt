@@ -1,7 +1,9 @@
 package fi.refineid.android.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -33,12 +35,34 @@ private val ReFineIdColors =
         error = REFINED_ID_ERROR,
     )
 
+/**
+ * Dark theme is the Android-provided Material baseline, not a second
+ * hand-rolled brand palette: it tracks the platform in both themes.
+ */
+private val ReFineIdDarkColors = darkColorScheme()
+
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
-internal fun ReFineIdTheme(content: @Composable () -> Unit) {
+internal fun ReFineIdTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit,
+) {
     MaterialTheme(
-        colorScheme = ReFineIdColors,
+        colorScheme = if (darkTheme) ReFineIdDarkColors else ReFineIdColors,
         typography = Typography(),
         content = content,
     )
 }
+
+private val SUCCESS_GREEN_DARK = Color(0xFF75D69B)
+private val SUCCESS_GREEN_LIGHT = Color(0xFF168447)
+private val WARNING_AMBER_DARK = Color(0xFFFFB74D)
+private val WARNING_AMBER_LIGHT = Color(0xFFE18400)
+
+/** Status green that stays readable on both light and dark surfaces. */
+@Composable
+internal fun successStatusColor(): Color = if (isSystemInDarkTheme()) SUCCESS_GREEN_DARK else SUCCESS_GREEN_LIGHT
+
+/** Warning amber that stays readable on both light and dark surfaces. */
+@Composable
+internal fun permissionStatusColor(): Color = if (isSystemInDarkTheme()) WARNING_AMBER_DARK else WARNING_AMBER_LIGHT

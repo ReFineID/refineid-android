@@ -11,6 +11,7 @@ import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -41,8 +42,14 @@ import androidx.compose.ui.text.intl.Locale as ComposeLocale
 internal fun ElectronicSignatureStamp(
     modifier: Modifier = Modifier,
     size: Dp = 170.dp,
-    color: Color = STAMP_RED,
+    color: Color = Color.Unspecified,
 ) {
+    val stampColor =
+        if (color == Color.Unspecified) {
+            MaterialTheme.colorScheme.error
+        } else {
+            color
+        }
     val locale = ComposeLocale.current.platformLocale
     val stampTexts = remember(locale) { resolveStampTexts(locale) }
     val density = LocalDensity.current
@@ -50,16 +57,16 @@ internal fun ElectronicSignatureStamp(
     val middleTextSizePx = with(density) { 8.8.sp.toPx() }
 
     val baseBorderPaint =
-        remember(color, baseBorderTextSizePx) {
-            createBorderPaint(color, baseBorderTextSizePx)
+        remember(stampColor, baseBorderTextSizePx) {
+            createBorderPaint(stampColor, baseBorderTextSizePx)
         }
     val middleTextPaint =
-        remember(color, middleTextSizePx) {
-            createMiddlePaint(color, middleTextSizePx)
+        remember(stampColor, middleTextSizePx) {
+            createMiddlePaint(stampColor, middleTextSizePx)
         }
     val starPaint =
-        remember(color, baseBorderTextSizePx) {
-            createStarPaint(color, baseBorderTextSizePx)
+        remember(stampColor, baseBorderTextSizePx) {
+            createStarPaint(stampColor, baseBorderTextSizePx)
         }
 
     Box(
@@ -74,7 +81,7 @@ internal fun ElectronicSignatureStamp(
             val textRadius = (outerRadius + borderInnerRadius) / 2f
             val centerCircleRadius = borderInnerRadius - with(density) { 2.5.dp.toPx() }
 
-            drawStampRings(color, density, center, outerRadius, borderInnerRadius, centerCircleRadius)
+            drawStampRings(stampColor, density, center, outerRadius, borderInnerRadius, centerCircleRadius)
             drawStampBorderArcs(center, textRadius, stampTexts, baseBorderPaint, starPaint, baseBorderTextSizePx)
             drawStampCenterText(center, stampTexts.middleLines, middleTextPaint, middleTextSizePx)
         }
@@ -256,5 +263,3 @@ internal fun resolveStampTexts(locale: Locale): StampTexts {
         }
     }
 }
-
-private val STAMP_RED = Color(0xFFC62828)
