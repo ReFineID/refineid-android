@@ -110,4 +110,9 @@
     <string name="confirm_activation_dialog_msg_single">Olet aktivoimassa puuttuvan tunnusluvun (%1$s). Se tulee voimaan heti. Varmista, että olet kirjoittanut sen muistiin.</string>
     <string name="pin1_section_title">Perustunnusluku (PIN 1)</string>
     <string name="pin2_section_title">Allekirjoitus-PIN (PIN 2)</string>
+    <string name="settings">Asetukset</string>
+    <string name="appearance">Ulkoasu</string>
+    <string name="theme_system">Järjestelmä</string>
+    <string name="theme_light">Vaalea</string>
+    <string name="theme_dark">Tumma</string>
 </resources>

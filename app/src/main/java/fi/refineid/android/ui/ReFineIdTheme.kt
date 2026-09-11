@@ -6,6 +6,8 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 private val REFINED_ID_PRIMARY = Color(0xFF0056A6)
@@ -41,17 +43,22 @@ private val ReFineIdColors =
  */
 private val ReFineIdDarkColors = darkColorScheme()
 
+/** Effective dark flag for status colors, following the in-app override. */
+internal val LocalRefineIdDarkTheme = compositionLocalOf { false }
+
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 @Composable
 internal fun ReFineIdTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) ReFineIdDarkColors else ReFineIdColors,
-        typography = Typography(),
-        content = content,
-    )
+    CompositionLocalProvider(LocalRefineIdDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) ReFineIdDarkColors else ReFineIdColors,
+            typography = Typography(),
+            content = content,
+        )
+    }
 }
 
 private val SUCCESS_GREEN_DARK = Color(0xFF75D69B)
@@ -61,8 +68,10 @@ private val WARNING_AMBER_LIGHT = Color(0xFFE18400)
 
 /** Status green that stays readable on both light and dark surfaces. */
 @Composable
-internal fun successStatusColor(): Color = if (isSystemInDarkTheme()) SUCCESS_GREEN_DARK else SUCCESS_GREEN_LIGHT
+internal fun successStatusColor(): Color =
+    if (LocalRefineIdDarkTheme.current) SUCCESS_GREEN_DARK else SUCCESS_GREEN_LIGHT
 
 /** Warning amber that stays readable on both light and dark surfaces. */
 @Composable
-internal fun permissionStatusColor(): Color = if (isSystemInDarkTheme()) WARNING_AMBER_DARK else WARNING_AMBER_LIGHT
+internal fun permissionStatusColor(): Color =
+    if (LocalRefineIdDarkTheme.current) WARNING_AMBER_DARK else WARNING_AMBER_LIGHT
