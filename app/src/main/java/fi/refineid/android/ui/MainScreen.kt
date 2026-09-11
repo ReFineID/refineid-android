@@ -117,6 +117,7 @@ private enum class MainDestination {
 internal fun MainScreen(
     snapshot: UsbReaderSnapshot,
     onRequestPermission: () -> Unit,
+    onSelectUsbDevice: (Int) -> Unit = {},
     onReaderConnect: (CanSubmission, ((ByteArray?) -> Unit)?) -> Unit = { _, _ -> },
     browserCardService: AuthenticationCardService? = null,
     qualifiedCardService: QualifiedCardService? = null,
@@ -172,11 +173,38 @@ internal fun MainScreen(
             snapshot.cardPresence == CardPresence.PRESENT
     val usbReaderPresent = snapshot.status != ReaderConnectionStatus.NOT_CONNECTED
 
-    val isActivationRequired =
-        snapshot.status == ReaderConnectionStatus.ACTIVATION_REQUIRED ||
-            nfcSnapshot.status == NfcReaderStatus.ACTIVATION_REQUIRED
+    val usbActivationRequired = snapshot.status == ReaderConnectionStatus.ACTIVATION_REQUIRED
+    val nfcActivationRequired = nfcSnapshot.status == NfcReaderStatus.ACTIVATION_REQUIRED
+    val isActivationRequired = usbActivationRequired || nfcActivationRequired
+    val isMultipleUnactivated = usbActivationRequired && nfcActivationRequired
+
+    val unactivatedCardLabel =
+        when {
+            isMultipleUnactivated -> {
+                val usbLabel = snapshot.holderName ?: stringResource(R.string.card_transport_usb)
+                val nfcLabel = nfcSnapshot.holderName ?: stringResource(R.string.card_transport_nfc)
+                "$usbLabel, $nfcLabel"
+            }
+
+            usbActivationRequired -> {
+                snapshot.holderName
+                    ?: snapshot.cardDetails?.documentNumber?.let { "Document $it" }
+                    ?: stringResource(R.string.card_transport_usb)
+            }
+
+            nfcActivationRequired -> {
+                nfcSnapshot.holderName
+                    ?: nfcSnapshot.cardDetails?.documentNumber?.let { "Document $it" }
+                    ?: stringResource(R.string.card_transport_nfc)
+            }
+
+            else -> {
+                null
+            }
+        }
 
     var destination by rememberSaveable { mutableStateOf(MainDestination.HOME) }
+    var activePersonDetails by remember { mutableStateOf<PersonCardDetails?>(null) }
 
     // Signing follows the one-transport rule: a wired reader signs on
     // its open session, while a contactless card is never assumed
@@ -239,6 +267,82 @@ internal fun MainScreen(
             performFullIdentityReset
         }
 
+    val cardItems =
+        buildList {
+            if (snapshot.availableReaders.size > 1) {
+                snapshot.availableReaders.forEach { reader ->
+                    val readerTitle =
+                        reader.holderName
+                            ?: if (reader.cardPresence == CardPresence.PRESENT) {
+                                stringResource(R.string.card_transport_usb)
+                            } else {
+                                reader.name
+                            }
+                    add(
+                        CardIdentityItem(
+                            id = "reader/${reader.deviceId}",
+                            title = readerTitle,
+                            transportLabel = reader.name,
+                            isActivationRequired = reader.isActivationRequired,
+                            isSelected = reader.isSelected,
+                            details = if (reader.isSelected) snapshot.cardDetails else null,
+                            onSelect = { onSelectUsbDevice(reader.deviceId) },
+                        ),
+                    )
+                }
+            } else if (usbCardReady || snapshot.status == ReaderConnectionStatus.ACTIVATION_REQUIRED) {
+                val title = snapshot.holderName ?: stringResource(R.string.card_transport_usb)
+                add(
+                    CardIdentityItem(
+                        id = "reader/active",
+                        title = title,
+                        transportLabel = stringResource(R.string.card_transport_usb),
+                        isActivationRequired = snapshot.status == ReaderConnectionStatus.ACTIVATION_REQUIRED,
+                        isSelected = true,
+                        details = snapshot.cardDetails,
+                    ),
+                )
+            }
+
+            if (nfcSnapshot.holderName != null ||
+                nfcSnapshot.status == NfcReaderStatus.CARD_READY ||
+                nfcSnapshot.status == NfcReaderStatus.ACTIVATION_REQUIRED ||
+                nfcSnapshot.isPrimed
+            ) {
+                val title = nfcSnapshot.holderName ?: stringResource(R.string.card_transport_nfc)
+                add(
+                    CardIdentityItem(
+                        id = "contactless/active",
+                        title = title,
+                        transportLabel = stringResource(R.string.card_transport_nfc),
+                        isActivationRequired = nfcSnapshot.status == NfcReaderStatus.ACTIVATION_REQUIRED,
+                        isSelected = !usbCardReady,
+                        details = nfcSnapshot.cardDetails,
+                        onForget = forgetIdentity,
+                    ),
+                )
+            }
+
+            if (remoteHolderName != null) {
+                add(
+                    CardIdentityItem(
+                        id = "remote/active",
+                        title = remoteHolderName ?: stringResource(R.string.connect_id_card),
+                        transportLabel = stringResource(R.string.connected_to_computer),
+                        isActivationRequired = false,
+                        isSelected = !usbCardReady && nfcSnapshot.holderName == null,
+                        details = remoteDetails,
+                        onForget = forgetIdentity,
+                    ),
+                )
+            }
+        }
+
+    val onOpenPersonForCard: (CardIdentityItem) -> Unit = { card ->
+        activePersonDetails = card.details ?: PersonCardDetails.fromHolderName(card.title)
+        destination = MainDestination.PERSON
+    }
+
     val browserAvailable =
         (usbCardReady || effectiveHolderName != null) && !isActivationRequired
 
@@ -250,6 +354,10 @@ internal fun MainScreen(
                 holderName = effectiveHolderName,
                 hasNfc = hasNfc,
                 isActivationRequired = isActivationRequired,
+                unactivatedCardLabel = unactivatedCardLabel,
+                isMultipleUnactivated = isMultipleUnactivated,
+                cards = cardItems,
+                onOpenPersonForCard = onOpenPersonForCard,
                 onForgetIdentity = forgetIdentity,
                 onWrongPin = performFullIdentityReset,
                 onOpenPerson = { destination = MainDestination.PERSON },
@@ -365,12 +473,16 @@ internal fun MainScreen(
 
         MainDestination.PERSON -> {
             val details =
-                effectiveDetails
+                activePersonDetails
+                    ?: effectiveDetails
                     ?: PersonCardDetails.fromHolderName(effectiveHolderName ?: "")
             SubScreen(
                 title = stringResource(R.string.section_identity),
                 tag = "PersonScreen",
-                onBack = { destination = MainDestination.HOME },
+                onBack = {
+                    activePersonDetails = null
+                    destination = MainDestination.HOME
+                },
             ) {
                 PersonScreen(
                     details = details,
@@ -513,6 +625,10 @@ private fun HomeScreen(
     holderName: String?,
     hasNfc: Boolean = true,
     isActivationRequired: Boolean = false,
+    unactivatedCardLabel: String? = null,
+    isMultipleUnactivated: Boolean = false,
+    cards: List<CardIdentityItem> = emptyList(),
+    onOpenPersonForCard: ((CardIdentityItem) -> Unit)? = null,
     onForgetIdentity: (() -> Unit)?,
     onWrongPin: (() -> Unit)? = null,
     onOpenPerson: () -> Unit,
@@ -557,6 +673,8 @@ private fun HomeScreen(
         ) {
             if (isActivationRequired) {
                 ActivationBanner(
+                    cardLabel = unactivatedCardLabel,
+                    isMultiple = isMultipleUnactivated,
                     onActivate = onOpenCardManagement,
                 )
             }
@@ -630,6 +748,8 @@ private fun HomeScreen(
                 onReadCard = onReadCard,
                 onOpenPairing = onOpenPairing,
                 pinCache = pinCache,
+                cards = cards,
+                onOpenPersonForCard = onOpenPersonForCard,
             )
 
             Section(stringResource(R.string.settings)) {
@@ -699,73 +819,92 @@ private fun IdentitySection(
     onReadCard: (CanSubmission?, Pin1Submission?) -> Unit,
     onOpenPairing: () -> Unit = {},
     pinCache: AuthenticationPinCache? = null,
+    cards: List<CardIdentityItem> = emptyList(),
+    onOpenPersonForCard: ((CardIdentityItem) -> Unit)? = null,
 ) {
     var showsForgetConfirmation by remember { mutableStateOf(false) }
     var showsNfcReadDialog by remember { mutableStateOf(false) }
 
     Section(stringResource(R.string.section_identity)) {
         NavigationGroup {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            val personPageComplete = holderName != null
-                            if (personPageComplete) {
-                                onOpenPerson()
-                            } else if (!hasNfc) {
-                                onOpenPairing()
-                            } else {
-                                showsNfcReadDialog = true
+            if (cards.size > 1) {
+                cards.forEachIndexed { index, card ->
+                    if (index > 0) {
+                        HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
+                    }
+                    CardItemRow(
+                        card = card,
+                        onClick = {
+                            card.onSelect?.invoke()
+                            if (card.details != null || card.title.isNotEmpty()) {
+                                onOpenPersonForCard?.invoke(card) ?: onOpenPerson()
                             }
-                        }.padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING)
-                        .testTag(UiAutomationIds.IDENTITY_ROW),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(ROW_ITEM_SPACING),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(ROW_ICON_SIZE),
-                )
-                Text(
-                    text =
-                        holderName
-                            ?: stringResource(
-                                if (hasNfc) R.string.read_identity_card else R.string.connect_id_card,
-                            ),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color =
-                        if (holderName != null) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
                         },
-                    modifier = Modifier.weight(ROW_LABEL_WEIGHT),
-                )
-                if ((holderName != null || pinCache?.hasPin == true) && onForget != null) {
-                    IconButton(
-                        onClick = { showsForgetConfirmation = true },
-                        modifier =
-                            Modifier
-                                .size(44.dp)
-                                .testTag("forgetCardIdentityButton"),
-                    ) {
+                    )
+                }
+            } else {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val personPageComplete = holderName != null
+                                if (personPageComplete) {
+                                    onOpenPerson()
+                                } else if (!hasNfc) {
+                                    onOpenPairing()
+                                } else {
+                                    showsNfcReadDialog = true
+                                }
+                            }.padding(horizontal = ROW_HORIZONTAL_PADDING, vertical = ROW_VERTICAL_PADDING)
+                            .testTag(UiAutomationIds.IDENTITY_ROW),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(ROW_ITEM_SPACING),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(ROW_ICON_SIZE),
+                    )
+                    Text(
+                        text =
+                            holderName
+                                ?: stringResource(
+                                    if (hasNfc) R.string.read_identity_card else R.string.connect_id_card,
+                                ),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color =
+                            if (holderName != null) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        modifier = Modifier.weight(ROW_LABEL_WEIGHT),
+                    )
+                    if ((holderName != null || pinCache?.hasPin == true) && onForget != null) {
+                        IconButton(
+                            onClick = { showsForgetConfirmation = true },
+                            modifier =
+                                Modifier
+                                    .size(44.dp)
+                                    .testTag("forgetCardIdentityButton"),
+                        ) {
+                            Icon(
+                                imageVector = MinusCircleIcon,
+                                contentDescription = stringResource(R.string.forget_identity),
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    } else {
                         Icon(
-                            imageVector = MinusCircleIcon,
-                            contentDescription = stringResource(R.string.forget_identity),
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(24.dp),
+                            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
-                } else {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
                 }
             }
         }

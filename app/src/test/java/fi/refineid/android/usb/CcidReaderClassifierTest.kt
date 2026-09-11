@@ -50,6 +50,76 @@ class CcidReaderClassifierTest {
         assertEquals(LOWER_DEVICE_ID, selected?.deviceId)
     }
 
+    @Test
+    fun classifiesAllCcidReaders() {
+        val matches =
+            CcidReaderClassifier.classifyAll(
+                listOf(
+                    descriptor(
+                        deviceId = HIGHER_DEVICE_ID,
+                        interfaceClasses = listOf(CCID_INTERFACE_CLASS),
+                    ),
+                    descriptor(
+                        deviceId = SYNTHETIC_DEVICE_ID,
+                        interfaceClasses = listOf(MASS_STORAGE_INTERFACE_CLASS),
+                    ),
+                    descriptor(
+                        deviceId = LOWER_DEVICE_ID,
+                        interfaceClasses = listOf(CCID_INTERFACE_CLASS),
+                    ),
+                ),
+            )
+
+        assertEquals(2, matches.size)
+        assertEquals(listOf(HIGHER_DEVICE_ID, LOWER_DEVICE_ID), matches.map { it.deviceId })
+    }
+
+    @Test
+    fun prefersExplicitDeviceId() {
+        val selected =
+            CcidReaderClassifier.selectPreferred(
+                listOf(
+                    descriptor(
+                        deviceId = LOWER_DEVICE_ID,
+                        interfaceClasses = listOf(CCID_INTERFACE_CLASS),
+                    ),
+                    descriptor(
+                        deviceId = HIGHER_DEVICE_ID,
+                        interfaceClasses = listOf(CCID_INTERFACE_CLASS),
+                    ),
+                ),
+                preferredDeviceId = HIGHER_DEVICE_ID,
+            )
+
+        assertEquals(HIGHER_DEVICE_ID, selected?.deviceId)
+    }
+
+    @Test
+    fun usbReaderInfoReflectsSelectionAndActivation() {
+        val reader =
+            UsbReaderInfo(
+                deviceId = 42,
+                name = "Identiv SCR3500",
+                isSelected = true,
+                cardPresence = CardPresence.PRESENT,
+                isActivationRequired = true,
+                holderName = "MALLI KORTTIHALTIJA",
+            )
+
+        val snapshot =
+            UsbReaderSnapshot(
+                status = ReaderConnectionStatus.ACTIVATION_REQUIRED,
+                cardPresence = CardPresence.PRESENT,
+                holderName = "MALLI KORTTIHALTIJA",
+                availableReaders = listOf(reader),
+            )
+
+        assertEquals(1, snapshot.availableReaders.size)
+        assertEquals("MALLI KORTTIHALTIJA", snapshot.availableReaders.first().holderName)
+        org.junit.Assert.assertTrue(snapshot.availableReaders.first().isActivationRequired)
+        org.junit.Assert.assertTrue(snapshot.availableReaders.first().isSelected)
+    }
+
     private fun descriptor(
         deviceId: Int,
         interfaceClasses: List<Int>,

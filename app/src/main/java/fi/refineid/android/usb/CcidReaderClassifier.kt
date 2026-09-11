@@ -26,8 +26,19 @@ internal object CcidReaderClassifier {
         )
     }
 
-    fun selectPreferred(devices: List<UsbDeviceDescriptor>): CcidReaderMatch? =
-        devices
-            .mapNotNull(::classify)
-            .minByOrNull(CcidReaderMatch::deviceId)
+    fun classifyAll(devices: List<UsbDeviceDescriptor>): List<CcidReaderMatch> = devices.mapNotNull(::classify)
+
+    fun selectPreferred(
+        devices: List<UsbDeviceDescriptor>,
+        preferredDeviceId: Int? = null,
+    ): CcidReaderMatch? {
+        val matches = classifyAll(devices)
+        if (preferredDeviceId != null) {
+            val preferred = matches.firstOrNull { it.deviceId == preferredDeviceId }
+            if (preferred != null) {
+                return preferred
+            }
+        }
+        return matches.minByOrNull(CcidReaderMatch::deviceId)
+    }
 }

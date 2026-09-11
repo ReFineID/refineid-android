@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
                     },
                     snapshot = readerSnapshot,
                     onRequestPermission = readerController::requestPermission,
+                    onSelectUsbDevice = readerController::selectDevice,
                     onReaderConnect = readerController::connect,
                     browserCardService = readerController,
                     qualifiedCardService = readerController.qualifiedCardService,

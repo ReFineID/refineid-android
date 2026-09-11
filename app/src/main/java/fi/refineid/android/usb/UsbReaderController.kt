@@ -69,12 +69,23 @@ internal enum class AuthenticationStatus {
     ERROR,
 }
 
+internal data class UsbReaderInfo(
+    val deviceId: Int,
+    val name: String,
+    val isSelected: Boolean = false,
+    val hasPermission: Boolean = false,
+    val cardPresence: CardPresence? = null,
+    val holderName: String? = null,
+    val isActivationRequired: Boolean = false,
+)
+
 internal data class UsbReaderSnapshot(
     val status: ReaderConnectionStatus = ReaderConnectionStatus.NOT_CONNECTED,
     val cardPresence: CardPresence? = null,
     val authenticationStatus: AuthenticationStatus = AuthenticationStatus.IDLE,
     val holderName: String? = null,
     val cardDetails: PersonCardDetails? = null,
+    val availableReaders: List<UsbReaderInfo> = emptyList(),
 )
 
 @Suppress("TooManyFunctions")
@@ -99,6 +110,7 @@ internal class UsbReaderController(
     @Volatile
     private var isStarted = false
     private var selectedDevice: UsbDevice? = null
+    private var preferredDeviceId: Int? = null
 
     @Volatile
     private var latestSnapshot = UsbReaderSnapshot()
@@ -263,6 +275,15 @@ internal class UsbReaderController(
         AppTrace.usbControllerStopped()
     }
 
+    fun selectDevice(deviceId: Int) {
+        checkMainThread()
+        if (preferredDeviceId == deviceId && selectedDevice?.deviceId == deviceId) {
+            return
+        }
+        preferredDeviceId = deviceId
+        refresh()
+    }
+
     fun refresh() {
         if (!isStarted) {
             AppTrace.usbRefreshIgnored()
@@ -271,8 +292,10 @@ internal class UsbReaderController(
         probeGeneration += 1
         val devices = usbManager.deviceList.values.toList()
         val descriptors = devices.map { device -> device.toDescriptor() }
-        val match = CcidReaderClassifier.selectPreferred(descriptors)
-        selectedDevice = devices.firstOrNull { it.deviceId == match?.deviceId }
+        val allMatches = CcidReaderClassifier.classifyAll(descriptors)
+        val ccidDevices = devices.filter { dev -> allMatches.any { it.deviceId == dev.deviceId } }
+        val match = CcidReaderClassifier.selectPreferred(descriptors, preferredDeviceId)
+        selectedDevice = ccidDevices.firstOrNull { it.deviceId == match?.deviceId }
 
         val device = selectedDevice
         AppTrace.usbReadersRefreshed(
@@ -294,7 +317,7 @@ internal class UsbReaderController(
 
                 else -> {
                     closeActiveSessionAsync()
-                    requestPermission()
+                    requestPermission(device)
                     UsbReaderSnapshot(
                         status = ReaderConnectionStatus.PERMISSION_REQUIRED,
                     )
@@ -303,16 +326,21 @@ internal class UsbReaderController(
         )
     }
 
-    fun requestPermission() {
+    fun requestPermission(targetDevice: UsbDevice? = null) {
         val device =
-            selectedDevice
+            targetDevice
+                ?: selectedDevice
                 ?: run {
                     AppTrace.usbPermissionRequestWithoutReader()
                     return
                 }
         if (usbManager.hasPermission(device)) {
             AppTrace.usbPermissionAlreadyGranted()
-            refresh()
+            if (targetDevice != null && targetDevice.deviceId != selectedDevice?.deviceId) {
+                selectDevice(targetDevice.deviceId)
+            } else {
+                refresh()
+            }
             return
         }
 
@@ -818,22 +846,56 @@ internal class UsbReaderController(
         activeSession = null
     }
 
+    private fun buildCurrentReaderInfos(snapshot: UsbReaderSnapshot): List<UsbReaderInfo> {
+        val devices = usbManager.deviceList.values.toList()
+        val descriptors = devices.map { it.toDescriptor() }
+        val allMatches = CcidReaderClassifier.classifyAll(descriptors)
+        val ccidDevices = devices.filter { dev -> allMatches.any { it.deviceId == dev.deviceId } }
+        return ccidDevices.map { dev ->
+            val isSelected = dev.deviceId == selectedDevice?.deviceId
+            val name =
+                dev.productName?.ifBlank { null }
+                    ?: dev.manufacturerName?.let { "$it Smart Card Reader" }
+                    ?: ("Smart Card Reader (" + dev.deviceId + ")")
+            UsbReaderInfo(
+                deviceId = dev.deviceId,
+                name = name,
+                isSelected = isSelected,
+                hasPermission = usbManager.hasPermission(dev),
+                cardPresence = if (isSelected) snapshot.cardPresence else null,
+                holderName = if (isSelected) snapshot.holderName else null,
+                isActivationRequired =
+                    if (isSelected) {
+                        snapshot.status == ReaderConnectionStatus.ACTIVATION_REQUIRED
+                    } else {
+                        false
+                    },
+            )
+        }
+    }
+
     private fun publish(snapshot: UsbReaderSnapshot) {
-        latestSnapshot = snapshot
+        val enrichedSnapshot =
+            if (snapshot.availableReaders.isEmpty()) {
+                snapshot.copy(availableReaders = buildCurrentReaderInfos(snapshot))
+            } else {
+                snapshot
+            }
+        latestSnapshot = enrichedSnapshot
         AppTrace.usbSnapshotPublished(
-            status = snapshot.status,
-            cardPresence = snapshot.cardPresence,
+            status = enrichedSnapshot.status,
+            cardPresence = enrichedSnapshot.cardPresence,
         )
         mainHandler.removeCallbacks(cardPresencePollRunnable)
         if (
             isStarted &&
             selectedDevice != null &&
-            snapshot.status == ReaderConnectionStatus.READY &&
-            snapshot.cardPresence != CardPresence.PRESENT
+            enrichedSnapshot.status == ReaderConnectionStatus.READY &&
+            enrichedSnapshot.cardPresence != CardPresence.PRESENT
         ) {
             mainHandler.postDelayed(cardPresencePollRunnable, CARD_POLL_INTERVAL_MILLISECONDS)
         }
-        stateListeners.toList().forEach { listener -> listener(snapshot) }
+        stateListeners.toList().forEach { listener -> listener(enrichedSnapshot) }
     }
 
     private companion object {
