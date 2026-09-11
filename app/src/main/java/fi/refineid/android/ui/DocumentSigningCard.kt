@@ -28,7 +28,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -307,7 +306,7 @@ private fun DocumentSigningStatusText(
             modifier = Modifier.testTag(UiAutomationIds.DOCUMENT_SIGNING_STATUS),
             color =
                 if (status == DocumentSigningStatus.SIGNED) {
-                    DOCUMENT_SUCCESS_COLOR
+                    successStatusColor()
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
@@ -320,4 +319,3 @@ private val DOCUMENT_CARD_PADDING = 20.dp
 private val DOCUMENT_ITEM_SPACING = 14.dp
 private val DOCUMENT_CARD_CORNER_RADIUS = 22.dp
 private val DOCUMENT_CARD_ELEVATION = 2.dp
-private val DOCUMENT_SUCCESS_COLOR = Color(0xFF168447)

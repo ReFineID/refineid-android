@@ -12,10 +12,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +36,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,12 +49,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecureTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -61,6 +67,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -79,11 +86,14 @@ import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.PersonCardDetails
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.core.QualifiedCardService
+import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.diagnostics.BuildDiagnostics
+import fi.refineid.android.diagnostics.DiagnosticsCollector
 import fi.refineid.android.nfc.NfcReaderSnapshot
 import fi.refineid.android.nfc.NfcReaderStatus
 import fi.refineid.android.rapp.RappAuthorizationInbox
 import fi.refineid.android.rapp.RappPairingModel
+import fi.refineid.android.settings.ThemePreference
 import fi.refineid.android.settings.TimestampAuthorityRepository
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
@@ -98,6 +108,8 @@ private enum class MainDestination {
     PAIRING,
     PERSON,
     CARD_MANAGEMENT,
+    DIAGNOSTICS,
+    APPEARANCE,
 }
 
 @Suppress("CyclomaticComplexMethod", "FunctionName", "ktlint:standard:function-naming")
@@ -105,7 +117,7 @@ private enum class MainDestination {
 internal fun MainScreen(
     snapshot: UsbReaderSnapshot,
     onRequestPermission: () -> Unit,
-    onReaderConnect: (CanSubmission) -> Unit = {},
+    onReaderConnect: (CanSubmission, ((ByteArray?) -> Unit)?) -> Unit = { _, _ -> },
     browserCardService: AuthenticationCardService? = null,
     qualifiedCardService: QualifiedCardService? = null,
     nfcQualifiedCardService: QualifiedCardService? = null,
@@ -126,16 +138,22 @@ internal fun MainScreen(
     remoteCardModel: fi.refineid.android.rapp.RemoteCardModel? = null,
     onPin1Changed: () -> Unit = {},
     onReadPhoto: (((ByteArray?) -> Unit) -> Unit)? = null,
+    themePreference: ThemePreference = ThemePreference.SYSTEM,
+    onThemePreferenceSelected: (ThemePreference) -> Unit = {},
 ) {
     var showsPhotoReadNfcDialog by remember { mutableStateOf(false) }
     var pendingPhotoConsumer by remember { mutableStateOf<((ByteArray?) -> Unit)?>(null) }
 
     LaunchedEffect(nfcSnapshot.status, pendingPhotoConsumer) {
-        if (nfcSnapshot.status == NfcReaderStatus.CARD_READY && pendingPhotoConsumer != null) {
+        val nfcReady =
+            nfcSnapshot.status == NfcReaderStatus.CARD_READY ||
+                nfcSnapshot.status == NfcReaderStatus.ACTIVATION_REQUIRED
+        if (nfcReady && pendingPhotoConsumer != null && fi.refineid.android.core.CanSessionStore.hasCan) {
+            val consumer = pendingPhotoConsumer
+            pendingPhotoConsumer = null
+            showsPhotoReadNfcDialog = false
             onReadPhoto?.invoke { bytes ->
-                pendingPhotoConsumer?.invoke(bytes)
-                pendingPhotoConsumer = null
-                showsPhotoReadNfcDialog = false
+                consumer?.invoke(bytes)
             }
         }
     }
@@ -160,12 +178,6 @@ internal fun MainScreen(
 
     var destination by rememberSaveable { mutableStateOf(MainDestination.HOME) }
 
-    LaunchedEffect(isActivationRequired) {
-        if (isActivationRequired) {
-            destination = MainDestination.CARD_MANAGEMENT
-        }
-    }
-
     // Signing follows the one-transport rule: a wired reader signs on
     // its open session, while a contactless card is never assumed
     // present — the holder taps it when prompted.
@@ -174,7 +186,8 @@ internal fun MainScreen(
             nfcSnapshot.status != NfcReaderStatus.NOT_AVAILABLE &&
             nfcSnapshot.status != NfcReaderStatus.TURNED_OFF
     val remoteSigningAvailable = !hasNfc && remoteHolderName != null
-    val signingAvailable = usbCardReady || nfcSigningAvailable || remoteSigningAvailable
+    val signingAvailable =
+        (usbCardReady || nfcSigningAvailable || remoteSigningAvailable) && !isActivationRequired
 
     rappInbox?.currentRequest?.let { req ->
         RappAuthorizationDialog(request = req)
@@ -226,15 +239,22 @@ internal fun MainScreen(
             performFullIdentityReset
         }
 
+    val browserAvailable =
+        (usbCardReady || effectiveHolderName != null) && !isActivationRequired
+
     when (destination) {
         MainDestination.HOME -> {
             HomeScreen(
                 signingAvailable = signingAvailable,
+                browserAvailable = browserAvailable,
                 holderName = effectiveHolderName,
                 hasNfc = hasNfc,
+                isActivationRequired = isActivationRequired,
                 onForgetIdentity = forgetIdentity,
                 onWrongPin = performFullIdentityReset,
                 onOpenPerson = { destination = MainDestination.PERSON },
+                onOpenDiagnostics = { destination = MainDestination.DIAGNOSTICS },
+                onOpenAppearance = { destination = MainDestination.APPEARANCE },
                 browserCardService =
                     if (usbCardReady) {
                         browserCardService
@@ -259,7 +279,7 @@ internal fun MainScreen(
                 onReadCard = { can, pin1 ->
                     if (snapshot.cardPresence == CardPresence.PRESENT && can != null) {
                         pin1?.close()
-                        onReaderConnect(can)
+                        onReaderConnect(can, null)
                     } else {
                         onNfcConnect(can, pin1)
                     }
@@ -354,8 +374,10 @@ internal fun MainScreen(
             ) {
                 PersonScreen(
                     details = details,
+                    activationRequired = isActivationRequired,
+                    onActivate = { destination = MainDestination.CARD_MANAGEMENT },
                     onReadPhoto = { onLoaded ->
-                        if (usbCardReady || nfcSnapshot.status == NfcReaderStatus.CARD_READY) {
+                        if (fi.refineid.android.core.CanSessionStore.hasCan) {
                             onReadPhoto?.invoke(onLoaded)
                         } else {
                             pendingPhotoConsumer = onLoaded
@@ -367,8 +389,13 @@ internal fun MainScreen(
         }
 
         MainDestination.CARD_MANAGEMENT -> {
+            var detectedNeedsActivation by remember { mutableStateOf(false) }
+            val effectiveActivationRequired = isActivationRequired || detectedNeedsActivation
             SubScreen(
-                title = stringResource(R.string.card_pins),
+                title =
+                    stringResource(
+                        if (effectiveActivationRequired) R.string.card_activation else R.string.card_pins,
+                    ),
                 tag = "CardManagementScreen",
                 onBack = { destination = MainDestination.HOME },
             ) {
@@ -384,12 +411,55 @@ internal fun MainScreen(
                     },
                     isCardReady =
                         usbCardReady || nfcSnapshot.status == NfcReaderStatus.CARD_READY || isActivationRequired,
-                    activationRequired = isActivationRequired,
+                    activationRequired = effectiveActivationRequired,
                     pinCache = pinCache,
                     onPin1Changed = onPin1Changed,
                     onActivationSucceeded = {
+                        detectedNeedsActivation = false
                         destination = MainDestination.HOME
                     },
+                    onNeedsActivationChanged = { needs ->
+                        detectedNeedsActivation = needs
+                    },
+                )
+            }
+        }
+
+        MainDestination.DIAGNOSTICS -> {
+            var refreshKey by remember { mutableIntStateOf(0) }
+            val context = LocalContext.current
+            val diagSnapshot =
+                remember(refreshKey, nfcSnapshot, snapshot, effectiveHolderName, effectiveDetails) {
+                    DiagnosticsCollector.collect(
+                        context = context,
+                        nfcReaderStatus = nfcSnapshot.status,
+                        usbReaderStatus = snapshot.status,
+                        holderName = effectiveHolderName,
+                        cardDetails = effectiveDetails,
+                    )
+                }
+            SubScreen(
+                title = stringResource(R.string.diagnostics),
+                tag = UiAutomationIds.DIAGNOSTICS_SCREEN,
+                onBack = { destination = MainDestination.HOME },
+            ) {
+                DiagnosticsScreen(
+                    snapshot = diagSnapshot,
+                    onRefresh = { refreshKey++ },
+                    onClearLogs = { AppTrace.clearTraceLog() },
+                )
+            }
+        }
+
+        MainDestination.APPEARANCE -> {
+            SubScreen(
+                title = stringResource(R.string.appearance),
+                tag = UiAutomationIds.APPEARANCE_SCREEN,
+                onBack = { destination = MainDestination.HOME },
+            ) {
+                AppearanceScreen(
+                    selected = themePreference,
+                    onSelected = onThemePreferenceSelected,
                 )
             }
         }
@@ -402,9 +472,30 @@ internal fun MainScreen(
                 pendingPhotoConsumer?.invoke(null)
                 pendingPhotoConsumer = null
             },
-            onConnect = { can, pin1 ->
-                onNfcConnect(can, pin1)
+            onConnect = { can, _ ->
+                val canDigits = can?.peekDigits()
+                if (canDigits != null) {
+                    fi.refineid.android.core.CanSessionStore
+                        .remember(canDigits)
+                }
+                val consumer = pendingPhotoConsumer
+                pendingPhotoConsumer = null
+                showsPhotoReadNfcDialog = false
+                if (can != null) {
+                    if (snapshot.cardPresence == CardPresence.PRESENT) {
+                        onReaderConnect(can) { bytes ->
+                            consumer?.invoke(bytes)
+                        }
+                    } else {
+                        onNfcConnect(can, null)
+                        if (consumer != null) {
+                            pendingPhotoConsumer = consumer
+                        }
+                    }
+                }
             },
+            canOnly = true,
+            isActivationRequired = isActivationRequired,
         )
     }
 }
@@ -418,11 +509,15 @@ internal fun MainScreen(
 @Composable
 private fun HomeScreen(
     signingAvailable: Boolean,
+    browserAvailable: Boolean = false,
     holderName: String?,
     hasNfc: Boolean = true,
+    isActivationRequired: Boolean = false,
     onForgetIdentity: (() -> Unit)?,
     onWrongPin: (() -> Unit)? = null,
     onOpenPerson: () -> Unit,
+    onOpenDiagnostics: () -> Unit = {},
+    onOpenAppearance: () -> Unit = {},
     browserCardService: AuthenticationCardService?,
     pinCache: AuthenticationPinCache?,
     nfcStatus: NfcReaderStatus?,
@@ -440,6 +535,13 @@ private fun HomeScreen(
             Modifier
                 .semantics { testTagsAsResourceId = true }
                 .testTag(UiAutomationIds.MAIN_SCREEN),
+        bottomBar = {
+            if (BuildDiagnostics.DIAGNOSTICS_VIEW_ENABLED) {
+                DiagnosticsFooter(
+                    onOpenDiagnostics = onOpenDiagnostics,
+                )
+            }
+        },
     ) { contentPadding ->
         Column(
             modifier =
@@ -453,17 +555,11 @@ private fun HomeScreen(
                     ),
             verticalArrangement = Arrangement.spacedBy(SCREEN_ITEM_SPACING),
         ) {
-            val appTitle =
-                if (BuildConfig.DEBUG) {
-                    "RID - ${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_NUMBER})"
-                } else {
-                    stringResource(R.string.app_name)
-                }
-            Text(
-                text = appTitle,
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
+            if (isActivationRequired) {
+                ActivationBanner(
+                    onActivate = onOpenCardManagement,
+                )
+            }
 
             Section(stringResource(R.string.section_document)) {
                 NavigationGroup {
@@ -473,55 +569,62 @@ private fun HomeScreen(
                         tag = UiAutomationIds.VERIFY_ROW,
                         onClick = onOpenVerify,
                     )
-                    HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
-                    NavigationRow(
-                        icon = Icons.Outlined.Create,
-                        label = stringResource(R.string.sign),
-                        tag = UiAutomationIds.SIGN_ROW,
-                        enabled = signingAvailable,
-                        onClick = onOpenSign,
-                    )
+                    if (!isActivationRequired) {
+                        HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
+                        NavigationRow(
+                            icon = Icons.Outlined.Create,
+                            label = stringResource(R.string.sign),
+                            tag = UiAutomationIds.SIGN_ROW,
+                            enabled = signingAvailable,
+                            onClick = onOpenSign,
+                        )
+                    }
                 }
             }
 
-            Section(stringResource(R.string.card)) {
-                NavigationGroup {
-                    BrowserHarness(
-                        cardService = browserCardService,
-                        pinCache = pinCache,
-                        nfcStatus = nfcStatus,
-                        nfcPrimed = nfcPrimed,
-                        onNfcConnect = { can, pin1 -> onNfcConnect(can, pin1) },
-                        onWrongPin = onWrongPin,
-                        launcher = { onOpen ->
-                            NavigationRow(
-                                icon = painterResource(R.drawable.ic_globe),
-                                label = stringResource(R.string.browser),
-                                tag = UiAutomationIds.BROWSER_ACTION,
-                                onClick = onOpen,
-                            )
-                        },
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
-                    NavigationRow(
-                        icon = Icons.Outlined.Share,
-                        label = stringResource(R.string.pair_computer),
-                        tag = "RappPairingRow",
-                        onClick = onOpenPairing,
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
-                    NavigationRow(
-                        icon = Icons.Outlined.Lock,
-                        label = stringResource(R.string.card_pins),
-                        tag = "manageCard",
-                        onClick = onOpenCardManagement,
-                    )
+            if (!isActivationRequired) {
+                Section(stringResource(R.string.card)) {
+                    NavigationGroup {
+                        BrowserHarness(
+                            cardService = browserCardService,
+                            pinCache = pinCache,
+                            nfcStatus = nfcStatus,
+                            nfcPrimed = nfcPrimed,
+                            enabled = browserAvailable,
+                            onNfcConnect = { can, pin1 -> onNfcConnect(can, pin1) },
+                            onWrongPin = onWrongPin,
+                            launcher = { onOpen ->
+                                NavigationRow(
+                                    icon = painterResource(R.drawable.ic_globe),
+                                    label = stringResource(R.string.browser),
+                                    tag = UiAutomationIds.BROWSER_ACTION,
+                                    enabled = browserAvailable,
+                                    onClick = onOpen,
+                                )
+                            },
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
+                        NavigationRow(
+                            icon = Icons.Outlined.Share,
+                            label = stringResource(R.string.pair_computer),
+                            tag = "RappPairingRow",
+                            onClick = onOpenPairing,
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
+                        NavigationRow(
+                            icon = Icons.Outlined.Lock,
+                            label = stringResource(R.string.card_pins),
+                            tag = "manageCard",
+                            onClick = onOpenCardManagement,
+                        )
+                    }
                 }
             }
 
             IdentitySection(
                 holderName = holderName,
                 hasNfc = hasNfc,
+                isActivationRequired = isActivationRequired,
                 onForget = onForgetIdentity,
                 onOpenPerson = onOpenPerson,
                 onReadCard = onReadCard,
@@ -529,9 +632,58 @@ private fun HomeScreen(
                 pinCache = pinCache,
             )
 
+            Section(stringResource(R.string.settings)) {
+                NavigationGroup {
+                    NavigationRow(
+                        icon = Icons.Outlined.Settings,
+                        label = stringResource(R.string.appearance),
+                        tag = UiAutomationIds.APPEARANCE_ROW,
+                        onClick = onOpenAppearance,
+                    )
+                }
+            }
+
             if (BuildDiagnostics.TIMESTAMP_SETTINGS_ENABLED) {
                 TimestampSettingsRow(timestampAuthorityRepository)
             }
+        }
+    }
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun DiagnosticsFooter(onOpenDiagnostics: () -> Unit) {
+    Surface(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenDiagnostics)
+                .testTag(UiAutomationIds.DIAGNOSTICS_BUTTON),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(vertical = 12.dp, horizontal = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_stethoscope),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            val diagnosticsLabel = stringResource(R.string.diagnostics)
+            Text(
+                text = "$diagnosticsLabel - ${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_NUMBER})",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -541,6 +693,7 @@ private fun HomeScreen(
 private fun IdentitySection(
     holderName: String?,
     hasNfc: Boolean = true,
+    isActivationRequired: Boolean = false,
     onForget: (() -> Unit)?,
     onOpenPerson: () -> Unit,
     onReadCard: (CanSubmission?, Pin1Submission?) -> Unit,
@@ -653,6 +806,7 @@ private fun IdentitySection(
             onConnect = { can, pin1 ->
                 onReadCard(can, pin1)
             },
+            isActivationRequired = isActivationRequired,
         )
     }
 }
@@ -662,11 +816,31 @@ private fun IdentitySection(
 private fun ReadCardNfcDialog(
     onDismiss: () -> Unit,
     onConnect: (CanSubmission?, Pin1Submission?) -> Unit,
+    canOnly: Boolean = false,
+    isActivationRequired: Boolean = false,
 ) {
     val initialCan = remember { fi.refineid.android.core.CanSessionStore.currentCan ?: "" }
     val canState = remember { TextFieldState(initialCan) }
     val pinState = remember { TextFieldState() }
-    val canReady = CanSubmission.isComplete(canState.text)
+
+    var remainingCooldown by remember {
+        mutableIntStateOf(
+            fi.refineid.android.core.CanSessionStore
+                .remainingCooldownSeconds(canState.text),
+        )
+    }
+    LaunchedEffect(canState.text) {
+        while (true) {
+            remainingCooldown =
+                fi.refineid.android.core.CanSessionStore
+                    .remainingCooldownSeconds(canState.text)
+            if (remainingCooldown <= 0) break
+            delay(1000L)
+        }
+    }
+
+    val isCanBlocked = remainingCooldown > 0
+    val canReady = CanSubmission.isComplete(canState.text) && !isCanBlocked
 
     val submit = {
         if (canReady) {
@@ -674,7 +848,7 @@ private fun ReadCardNfcDialog(
                 .remember(canState.text)
             val can = CanSubmission.from(canState.text)
             val pin1 =
-                if (Pin1Submission.isComplete(pinState.text)) {
+                if (!canOnly && !isActivationRequired && Pin1Submission.isComplete(pinState.text)) {
                     Pin1Submission.from(pinState.text)
                 } else {
                     null
@@ -712,26 +886,42 @@ private fun ReadCardNfcDialog(
                         KeyboardOptions(
                             autoCorrectEnabled = false,
                             keyboardType = KeyboardType.NumberPassword,
-                            imeAction = ImeAction.Next,
+                            imeAction = if (canOnly || isActivationRequired) ImeAction.Done else ImeAction.Next,
                         ),
+                    isError = isCanBlocked,
+                    supportingText = {
+                        if (isCanBlocked) {
+                            Text(
+                                text = stringResource(R.string.can_rejected_cooldown, remainingCooldown),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
+                    onKeyboardAction = {
+                        if (canOnly || isActivationRequired) {
+                            submit()
+                        }
+                    },
                 )
-                SecureTextField(
-                    state = pinState,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .testTag(UiAutomationIds.NFC_PIN1_FIELD),
-                    label = { Text(stringResource(R.string.pin1_optional)) },
-                    inputTransformation = Pin1InputTransformation,
-                    textObfuscationMode = TextObfuscationMode.Hidden,
-                    keyboardOptions =
-                        KeyboardOptions(
-                            autoCorrectEnabled = false,
-                            keyboardType = KeyboardType.NumberPassword,
-                            imeAction = ImeAction.Done,
-                        ),
-                    onKeyboardAction = { submit() },
-                )
+                if (!canOnly && !isActivationRequired) {
+                    SecureTextField(
+                        state = pinState,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .testTag(UiAutomationIds.NFC_PIN1_FIELD),
+                        label = { Text(stringResource(R.string.pin1_optional)) },
+                        inputTransformation = Pin1InputTransformation,
+                        textObfuscationMode = TextObfuscationMode.Hidden,
+                        keyboardOptions =
+                            KeyboardOptions(
+                                autoCorrectEnabled = false,
+                                keyboardType = KeyboardType.NumberPassword,
+                                imeAction = ImeAction.Done,
+                            ),
+                        onKeyboardAction = { submit() },
+                    )
+                }
             }
         },
         confirmButton = {
@@ -785,9 +975,9 @@ private fun NfcCard(
 ) {
     val statusColor =
         when (snapshot.status) {
-            NfcReaderStatus.CARD_RECOGNIZED -> SUCCESS_STATUS_COLOR
+            NfcReaderStatus.CARD_RECOGNIZED -> successStatusColor()
 
-            NfcReaderStatus.CARD_READY -> SUCCESS_STATUS_COLOR
+            NfcReaderStatus.CARD_READY -> successStatusColor()
 
             NfcReaderStatus.CARD_NOT_SUPPORTED -> MaterialTheme.colorScheme.error
 
@@ -795,7 +985,7 @@ private fun NfcCard(
 
             NfcReaderStatus.TRANSPORT_ERROR -> MaterialTheme.colorScheme.error
 
-            NfcReaderStatus.TURNED_OFF -> PERMISSION_STATUS_COLOR
+            NfcReaderStatus.TURNED_OFF -> permissionStatusColor()
 
             NfcReaderStatus.CHECKING -> MaterialTheme.colorScheme.primary
 
@@ -941,7 +1131,7 @@ private fun NfcPrimedRow(onForgetPrimedCard: () -> Unit) {
     ) {
         Text(
             text = stringResource(R.string.card_primed),
-            color = SUCCESS_STATUS_COLOR,
+            color = successStatusColor(),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(WEIGHT_FILL),
         )
@@ -1067,16 +1257,16 @@ internal val CanInputTransformation =
 @Composable
 private fun readerStatusColor(status: ReaderConnectionStatus): Color =
     when (status) {
-        ReaderConnectionStatus.READY -> SUCCESS_STATUS_COLOR
+        ReaderConnectionStatus.READY -> successStatusColor()
         ReaderConnectionStatus.PERMISSION_REQUEST_FAILED -> MaterialTheme.colorScheme.error
         ReaderConnectionStatus.CARD_ERROR -> MaterialTheme.colorScheme.error
         ReaderConnectionStatus.TRANSPORT_ERROR -> MaterialTheme.colorScheme.error
-        ReaderConnectionStatus.PERMISSION_REQUIRED -> PERMISSION_STATUS_COLOR
+        ReaderConnectionStatus.PERMISSION_REQUIRED -> permissionStatusColor()
         ReaderConnectionStatus.CHECKING -> MaterialTheme.colorScheme.primary
         ReaderConnectionStatus.NOT_CONNECTED -> MaterialTheme.colorScheme.onSurfaceVariant
-        ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED -> PERMISSION_STATUS_COLOR
+        ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED -> permissionStatusColor()
         ReaderConnectionStatus.WRONG_ACCESS_NUMBER -> MaterialTheme.colorScheme.error
-        ReaderConnectionStatus.ACTIVATION_REQUIRED -> SUCCESS_STATUS_COLOR
+        ReaderConnectionStatus.ACTIVATION_REQUIRED -> successStatusColor()
     }
 
 @Composable
@@ -1239,7 +1429,26 @@ private fun ReaderCard(
 private fun ReaderCanEntry(onConnect: (CanSubmission) -> Unit) {
     val initialCan = remember { fi.refineid.android.core.CanSessionStore.currentCan ?: "" }
     val canState = remember { TextFieldState(initialCan) }
-    val canReady = CanSubmission.isComplete(canState.text)
+
+    var remainingCooldown by remember {
+        mutableIntStateOf(
+            fi.refineid.android.core.CanSessionStore
+                .remainingCooldownSeconds(canState.text),
+        )
+    }
+    LaunchedEffect(canState.text) {
+        while (true) {
+            remainingCooldown =
+                fi.refineid.android.core.CanSessionStore
+                    .remainingCooldownSeconds(canState.text)
+            if (remainingCooldown <= 0) break
+            delay(1000L)
+        }
+    }
+
+    val isCanBlocked = remainingCooldown > 0
+    val canReady = CanSubmission.isComplete(canState.text) && !isCanBlocked
+
     val submit = {
         if (canReady) {
             fi.refineid.android.core.CanSessionStore
@@ -1264,6 +1473,15 @@ private fun ReaderCanEntry(onConnect: (CanSubmission) -> Unit) {
                 keyboardType = KeyboardType.NumberPassword,
                 imeAction = ImeAction.Done,
             ),
+        isError = isCanBlocked,
+        supportingText = {
+            if (isCanBlocked) {
+                Text(
+                    text = stringResource(R.string.can_rejected_cooldown, remainingCooldown),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
         onKeyboardAction = { submit() },
     )
     Button(
@@ -1289,8 +1507,6 @@ private val CARD_CORNER_RADIUS = 22.dp
 private val CARD_ELEVATION = 2.dp
 private val READER_STATUS_ITEM_SPACING = 12.dp
 private val READER_STATUS_INDICATOR_SIZE = 12.dp
-private val SUCCESS_STATUS_COLOR = Color(0xFF168447)
-private val PERMISSION_STATUS_COLOR = Color(0xFFE18400)
 
 private val MinusCircleIcon: ImageVector by lazy {
     ImageVector

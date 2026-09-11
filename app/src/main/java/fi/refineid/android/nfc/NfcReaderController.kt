@@ -108,8 +108,13 @@ internal class NfcReaderController(
             currentGeneration = { probeGeneration },
             activeSession = { activeSession },
             onCardLost = { generation ->
+                val sessionWasActive = activeSession != null
                 closeActiveSession()
-                publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+                publishAsync(
+                    generation,
+                    NfcReaderStatus.WAITING_FOR_CARD,
+                    awaitingCard = sessionWasActive,
+                )
             },
         )
 
@@ -144,8 +149,13 @@ internal class NfcReaderController(
             activeProviderGeneration = { activeProviderGeneration },
             onCardLost = {
                 val generation = probeGeneration
+                val sessionWasActive = activeSession != null
                 closeActiveSession()
-                publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+                publishAsync(
+                    generation,
+                    NfcReaderStatus.WAITING_FOR_CARD,
+                    awaitingCard = sessionWasActive,
+                )
             },
         )
 
@@ -279,7 +289,14 @@ internal class NfcReaderController(
             pin1?.copyBytes()?.let(pinCache::recordVerified)
             pin1?.close()
             refreshReaderMode()
-            publish(NfcReaderSnapshot(status = NfcReaderStatus.WAITING_FOR_CARD))
+            // The holder asked to connect with no tag in the field:
+            // prompt for the card instead of waiting silently.
+            publish(
+                NfcReaderSnapshot(
+                    status = NfcReaderStatus.WAITING_FOR_CARD,
+                    awaitingCard = true,
+                ),
+            )
             return
         }
         publish(NfcReaderSnapshot(status = NfcReaderStatus.CONNECTING))
@@ -291,7 +308,7 @@ internal class NfcReaderController(
                 val canBytes = inMemoryCanBytes ?: primedCanStore.read()
                 if (canBytes == null) {
                     pin1?.close()
-                    publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+                    publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD, awaitingCard = true)
                     return@execute
                 }
                 val mint = can != null
@@ -427,6 +444,14 @@ internal class NfcReaderController(
         session.adopt(isoDep)
     }
 
+    /**
+     * Whether any holder intent is waiting on the card: a remembered
+     * access number or a primed card means presenting the tag advances
+     * a real operation, so losing it deserves a prompt. Pure idle
+     * listening has neither and stays silent.
+     */
+    private fun wantsCard(): Boolean = CanSessionStore.hasCan || primedCardStored
+
     /** Worker-thread confined; owns the ISO-DEP connection. */
     private fun probe(
         isoDep: IsoDep,
@@ -443,15 +468,15 @@ internal class NfcReaderController(
             isoDep.timeout = TRANSCEIVE_TIMEOUT_MILLISECONDS
         } catch (_: IOException) {
             AppTrace.nfcSessionOpenFailed()
-            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD, awaitingCard = wantsCard())
             return
         } catch (_: SecurityException) {
             AppTrace.nfcSessionOpenFailed()
-            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD, awaitingCard = wantsCard())
             return
         } catch (_: IllegalStateException) {
             AppTrace.nfcSessionOpenFailed()
-            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD, awaitingCard = wantsCard())
             return
         }
         val result =
@@ -492,7 +517,7 @@ internal class NfcReaderController(
         if (isoDep == null || generation != probeGeneration) {
             canBytes.fill(0)
             pin1?.close()
-            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD)
+            publishAsync(generation, NfcReaderStatus.WAITING_FOR_CARD, awaitingCard = true)
             return
         }
         try {
@@ -530,6 +555,11 @@ internal class NfcReaderController(
                     NfcReaderStatus.CARD_READY
                 }
 
+                is NativeContactlessOpenResult.ActivationRequired -> {
+                    material.cacheAuthenticationCertificate(opened.certificate)
+                    NfcReaderStatus.ACTIVATION_REQUIRED
+                }
+
                 is NativeContactlessOpenResult.Failure -> {
                     opened.kind.toConnectStatus()
                 }
@@ -565,6 +595,7 @@ internal class NfcReaderController(
             return
         } else if (status == NfcReaderStatus.ACTIVATION_REQUIRED && generation == probeGeneration) {
             CanSessionStore.remember(String(canBytes, Charsets.US_ASCII))
+            val (cardDetails, holderName) = extractCardDetails(opened)
             pin1?.close()
             primedCanStore.clear()
             primedCardStored = false
@@ -577,13 +608,14 @@ internal class NfcReaderController(
                 )
             activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
             feedback.onCardSuccess()
-            publishAsync(generation, status)
+            publishAsync(generation, status, holderName = holderName, cardDetails = cardDetails)
             return
         } else {
             pin1?.close()
             if (status == NfcReaderStatus.WRONG_CAN) {
                 // The access number no longer opens this card.
-                CanSessionStore.drop()
+                val rejected = String(canBytes, Charsets.US_ASCII)
+                CanSessionStore.recordRejected(rejected)
                 primedCanStore.clear()
                 primedCardStored = false
                 feedback.onCardError()
@@ -603,24 +635,31 @@ internal class NfcReaderController(
             }
             AppTrace.nfcSessionClosed()
         }
-        publishAsync(generation, status)
+        // A connect that ends back at idle still holds its access
+        // number, so a lost card re-prompts instead of going silent.
+        publishAsync(
+            generation,
+            status,
+            awaitingCard = status == NfcReaderStatus.WAITING_FOR_CARD,
+        )
     }
 
     private fun extractCardDetails(opened: NativeContactlessOpenResult): Pair<PersonCardDetails?, String?> {
-        val holderNameFromCert =
-            if (opened is NativeContactlessOpenResult.Success) {
-                CertificateHolderName.fromCertificate(opened.certificate)
-            } else {
-                null
+        val certificate =
+            when (opened) {
+                is NativeContactlessOpenResult.Success -> opened.certificate
+                is NativeContactlessOpenResult.ActivationRequired -> opened.certificate
+                is NativeContactlessOpenResult.Failure -> null
             }
+        val holderNameFromCert = certificate?.let(CertificateHolderName::fromCertificate)
         val photoBytes = CardPhotoStore.getPhoto(holderNameFromCert) ?: NativeCore.readCardFacePhoto()
         val documentNumber = NativeCore.readCardDocumentNumber()
         val tamperProofVerified = NativeVerification.readCardVerificationPassed()
         val cardDetails: PersonCardDetails? =
-            if (opened is NativeContactlessOpenResult.Success) {
+            certificate?.let { cert ->
                 try {
                     PersonCardDetails.fromDer(
-                        opened.certificate.copyDer(),
+                        cert.copyDer(),
                         photoBytes = photoBytes,
                         documentNumber = documentNumber,
                         tamperProofVerified = tamperProofVerified,
@@ -628,8 +667,6 @@ internal class NfcReaderController(
                 } catch (_: Exception) {
                     null
                 }
-            } else {
-                null
             }
         val holderName = cardDetails?.holderName ?: holderNameFromCert
         if (photoBytes != null && photoBytes.isNotEmpty() && holderName != null) {
@@ -664,7 +701,7 @@ internal class NfcReaderController(
             return
         }
         val resting = latestIsoDep
-        val canBytes = primedCanStore.read()
+        val canBytes = CanSessionStore.canBytes() ?: primedCanStore.read()
         if (resting != null && canBytes != null) {
             probeExecutor.execute {
                 val photo =
@@ -734,12 +771,24 @@ internal class NfcReaderController(
         }
     }
 
+    /**
+     * Dismiss the present-card prompt without forgetting anything: the
+     * reader keeps listening and the stored access number stays.
+     */
+    fun cancelAwaitingCard() {
+        checkMainThread()
+        if (latestSnapshot.awaitingCard) {
+            publish(latestSnapshot.copy(awaitingCard = false))
+        }
+    }
+
     private fun publishAsync(
         generation: Int,
         status: NfcReaderStatus,
         isPrimedOpening: Boolean = false,
         holderName: String? = null,
         cardDetails: PersonCardDetails? = null,
+        awaitingCard: Boolean = false,
     ) {
         mainHandler.post {
             if (generation == probeGeneration) {
@@ -750,6 +799,7 @@ internal class NfcReaderController(
                         isPrimedOpening = isPrimedOpening,
                         holderName = holderName,
                         cardDetails = cardDetails,
+                        awaitingCard = awaitingCard,
                     ),
                 )
             } else {
@@ -763,6 +813,9 @@ internal class NfcReaderController(
         val details = snapshot.cardDetails ?: holder?.let { PersonCardDetails.fromHolderName(it) }
         latestSnapshot = snapshot.copy(isPrimed = primedCardStored, holderName = holder, cardDetails = details)
         AppTrace.nfcSnapshotPublished(latestSnapshot.status)
+        if (latestSnapshot.awaitingCard) {
+            AppTrace.nfcAwaitingCard()
+        }
         stateListeners.toList().forEach { listener -> listener(latestSnapshot) }
     }
 

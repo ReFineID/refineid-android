@@ -81,6 +81,7 @@ internal fun BrowserHarness(
     pinCache: fi.refineid.android.core.AuthenticationPinCache? = null,
     nfcStatus: NfcReaderStatus? = null,
     nfcPrimed: Boolean = false,
+    enabled: Boolean = true,
     onNfcConnect: (CanSubmission?, Pin1Submission) -> Unit = { _, _ -> },
     onWrongPin: (() -> Unit)? = null,
     launcher: (@Composable (onOpen: () -> Unit) -> Unit)? = null,
@@ -90,14 +91,17 @@ internal fun BrowserHarness(
     }
     var isOpen by remember { mutableStateOf(false) }
     val open = {
-        AppTrace.browserOpened()
-        isOpen = true
+        if (enabled) {
+            AppTrace.browserOpened()
+            isOpen = true
+        }
     }
     if (launcher != null) {
         launcher(open)
     } else {
         Button(
             onClick = open,
+            enabled = enabled,
             modifier =
                 Modifier
                     .fillMaxWidth()

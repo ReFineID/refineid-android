@@ -8,6 +8,12 @@ internal sealed interface NativeContactlessOpenResult {
         override fun toString(): String = "Success(" + certificate + ", " + preflight + ")"
     }
 
+    class ActivationRequired(
+        val certificate: NativeAuthenticationCertificate,
+    ) : NativeContactlessOpenResult {
+        override fun toString(): String = "ActivationRequired(" + certificate + ")"
+    }
+
     data class Failure(
         val kind: NativeCertificateReadFailure,
     ) : NativeContactlessOpenResult
@@ -26,6 +32,10 @@ internal object NativeContactlessOpenReply {
                 bridgeFailure()
             } else if (reply[TAG_OFFSET].toUnsignedInt() == OPEN_SUCCEEDED) {
                 decodeSuccess(reply)
+            } else if (reply[TAG_OFFSET].toUnsignedInt() == OPEN_ACTIVATION_REQUIRED &&
+                reply.size >= MINIMUM_CERTIFICATE_REPLY_LENGTH
+            ) {
+                decodeActivationRequired(reply)
             } else {
                 decodeFailure(reply)
             }
@@ -67,6 +77,30 @@ internal object NativeContactlessOpenReply {
         )
     }
 
+    private fun decodeActivationRequired(reply: ByteArray): NativeContactlessOpenResult {
+        val certPayload = reply.copyOf()
+        certPayload[TAG_OFFSET] = OPEN_SUCCEEDED.toByte()
+        val certificateResult =
+            NativeCertificateReply.decode(
+                reply = certPayload,
+                certificate = { profile, der ->
+                    NativeAuthenticationCertificate(
+                        keyProfile = profile,
+                        ownedDer = der,
+                    )
+                },
+            )
+        return when (certificateResult) {
+            is NativeCertificateReadResult.Success -> {
+                NativeContactlessOpenResult.ActivationRequired(certificateResult.certificate)
+            }
+
+            is NativeCertificateReadResult.Failure -> {
+                NativeContactlessOpenResult.Failure(NativeCertificateReadFailure.ACTIVATION_REQUIRED)
+            }
+        }
+    }
+
     private fun decodeFailure(reply: ByteArray): NativeContactlessOpenResult =
         when (
             val result =
@@ -96,6 +130,7 @@ internal object NativeContactlessOpenReply {
     private fun Byte.toUnsignedInt(): Int = toInt() and UNSIGNED_BYTE_MASK
 
     private const val OPEN_SUCCEEDED = 1
+    private const val OPEN_ACTIVATION_REQUIRED = 7
 
     private const val TAG_OFFSET = 0
     private const val PREFLIGHT_LENGTH_OFFSET = 1

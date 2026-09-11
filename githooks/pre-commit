@@ -1,0 +1,110 @@
+#!/bin/sh
+# Pre-commit gate:
+#   1. Auto-bump Cargo.toml `version` to today (YY.M.D, no leading
+#      zeros) so commits never carry stale stamps. Idempotent.
+#   2. Refuse commits that would introduce unformatted Rust code
+#      (cargo fmt --check, ~1 s).
+#
+# Why a hook and not a build.rs override: the version must agree
+# across (a) `cargo metadata` / IDE tooling, (b) packaging-time
+# tooling that reads Cargo.toml (Debian/RPM/MSIX scripts already
+# use the date pattern via compute-windows-version.sh), and (c)
+# the runtime `env!("CARGO_PKG_VERSION")` constant. Only pinning
+# Cargo.toml itself satisfies all three from a single source.
+#
+# Canonical copy: ~/src/refineid/githooks/pre-commit
+# Install everywhere: ~/src/refineid/script/install-githooks.sh
+#
+# To bypass for a one-off WIP commit:
+#   git commit --no-verify
+
+set -eu
+
+REPO_TOP=$(git rev-parse --show-toplevel)
+
+# Only act on Rust crates; refineid-release and similar release-eng
+# repos have no Cargo.toml at the root, so this is a no-op there.
+[ -f "$REPO_TOP/Cargo.toml" ] || exit 0
+
+# Auto-bump Cargo.toml `version` on commits that touch Rust source
+# or any Cargo.toml. The bump rewrites the first top-level
+# `^version = "..."` line — in workspaces this lands in
+# `[workspace.package]` (members inherit via
+# `version.workspace = true`), in single-crate repos it lands in
+# `[package]` directly.
+if git diff --cached --name-only --diff-filter=ACMR \
+        | grep -qE '(\.rs$|(^|/)Cargo\.toml$)'; then
+    TODAY=$(date +%y.%-m.%-d)
+    TOML="$REPO_TOP/Cargo.toml"
+    CURRENT=$(awk -F\" '/^version = "/ {print $2; exit}' "$TOML")
+    if [ -n "$CURRENT" ] && [ "$CURRENT" != "$TODAY" ]; then
+        awk -v today="$TODAY" '
+            /^version = "/ && !done { sub(/"[^"]*"/, "\"" today "\""); done=1 }
+            { print }
+        ' "$TOML" > "$TOML.tmp.$$" && mv "$TOML.tmp.$$" "$TOML"
+        # Also bump Cargo.lock entries that point at workspace members
+        # — otherwise `cargo build` immediately regenerates a dirty
+        # lock and the just-bumped version disagrees on disk. We only
+        # touch entries whose `source` is absent (i.e. local path
+        # deps, which is what workspace members look like in the
+        # lock file). External crates from crates.io / git carry a
+        # source line and are left untouched.
+        LOCK="$REPO_TOP/Cargo.lock"
+        if [ -f "$LOCK" ]; then
+            awk -v old="$CURRENT" -v today="$TODAY" '
+                function flush_pkg(    i, line) {
+                    for (i = 0; i < lines_n; i++) {
+                        line = lines[i]
+                        if (!has_source && line == "version = \"" old "\"") {
+                            line = "version = \"" today "\""
+                        }
+                        print line
+                    }
+                    in_pkg=0; lines_n=0; has_source=0
+                }
+                /^\[\[package\]\]/ { in_pkg=1; has_source=0; lines_n=0 }
+                in_pkg {
+                    lines[lines_n++] = $0
+                    if ($0 ~ /^source = /) has_source=1
+                    if ($0 == "") flush_pkg()
+                    next
+                }
+                { print }
+                END { if (in_pkg) flush_pkg() }
+            ' "$LOCK" > "$LOCK.tmp.$$" && mv "$LOCK.tmp.$$" "$LOCK"
+            git add -- "$LOCK"
+        fi
+        git add -- "$TOML"
+        echo "pre-commit: bumped Cargo.toml version $CURRENT -> $TODAY" >&2
+    fi
+fi
+
+# Skip the rustfmt gate if no Rust source is staged (doc-only or
+# Cargo.toml-only commit). The version bump above still ran.
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -qE '\.rs$'; then
+    exit 0
+fi
+
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "pre-commit: cargo not on PATH - cannot verify Rust formatting." >&2
+    echo "  install Rust (rustup) or bypass once with: git commit --no-verify" >&2
+    exit 1
+fi
+
+if ! cargo --list 2>/dev/null | grep -q '^    fmt'; then
+    echo "pre-commit: rustfmt component not installed - cannot verify formatting." >&2
+    echo "  install with: rustup component add rustfmt" >&2
+    echo "  or bypass once with: git commit --no-verify" >&2
+    exit 1
+fi
+
+cd "$REPO_TOP"
+if ! cargo fmt --all -- --check >/dev/null 2>&1; then
+    echo "pre-commit: cargo fmt --check failed." >&2
+    echo "  Files that need reformatting (from cargo fmt --check):" >&2
+    cargo fmt --all -- --check 2>&1 | sed -n 's/^Diff in //p' | sort -u | sed 's/^/    /' >&2
+    echo "" >&2
+    echo "  Fix: cargo fmt    then re-stage and re-commit." >&2
+    echo "  Bypass once: git commit --no-verify" >&2
+    exit 1
+fi

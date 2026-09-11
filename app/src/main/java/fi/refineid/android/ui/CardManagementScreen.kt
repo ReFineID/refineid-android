@@ -2,6 +2,7 @@
     "CyclomaticComplexMethod",
     "FunctionName",
     "LongMethod",
+    "LongParameterList",
     "MagicNumber",
     "MaxLineLength",
     "TooManyFunctions",
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.clearText
@@ -34,6 +36,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SecureTextField
@@ -49,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -89,11 +93,15 @@ internal fun CardManagementScreen(
     onPin1Changed: (() -> Unit)? = null,
     activationRequired: Boolean = false,
     onActivationSucceeded: (() -> Unit)? = null,
+    onNeedsActivationChanged: ((Boolean) -> Unit)? = null,
 ) {
     var health by remember { mutableStateOf<CredentialHealth?>(null) }
     var isProbing by remember { mutableStateOf(false) }
     var isOperating by remember { mutableStateOf(false) }
-    var selectedTask by remember { mutableStateOf(ManagementTask.CHANGE_PIN1) }
+    var selectedTask by
+        remember(activationRequired) {
+            mutableStateOf(if (activationRequired) ManagementTask.ACTIVATE_CARD else ManagementTask.CHANGE_PIN1)
+        }
     var outcomeNotice by remember { mutableStateOf<OutcomeNotice?>(null) }
     var outcomeIsError by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
@@ -101,6 +109,8 @@ internal fun CardManagementScreen(
     val currentPinState = remember { TextFieldState() }
     val newPinState = remember { TextFieldState() }
     val newPinConfirmState = remember { TextFieldState() }
+    val newPin2State = remember { TextFieldState() }
+    val newPin2ConfirmState = remember { TextFieldState() }
     val pukState = remember { TextFieldState() }
     val activationCodeState = remember { TextFieldState() }
     val canState =
@@ -112,6 +122,8 @@ internal fun CardManagementScreen(
         currentPinState.clearText()
         newPinState.clearText()
         newPinConfirmState.clearText()
+        newPin2State.clearText()
+        newPin2ConfirmState.clearText()
         pukState.clearText()
         activationCodeState.clearText()
     }
@@ -130,7 +142,9 @@ internal fun CardManagementScreen(
             when (result) {
                 is CardManagementResult.Success -> {
                     health = result.value
-                    if (result.value.activationNeeds.any) {
+                    val needsActivation = result.value.activationNeeds.any
+                    onNeedsActivationChanged?.invoke(needsActivation)
+                    if (needsActivation) {
                         selectedTask = ManagementTask.ACTIVATE_CARD
                     } else if (result.value.pin1State is NativePin1State.Locked) {
                         selectedTask = ManagementTask.RESET_PIN1
@@ -161,15 +175,31 @@ internal fun CardManagementScreen(
         }
     }
 
+    val isActivationFlow =
+        (activationRequired && (health == null || health?.activationNeeds?.any == true)) ||
+            (health?.activationNeeds?.any == true) ||
+            selectedTask == ManagementTask.ACTIVATE_CARD
+
+    val needsPin1 = health?.activationNeeds?.pin1 ?: true
+    val needsPin2 = health?.activationNeeds?.pin2 ?: true
+
     val currentPin = currentPinState.text.toString()
     val newPin = newPinState.text.toString()
     val newPinConfirm = newPinConfirmState.text.toString()
+    val newPin2 = newPin2State.text.toString()
+    val newPin2Confirm = newPin2ConfirmState.text.toString()
     val puk = pukState.text.toString()
     val activationCode = activationCodeState.text.toString()
 
     val pin1Bounds = 4..12
     val pin2Bounds = 6..12
     val pukBounds = 8..8
+    val activationCodeBounds =
+        when (health?.activationScheme) {
+            CardManagementScheme.PRESET_PIN -> 7..7
+            CardManagementScheme.PUK -> 8..8
+            else -> 7..8
+        }
 
     val targetBounds =
         if (selectedTask == ManagementTask.CHANGE_PIN2 || selectedTask == ManagementTask.RESET_PIN2) {
@@ -178,12 +208,20 @@ internal fun CardManagementScreen(
             pin1Bounds
         }
 
-    val currentPinValid = targetBounds.contains(currentPin.length)
-    val newPinValid = targetBounds.contains(newPin.length)
+    val currentPinValid = targetBounds.contains(currentPin.length) && currentPin.all { it in '0'..'9' }
+    val newPinValid = targetBounds.contains(newPin.length) && newPin.all { it in '0'..'9' }
     val confirmationValid = newPinValid && newPin == newPinConfirm
     val pinsDiffer = currentPin.isNotEmpty() && newPin.isNotEmpty() && currentPin != newPin
-    val pukValid = pukBounds.contains(puk.length)
-    val activationCodeValid = activationCode.length >= 4
+    val pukValid = pukBounds.contains(puk.length) && puk.all { it in '0'..'9' }
+
+    val activationCodeValid =
+        activationCodeBounds.contains(activationCode.length) && activationCode.all { it in '0'..'9' }
+
+    val newPin1Valid = pin1Bounds.contains(newPin.length) && newPin.all { it in '0'..'9' }
+    val newPin1ConfirmValid = newPin1Valid && newPin == newPinConfirm
+
+    val newPin2Valid = pin2Bounds.contains(newPin2.length) && newPin2.all { it in '0'..'9' }
+    val newPin2ConfirmValid = newPin2Valid && newPin2 == newPin2Confirm
 
     val pin1Attempts = health?.pin1State?.let { getAttempts(it) }
     val pin2Attempts = health?.pin2State?.let { getAttempts(it) }
@@ -274,7 +312,10 @@ internal fun CardManagementScreen(
                 }
 
                 ManagementTask.ACTIVATE_CARD -> {
-                    activationCodeValid && newPinValid && confirmationValid
+                    activationCodeValid &&
+                        (!needsPin1 || newPin1ConfirmValid) &&
+                        (!needsPin2 || newPin2ConfirmValid) &&
+                        (needsPin1 || needsPin2)
                 }
             }
 
@@ -369,22 +410,18 @@ internal fun CardManagementScreen(
             ManagementTask.ACTIVATE_CARD -> {
                 val codeBytes = activationCode.toByteArray(Charsets.US_ASCII)
                 val new1Bytes =
-                    if (health?.activationNeeds?.pin1 !=
-                        false
-                    ) {
+                    if (needsPin1) {
                         newPin.toByteArray(Charsets.US_ASCII)
                     } else {
                         null
                     }
                 val new2Bytes =
-                    if (health?.activationNeeds?.pin2 !=
-                        false
-                    ) {
-                        newPin.toByteArray(Charsets.US_ASCII)
+                    if (needsPin2) {
+                        newPin2.toByteArray(Charsets.US_ASCII)
                     } else {
                         null
                     }
-                val scheme = health?.activationScheme ?: CardManagementScheme.PUK
+                val scheme = health?.activationScheme ?: CardManagementScheme.PRESET_PIN
                 pinCache?.clear()
                 onPin1Changed?.invoke()
                 cardManagementService.activateCard(scheme, codeBytes, new1Bytes, new2Bytes) { result ->
@@ -393,9 +430,9 @@ internal fun CardManagementScreen(
                     when (result) {
                         is CardManagementResult.Success -> {
                             val actReport = result.value
-                            if (actReport.pin1Outcome is ManageOutcome.Succeeded &&
-                                actReport.pin2Outcome is ManageOutcome.Succeeded
-                            ) {
+                            val pin1Ok = new1Bytes == null || actReport.pin1Outcome is ManageOutcome.Succeeded
+                            val pin2Ok = new2Bytes == null || actReport.pin2Outcome is ManageOutcome.Succeeded
+                            if (pin1Ok && pin2Ok && (new1Bytes != null || new2Bytes != null)) {
                                 outcomeNotice = OutcomeNotice(R.string.card_activated_success)
                                 outcomeIsError = false
                                 pinCache?.clear()
@@ -500,18 +537,32 @@ internal fun CardManagementScreen(
         }
 
         // If card awaits activation
-        if (health?.activationNeeds?.any == true) {
-            Section(stringResource(R.string.card_activation)) {
-                CardActivationForm(
-                    health = health!!,
-                    activationCodeState = activationCodeState,
-                    newPinState = newPinState,
-                    newPinConfirmState = newPinConfirmState,
-                    canExecute = canExecute,
-                    isOperating = isOperating,
-                    onSubmit = { showConfirmDialog = true },
-                )
-            }
+        if (isActivationFlow) {
+            CardActivationForm(
+                health =
+                    health ?: CredentialHealth(
+                        pin1State = NativePin1State.Remaining(3),
+                        pin2State = NativePin2State.Remaining(3),
+                        pukState = NativePin1State.Remaining(3),
+                        scheme = fi.refineid.android.core.NativePinReferenceScheme.CITIZEN,
+                        activationScheme = CardManagementScheme.PRESET_PIN,
+                        activationNeeds =
+                            fi.refineid.android.core.CardActivationNeeds(
+                                pin1 = true,
+                                pin2 = true,
+                            ),
+                    ),
+                needsPin1 = needsPin1,
+                needsPin2 = needsPin2,
+                activationCodeState = activationCodeState,
+                newPin1State = newPinState,
+                newPin1ConfirmState = newPinConfirmState,
+                newPin2State = newPin2State,
+                newPin2ConfirmState = newPin2ConfirmState,
+                canExecute = canExecute,
+                isOperating = isOperating,
+                onSubmit = { showConfirmDialog = true },
+            )
         } else {
             // Task Form
             Section(
@@ -520,7 +571,7 @@ internal fun CardManagementScreen(
                     ManagementTask.CHANGE_PIN2 -> stringResource(R.string.change_pin2)
                     ManagementTask.RESET_PIN1 -> stringResource(R.string.reset_pin1)
                     ManagementTask.RESET_PIN2 -> stringResource(R.string.reset_pin2)
-                    ManagementTask.ACTIVATE_CARD -> stringResource(R.string.activate_card)
+                    ManagementTask.ACTIVATE_CARD -> ""
                 },
             ) {
                 when (selectedTask) {
@@ -555,29 +606,7 @@ internal fun CardManagementScreen(
                         )
                     }
 
-                    ManagementTask.ACTIVATE_CARD -> {
-                        CardActivationForm(
-                            health =
-                                health ?: CredentialHealth(
-                                    pin1State = NativePin1State.Remaining(3),
-                                    pin2State = NativePin2State.Remaining(3),
-                                    pukState = NativePin1State.Remaining(3),
-                                    scheme = fi.refineid.android.core.NativePinReferenceScheme.CITIZEN,
-                                    activationScheme = CardManagementScheme.PUK,
-                                    activationNeeds =
-                                        fi.refineid.android.core.CardActivationNeeds(
-                                            pin1 = true,
-                                            pin2 = true,
-                                        ),
-                                ),
-                            activationCodeState = activationCodeState,
-                            newPinState = newPinState,
-                            newPinConfirmState = newPinConfirmState,
-                            canExecute = canExecute,
-                            isOperating = isOperating,
-                            onSubmit = { showConfirmDialog = true },
-                        )
-                    }
+                    ManagementTask.ACTIVATE_CARD -> {}
                 }
             }
 
@@ -627,7 +656,16 @@ internal fun CardManagementScreen(
                 }
 
                 ManagementTask.ACTIVATE_CARD -> {
-                    stringResource(R.string.confirm_activation_title) to null
+                    val title = stringResource(R.string.confirm_activation_title)
+                    val msg =
+                        if (needsPin1 && needsPin2) {
+                            stringResource(R.string.confirm_activation_dialog_msg_both)
+                        } else if (needsPin1) {
+                            stringResource(R.string.confirm_activation_dialog_msg_single, "PIN 1")
+                        } else {
+                            stringResource(R.string.confirm_activation_dialog_msg_single, "PIN 2")
+                        }
+                    title to msg
                 }
             }
 
@@ -695,16 +733,16 @@ private fun GuidanceBanner(
 
             BannerTone.WARNING -> {
                 Triple(
-                    Color(0xFFFFF3E0),
-                    Color(0xFFE65100),
+                    MaterialTheme.colorScheme.tertiaryContainer,
+                    MaterialTheme.colorScheme.onTertiaryContainer,
                     Icons.Outlined.Warning,
                 )
             }
 
             BannerTone.INFO -> {
                 Triple(
-                    Color(0xFFE3F2FD),
-                    Color(0xFF0D47A1),
+                    MaterialTheme.colorScheme.secondaryContainer,
+                    MaterialTheme.colorScheme.onSecondaryContainer,
                     Icons.Outlined.CheckCircle,
                 )
             }
@@ -808,8 +846,18 @@ private fun OutcomeBanner(
     message: String,
     isError: Boolean,
 ) {
-    val containerColor = if (isError) MaterialTheme.colorScheme.errorContainer else Color(0xFFE8F5E9)
-    val contentColor = if (isError) MaterialTheme.colorScheme.onErrorContainer else Color(0xFF1B5E20)
+    val containerColor =
+        if (isError) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.tertiaryContainer
+        }
+    val contentColor =
+        if (isError) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onTertiaryContainer
+        }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -878,45 +926,44 @@ private fun ChangePinForm(
                 } else {
                     stringResource(R.string.change_basic_pin1)
                 }
+            val lengthHint =
+                if (isPin2) {
+                    stringResource(R.string.pin2_length_hint)
+                } else {
+                    stringResource(R.string.pin1_length_hint)
+                }
 
-            SecureTextField(
+            val pinMismatch =
+                confirmState.text.isNotEmpty() &&
+                    confirmState.text.toString() != newState.text.toString()
+
+            ManagedPasswordField(
                 state = currentState,
-                modifier = Modifier.fillMaxWidth().testTag("managementCurrentPin"),
-                label = { Text(currentLabel) },
-                textObfuscationMode = TextObfuscationMode.Hidden,
-                keyboardOptions =
-                    KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Next,
-                    ),
+                label = currentLabel,
+                maxLength = 12,
+                supportingText = lengthHint,
+                imeAction = ImeAction.Next,
+                testTag = "managementCurrentPin",
             )
 
-            SecureTextField(
+            ManagedPasswordField(
                 state = newState,
-                modifier = Modifier.fillMaxWidth().testTag("managementNewPin"),
-                label = { Text(newLabel) },
-                textObfuscationMode = TextObfuscationMode.Hidden,
-                keyboardOptions =
-                    KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Next,
-                    ),
+                label = newLabel,
+                maxLength = 12,
+                supportingText = lengthHint,
+                imeAction = ImeAction.Next,
+                testTag = "managementNewPin",
             )
 
-            SecureTextField(
+            ManagedPasswordField(
                 state = confirmState,
-                modifier = Modifier.fillMaxWidth().testTag("managementNewPinRepeat"),
-                label = { Text(repeatLabel) },
-                textObfuscationMode = TextObfuscationMode.Hidden,
-                keyboardOptions =
-                    KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Done,
-                    ),
+                label = repeatLabel,
+                maxLength = 12,
+                isError = pinMismatch,
+                errorMessage = if (pinMismatch) stringResource(R.string.pins_do_not_match) else null,
+                imeAction = ImeAction.Done,
                 onKeyboardAction = { if (canExecute && !isOperating) onSubmit() },
+                testTag = "managementNewPinRepeat",
             )
 
             Button(
@@ -977,45 +1024,44 @@ private fun ResetPinForm(
                 } else {
                     stringResource(R.string.reset_pin1)
                 }
+            val lengthHint =
+                if (isPin2) {
+                    stringResource(R.string.pin2_length_hint)
+                } else {
+                    stringResource(R.string.pin1_length_hint)
+                }
 
-            SecureTextField(
+            val pinMismatch =
+                confirmState.text.isNotEmpty() &&
+                    confirmState.text.toString() != newState.text.toString()
+
+            ManagedPasswordField(
                 state = pukState,
-                modifier = Modifier.fillMaxWidth().testTag("managementPuk"),
-                label = { Text(stringResource(R.string.puk_code)) },
-                textObfuscationMode = TextObfuscationMode.Hidden,
-                keyboardOptions =
-                    KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Next,
-                    ),
+                label = stringResource(R.string.puk_code),
+                maxLength = 8,
+                supportingText = stringResource(R.string.activation_code_length_hint, 8),
+                imeAction = ImeAction.Next,
+                testTag = "managementPuk",
             )
 
-            SecureTextField(
+            ManagedPasswordField(
                 state = newState,
-                modifier = Modifier.fillMaxWidth().testTag("managementNewPin"),
-                label = { Text(newLabel) },
-                textObfuscationMode = TextObfuscationMode.Hidden,
-                keyboardOptions =
-                    KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Next,
-                    ),
+                label = newLabel,
+                maxLength = 12,
+                supportingText = lengthHint,
+                imeAction = ImeAction.Next,
+                testTag = "managementNewPin",
             )
 
-            SecureTextField(
+            ManagedPasswordField(
                 state = confirmState,
-                modifier = Modifier.fillMaxWidth().testTag("managementNewPinRepeat"),
-                label = { Text(repeatLabel) },
-                textObfuscationMode = TextObfuscationMode.Hidden,
-                keyboardOptions =
-                    KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Done,
-                    ),
+                label = repeatLabel,
+                maxLength = 12,
+                isError = pinMismatch,
+                errorMessage = if (pinMismatch) stringResource(R.string.pins_do_not_match) else null,
+                imeAction = ImeAction.Done,
                 onKeyboardAction = { if (canExecute && !isOperating) onSubmit() },
+                testTag = "managementNewPinRepeat",
             )
 
             Button(
@@ -1039,75 +1085,236 @@ private fun ResetPinForm(
 @Composable
 private fun CardActivationForm(
     health: CredentialHealth,
+    needsPin1: Boolean,
+    needsPin2: Boolean,
     activationCodeState: TextFieldState,
-    newPinState: TextFieldState,
-    newPinConfirmState: TextFieldState,
+    newPin1State: TextFieldState,
+    newPin1ConfirmState: TextFieldState,
+    newPin2State: TextFieldState,
+    newPin2ConfirmState: TextFieldState,
     canExecute: Boolean,
     isOperating: Boolean,
     onSubmit: () -> Unit,
 ) {
-    NavigationGroup {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            SecureTextField(
-                state = activationCodeState,
-                modifier = Modifier.fillMaxWidth().testTag("managementActivationCode"),
-                label = { Text(stringResource(R.string.activation_pin)) },
-                textObfuscationMode = TextObfuscationMode.Hidden,
-                keyboardOptions =
-                    KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Next,
-                    ),
-            )
+    val activationCodeLength =
+        when (health.activationScheme) {
+            CardManagementScheme.PRESET_PIN -> 7
+            CardManagementScheme.PUK -> 8
+            else -> 7
+        }
 
-            SecureTextField(
-                state = newPinState,
-                modifier = Modifier.fillMaxWidth().testTag("managementNewPin"),
-                label = { Text(stringResource(R.string.new_pin1)) },
-                textObfuscationMode = TextObfuscationMode.Hidden,
-                keyboardOptions =
-                    KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Next,
-                    ),
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (!needsPin1 && needsPin2) {
+            Text(
+                text = stringResource(R.string.half_activated_pin2_needed),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
             )
-
-            SecureTextField(
-                state = newPinConfirmState,
-                modifier = Modifier.fillMaxWidth().testTag("managementNewPinRepeat"),
-                label = { Text(stringResource(R.string.new_pin1_again)) },
-                textObfuscationMode = TextObfuscationMode.Hidden,
-                keyboardOptions =
-                    KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.NumberPassword,
-                        imeAction = ImeAction.Done,
-                    ),
-                onKeyboardAction = { if (canExecute && !isOperating) onSubmit() },
+        } else if (needsPin1 && !needsPin2) {
+            Text(
+                text = stringResource(R.string.half_activated_pin1_needed),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
             )
+        }
 
-            Button(
-                onClick = onSubmit,
-                enabled = canExecute && !isOperating,
+        NavigationGroup {
+            Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .testTag("managementActivate"),
+                        .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (isOperating) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(stringResource(R.string.activate_card))
+                ManagedPasswordField(
+                    state = activationCodeState,
+                    label = stringResource(R.string.activation_pin),
+                    maxLength = activationCodeLength,
+                    supportingText = stringResource(R.string.activation_code_length_hint, activationCodeLength),
+                    imeAction = ImeAction.Next,
+                    testTag = UiAutomationIds.ACTIVATION_CODE_FIELD,
+                )
+            }
+        }
+
+        if (needsPin1) {
+            val pin1Mismatch =
+                newPin1ConfirmState.text.isNotEmpty() &&
+                    newPin1ConfirmState.text.toString() != newPin1State.text.toString()
+
+            Section(stringResource(R.string.pin1_section_title)) {
+                NavigationGroup {
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        ManagedPasswordField(
+                            state = newPin1State,
+                            label = stringResource(R.string.new_pin1),
+                            maxLength = 12,
+                            supportingText = stringResource(R.string.pin1_length_hint),
+                            imeAction = ImeAction.Next,
+                            testTag = UiAutomationIds.ACTIVATION_NEW_PIN1_FIELD,
+                        )
+
+                        ManagedPasswordField(
+                            state = newPin1ConfirmState,
+                            label = stringResource(R.string.new_pin1_again),
+                            maxLength = 12,
+                            isError = pin1Mismatch,
+                            errorMessage = if (pin1Mismatch) stringResource(R.string.pins_do_not_match) else null,
+                            imeAction = if (needsPin2) ImeAction.Next else ImeAction.Done,
+                            onKeyboardAction =
+                                if (!needsPin2) {
+                                    { if (canExecute && !isOperating) onSubmit() }
+                                } else {
+                                    null
+                                },
+                            testTag = UiAutomationIds.ACTIVATION_NEW_PIN1_REPEAT_FIELD,
+                        )
+                    }
                 }
+            }
+        }
+
+        if (needsPin2) {
+            val pin2Mismatch =
+                newPin2ConfirmState.text.isNotEmpty() &&
+                    newPin2ConfirmState.text.toString() != newPin2State.text.toString()
+
+            Section(stringResource(R.string.pin2_section_title)) {
+                NavigationGroup {
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        ManagedPasswordField(
+                            state = newPin2State,
+                            label = stringResource(R.string.new_pin2),
+                            maxLength = 12,
+                            supportingText = stringResource(R.string.pin2_length_hint),
+                            imeAction = ImeAction.Next,
+                            testTag = UiAutomationIds.ACTIVATION_NEW_PIN2_FIELD,
+                        )
+
+                        ManagedPasswordField(
+                            state = newPin2ConfirmState,
+                            label = stringResource(R.string.new_pin2_again),
+                            maxLength = 12,
+                            isError = pin2Mismatch,
+                            errorMessage = if (pin2Mismatch) stringResource(R.string.pins_do_not_match) else null,
+                            imeAction = ImeAction.Done,
+                            onKeyboardAction = { if (canExecute && !isOperating) onSubmit() },
+                            testTag = UiAutomationIds.ACTIVATION_NEW_PIN2_REPEAT_FIELD,
+                        )
+                    }
+                }
+            }
+        }
+
+        Button(
+            onClick = onSubmit,
+            enabled = canExecute && !isOperating,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .testTag(UiAutomationIds.ACTIVATION_SUBMIT_ACTION),
+        ) {
+            if (isOperating) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                Text(stringResource(R.string.activate_card))
             }
         }
     }
 }
+
+@Composable
+private fun ManagedPasswordField(
+    state: TextFieldState,
+    label: String,
+    modifier: Modifier = Modifier,
+    imeAction: ImeAction = ImeAction.Next,
+    onKeyboardAction: (() -> Unit)? = null,
+    maxLength: Int = 12,
+    supportingText: String? = null,
+    isError: Boolean = false,
+    errorMessage: String? = null,
+    testTag: String? = null,
+) {
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SecureTextField(
+            state = state,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
+            label = { Text(label) },
+            textObfuscationMode =
+                if (passwordVisible) {
+                    TextObfuscationMode.Visible
+                } else {
+                    TextObfuscationMode.Hidden
+                },
+            inputTransformation = remember(maxLength) { digitsOnlyTransformation(maxLength) },
+            keyboardOptions =
+                KeyboardOptions(
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.NumberPassword,
+                    imeAction = imeAction,
+                ),
+            onKeyboardAction = onKeyboardAction?.let { action -> { action() } },
+            trailingIcon = {
+                IconButton(
+                    onClick = { passwordVisible = !passwordVisible },
+                    modifier = Modifier.testTag(if (testTag != null) "${testTag}Toggle" else "passwordToggle"),
+                ) {
+                    Icon(
+                        painter =
+                            painterResource(
+                                if (passwordVisible) R.drawable.ic_visibility_off else R.drawable.ic_visibility,
+                            ),
+                        contentDescription =
+                            stringResource(
+                                if (passwordVisible) R.string.hide_pin else R.string.show_pin,
+                            ),
+                    )
+                }
+            },
+        )
+        if (isError && errorMessage != null) {
+            Text(
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(start = 16.dp),
+            )
+        } else if (supportingText != null) {
+            Text(
+                text = supportingText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(start = 16.dp),
+            )
+        }
+    }
+}
+
+private fun digitsOnlyTransformation(maxLength: Int): InputTransformation =
+    InputTransformation {
+        val text = asCharSequence()
+        if (text.length > maxLength || !text.all { it in '0'..'9' }) {
+            revertAllChanges()
+        }
+    }

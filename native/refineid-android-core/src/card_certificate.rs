@@ -33,6 +33,7 @@ pub(crate) enum CertificateReadFailure {
     PaceRejected,
     Bridge,
     /// The card still awaits factory activation.
+    #[allow(dead_code)]
     ActivationRequired,
 }
 

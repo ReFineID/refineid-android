@@ -25,6 +25,13 @@ internal data class NfcReaderSnapshot(
     val isPrimed: Boolean = false,
     /** True while a stored access number is opening a discovered card. */
     val isPrimedOpening: Boolean = false,
+    /**
+     * True while a card-dependent operation is pending and only the
+     * card is missing: the holder tapped connect, or a live session
+     * was lost. The UI shows a present-card prompt until the card
+     * returns or the holder cancels. Idle listening leaves this false.
+     */
+    val awaitingCard: Boolean = false,
     /** The cardholder name read from the certificate or primed store. */
     val holderName: String? = null,
     /** The detailed cardholder identity info parsed from the certificate. */

@@ -84,7 +84,7 @@ class CcidCodecTest {
         )
         assertEquals(CcidResponseMessageType.DATA_BLOCK, command.expectedResponse)
         assertEquals(
-            "CcidCommand(slot=0, sequence=17, response=DATA_BLOCK, payloadLength=4)",
+            "CcidCommand(type=111, slot=0, sequence=17, response=DATA_BLOCK, payloadLength=4)",
             command.toString(),
         )
 
@@ -263,6 +263,43 @@ class CcidCodecTest {
         assertProtocolError(CcidProtocolErrorKind.UNEXPECTED_MESSAGE_TYPE) {
             CcidResponseParser.parse(frame, slotStatusCommand())
         }
+    }
+
+    @Test
+    fun unexpectedSlotCarriesIntegerDetail() {
+        val frame = validSlotStatusFrame()
+        frame[CcidWire.SLOT_OFFSET] = OTHER_SLOT.toByte()
+
+        val exception =
+            assertThrows(CcidProtocolException::class.java) {
+                CcidResponseParser.parse(frame, slotStatusCommand())
+            }
+
+        assertEquals(CcidProtocolErrorKind.UNEXPECTED_SLOT, exception.kind)
+        assertEquals(
+            "expected=" + TEST_SLOT + " actual=" + OTHER_SLOT,
+            exception.detail,
+        )
+    }
+
+    @Test
+    fun unexpectedResponseTypeCarriesFramingDetail() {
+        val frame =
+            responseFrame(
+                messageType = CcidWire.RDR_TO_PC_DATA_BLOCK,
+                cardStatus = CcidWire.CARD_STATUS_ACTIVE,
+                commandStatus = CcidWire.COMMAND_STATUS_SUCCEEDED,
+            )
+
+        val exception =
+            assertThrows(CcidProtocolException::class.java) {
+                CcidResponseParser.parse(frame, slotStatusCommand())
+            }
+
+        assertEquals(CcidProtocolErrorKind.UNEXPECTED_MESSAGE_TYPE, exception.kind)
+        assertEquals(CcidWire.RDR_TO_PC_SLOT_STATUS, exception.expected)
+        assertEquals(CcidWire.RDR_TO_PC_DATA_BLOCK, exception.actual)
+        assertEquals(frame.size, exception.frameLength)
     }
 
     @Test

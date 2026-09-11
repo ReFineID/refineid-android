@@ -65,6 +65,7 @@ internal class CcidCommand private constructor(
     internal val slot: Int,
     internal val sequence: Int,
     internal val expectedResponse: CcidResponseMessageType,
+    internal val messageType: Int,
     private val payloadLength: Int,
     private val wireBytes: ByteArray,
 ) : AutoCloseable {
@@ -83,7 +84,8 @@ internal class CcidCommand private constructor(
     }
 
     override fun toString(): String =
-        "CcidCommand(slot=" + slot +
+        "CcidCommand(type=" + messageType +
+            ", slot=" + slot +
             ", sequence=" + sequence +
             ", response=" + expectedResponse +
             ", payloadLength=" + payloadLength + ")"
@@ -142,6 +144,7 @@ internal class CcidCommand private constructor(
                 slot = slot,
                 sequence = sequence,
                 expectedResponse = CcidResponseMessageType.DATA_BLOCK,
+                messageType = CcidWire.PC_TO_RDR_XFR_BLOCK,
                 payloadLength = block.size,
                 wireBytes = bytes,
             )
@@ -167,6 +170,7 @@ internal class CcidCommand private constructor(
                 slot = slot,
                 sequence = sequence,
                 expectedResponse = expectedResponse,
+                messageType = messageType,
                 payloadLength = 0,
                 wireBytes = bytes,
             )
@@ -305,6 +309,18 @@ internal enum class CcidProtocolErrorKind {
 internal class CcidProtocolException(
     val kind: CcidProtocolErrorKind,
     message: String,
+    /** Expected response message type byte, or -1 when not applicable. */
+    val expected: Int = -1,
+    /** Actual response message type byte, or -1 when not applicable. */
+    val actual: Int = -1,
+    /** Received frame length in bytes, or -1 when not applicable. */
+    val frameLength: Int = -1,
+    /**
+     * Short framing detail built from integers only (slots, sequences,
+     * status bytes, lengths) — never response payloads, so holder data
+     * such as photos or document numbers can never reach the trace.
+     */
+    val detail: String = "",
 ) : Exception(message)
 
 internal object CcidResponseParser {
@@ -316,6 +332,7 @@ internal object CcidResponseParser {
             throw protocolError(
                 CcidProtocolErrorKind.TRUNCATED_HEADER,
                 "CCID response header is truncated",
+                "received=" + frame.size,
             )
         }
 
@@ -324,6 +341,7 @@ internal object CcidResponseParser {
             throw protocolError(
                 CcidProtocolErrorKind.LENGTH_OUT_OF_RANGE,
                 "CCID response length exceeds the specification maximum",
+                "declared=" + declaredLength,
             )
         }
 
@@ -332,14 +350,18 @@ internal object CcidResponseParser {
             throw protocolError(
                 CcidProtocolErrorKind.LENGTH_MISMATCH,
                 "CCID response length does not match the received byte count",
+                "declared=" + declaredLength + " received=" + frame.size,
             )
         }
 
         val messageType = frame.unsignedByte(CcidWire.MESSAGE_TYPE_OFFSET)
         if (messageType != command.expectedResponse.wireValue) {
-            throw protocolError(
+            throw CcidProtocolException(
                 CcidProtocolErrorKind.UNEXPECTED_MESSAGE_TYPE,
                 "CCID response type does not match the command",
+                expected = command.expectedResponse.wireValue,
+                actual = messageType,
+                frameLength = frame.size,
             )
         }
 
@@ -348,6 +370,7 @@ internal object CcidResponseParser {
             throw protocolError(
                 CcidProtocolErrorKind.UNEXPECTED_SLOT,
                 "CCID response slot does not match the command",
+                "expected=" + command.slot + " actual=" + slot,
             )
         }
 
@@ -356,6 +379,7 @@ internal object CcidResponseParser {
             throw protocolError(
                 CcidProtocolErrorKind.UNEXPECTED_SEQUENCE,
                 "CCID response sequence does not match the command",
+                "expected=" + command.sequence + " actual=" + sequence,
             )
         }
 
@@ -366,6 +390,7 @@ internal object CcidResponseParser {
             throw protocolError(
                 CcidProtocolErrorKind.UNEXPECTED_PAYLOAD,
                 "CCID slot-status response contains a payload",
+                "declared=" + declaredLength,
             )
         }
 
@@ -374,6 +399,7 @@ internal object CcidResponseParser {
             throw protocolError(
                 CcidProtocolErrorKind.RESERVED_STATUS_BITS,
                 "CCID response sets reserved status bits",
+                "status=" + status,
             )
         }
 
@@ -409,6 +435,7 @@ internal object CcidResponseParser {
                 throw protocolError(
                     CcidProtocolErrorKind.RESERVED_COMMAND_STATUS,
                     "CCID response uses a reserved command status",
+                    "status=" + commandStatus,
                 )
             }
         }
@@ -475,6 +502,7 @@ internal object CcidResponseParser {
                 throw protocolError(
                     CcidProtocolErrorKind.RESERVED_CARD_STATUS,
                     "CCID response uses a reserved card status",
+                    "value=" + value,
                 )
             }
         }
@@ -501,6 +529,7 @@ internal object CcidResponseParser {
                 throw protocolError(
                     CcidProtocolErrorKind.INVALID_CLOCK_STATUS,
                     "CCID response uses an undefined clock status",
+                    "value=" + value,
                 )
             }
         }
@@ -531,6 +560,7 @@ internal object CcidResponseParser {
                 throw protocolError(
                     CcidProtocolErrorKind.INVALID_CHAIN_PARAMETER,
                     "CCID response uses an undefined chain parameter",
+                    "value=" + value,
                 )
             }
         }
@@ -547,5 +577,6 @@ internal object CcidResponseParser {
     private fun protocolError(
         kind: CcidProtocolErrorKind,
         message: String,
-    ): CcidProtocolException = CcidProtocolException(kind, message)
+        detail: String = "",
+    ): CcidProtocolException = CcidProtocolException(kind, message, detail = detail)
 }

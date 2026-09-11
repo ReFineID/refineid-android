@@ -71,6 +71,41 @@ class CcidCardActivatorTest {
     }
 
     @Test
+    fun inactivePowerBlockIsCardErrorWithoutValidation() {
+        val io =
+            ScriptedBulkIo(
+                listOf(
+                    slotStatusFrame(
+                        sequence = TEST_SEQUENCE,
+                        cardStatus = CcidWire.CARD_STATUS_ACTIVE,
+                    ),
+                    responseFrame(
+                        messageType = CcidWire.RDR_TO_PC_DATA_BLOCK,
+                        sequence = TEST_SEQUENCE + 1,
+                        cardStatus = CcidWire.CARD_STATUS_INACTIVE,
+                        responseParameter = CcidWire.COMPLETE_CHAIN,
+                    ),
+                ),
+            )
+        var validationCalls = 0
+        val activator =
+            CcidCardActivator(
+                validateAtr = {
+                    validationCalls += 1
+                    AtrValidation.VALID_T0_DIRECT
+                },
+                sequenceCounter = CcidSequenceCounter(TEST_SEQUENCE),
+            )
+
+        val result = activator.activate(exchange(io), CcidExchangeLevel.SHORT_AND_EXTENDED_APDU)
+
+        assertEquals(CcidActivationResult.CARD_ERROR, result)
+        assertEquals(0, validationCalls)
+        assertEquals(2, io.writtenFrames.size)
+        io.close()
+    }
+
+    @Test
     fun emptySlotDoesNotPowerOrValidate() {
         val io =
             ScriptedBulkIo(

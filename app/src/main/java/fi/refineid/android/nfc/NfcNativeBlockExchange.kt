@@ -25,7 +25,26 @@ internal class NfcNativeBlockExchange(
         val elapsedMicros = (System.nanoTime() - startedAtNanos) / NANOSECONDS_PER_MICROSECOND
         return when (result) {
             is NfcTransceiveResult.Response -> {
-                AppTrace.nfcTransceive(block.size, result.bytes.size, elapsedMicros)
+                val sw =
+                    if (result.bytes.size >= STATUS_WORD_LENGTH) {
+                        val sw1 = result.bytes[result.bytes.size - STATUS_WORD_LENGTH].toInt() and 0xFF
+                        val sw2 = result.bytes[result.bytes.size - 1].toInt() and 0xFF
+                        (sw1 shl 8) or sw2
+                    } else {
+                        0
+                    }
+                // The header is public routing; bodies stay out of the trace.
+                val hasHeader = block.size >= APDU_HEADER_LENGTH
+                AppTrace.nfcTransceive(
+                    block.size,
+                    result.bytes.size,
+                    elapsedMicros,
+                    sw,
+                    cla = if (hasHeader) block[CLASS_BYTE_OFFSET].toInt() and 0xFF else -1,
+                    ins = if (hasHeader) block[INSTRUCTION_OFFSET].toInt() and 0xFF else -1,
+                    p1 = if (hasHeader) block[PARAMETER_ONE_OFFSET].toInt() and 0xFF else -1,
+                    p2 = if (hasHeader) block[PARAMETER_TWO_OFFSET].toInt() and 0xFF else -1,
+                )
                 encodeResponse(result.bytes)
             }
 
@@ -64,6 +83,13 @@ internal class NfcNativeBlockExchange(
 
         const val TAG_OFFSET = 0
         const val TAG_LENGTH = 1
+
+        /** An ISO 7816-4 command carries at least CLA, INS, P1, P2. */
+        const val APDU_HEADER_LENGTH = 4
+        const val CLASS_BYTE_OFFSET = 0
+        const val INSTRUCTION_OFFSET = 1
+        const val PARAMETER_ONE_OFFSET = 2
+        const val PARAMETER_TWO_OFFSET = 3
 
         /** An ISO 7816-4 response carries at least SW1 and SW2. */
         const val STATUS_WORD_LENGTH = 2

@@ -48,12 +48,18 @@ internal class CcidCommandExchange(
 
     fun exchange(command: CcidCommand): CcidExchangeResult {
         val commandBytes = command.encodedBytes()
+        AppTrace.ccidExchangeStarted(
+            messageType = command.messageType,
+            slot = command.slot,
+            sequence = command.sequence,
+            length = commandBytes.size,
+        )
         try {
             if (commandBytes.size > maximumMessageLength) {
-                return failure(CcidExchangeFailureKind.COMMAND_TOO_LONG)
+                return failure(CcidExchangeFailureKind.COMMAND_TOO_LONG, command)
             }
             if (bulkIo.write(commandBytes) != commandBytes.size) {
-                return failure(CcidExchangeFailureKind.TRANSPORT)
+                return failure(CcidExchangeFailureKind.TRANSPORT, command)
             }
         } finally {
             commandBytes.fill(0)
@@ -74,7 +80,7 @@ internal class CcidCommandExchange(
                             multiplier = result.value.multiplier,
                         )
                         if (timeExtensionCount > maximumTimeExtensions) {
-                            return failure(CcidExchangeFailureKind.TIME_EXTENSION_LIMIT)
+                            return failure(CcidExchangeFailureKind.TIME_EXTENSION_LIMIT, command)
                         }
                     } else {
                         return result
@@ -90,10 +96,10 @@ internal class CcidCommandExchange(
         return try {
             val bytesRead = bulkIo.read(responseBytes)
             if (bytesRead < 0) {
-                return failure(CcidExchangeFailureKind.TRANSPORT)
+                return failure(CcidExchangeFailureKind.TRANSPORT, command)
             }
             if (bytesRead > responseBytes.size) {
-                return failure(CcidExchangeFailureKind.MALFORMED_RESPONSE)
+                return failure(CcidExchangeFailureKind.MALFORMED_RESPONSE, command)
             }
 
             receivedFrame = responseBytes.copyOf(bytesRead)
@@ -104,16 +110,30 @@ internal class CcidCommandExchange(
                 ),
             )
         } catch (error: CcidProtocolException) {
-            AppTrace.ccidResponseRejected(error.kind)
-            failure(CcidExchangeFailureKind.MALFORMED_RESPONSE)
+            AppTrace.ccidResponseRejected(
+                error.kind,
+                expected = error.expected,
+                actual = error.actual,
+                frameLength = error.frameLength,
+                detail = error.detail,
+            )
+            failure(CcidExchangeFailureKind.MALFORMED_RESPONSE, command)
         } finally {
             receivedFrame?.fill(0)
             responseBytes.fill(0)
         }
     }
 
-    private fun failure(kind: CcidExchangeFailureKind): CcidExchangeResult.Failure {
-        AppTrace.ccidCommandExchangeFailed(kind)
+    private fun failure(
+        kind: CcidExchangeFailureKind,
+        command: CcidCommand,
+    ): CcidExchangeResult.Failure {
+        AppTrace.ccidCommandExchangeFailed(
+            kind,
+            messageType = command.messageType,
+            slot = command.slot,
+            sequence = command.sequence,
+        )
         return CcidExchangeResult.Failure(kind)
     }
 

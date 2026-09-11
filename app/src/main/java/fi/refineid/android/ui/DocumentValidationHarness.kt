@@ -211,7 +211,7 @@ private fun DocumentValidationVerdict(
                     text = headline,
                     color =
                         if (result.isValid) {
-                            VALIDATION_VALID_COLOR
+                            successStatusColor()
                         } else {
                             MaterialTheme.colorScheme.error
                         },
@@ -295,7 +295,7 @@ private fun SignatureDetailsCard(
                     if (verdict.isValid) {
                         StatusChip(
                             text = stringResource(R.string.signature_status_valid),
-                            color = VALIDATION_VALID_COLOR,
+                            color = successStatusColor(),
                         )
                     } else {
                         StatusChip(
@@ -420,4 +420,3 @@ private const val PDF_MIME_TYPE = "application/pdf"
 private val VALIDATION_CARD_PADDING = 20.dp
 private val VALIDATION_CARD_SPACING = 12.dp
 private val VALIDATION_CARD_ELEVATION = 2.dp
-private val VALIDATION_VALID_COLOR = Color(0xFF168447)
