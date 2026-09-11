@@ -145,6 +145,13 @@ internal class CcidUsbSession(
                 val holderName = CertificateHolderName.fromCertificate(result.certificate)
                 CardPhotoStore.savePhoto(photo, holderName, NativeCore.readCardDocumentNumber())
             }
+        } else if (result is NativeContactlessOpenResult.ActivationRequired) {
+            contactlessSessionActive = true
+            sessionMaterial.cacheAuthenticationCertificate(result.certificate)
+            NativeCore.readCardFacePhoto()?.let { photo ->
+                val holderName = CertificateHolderName.fromCertificate(result.certificate)
+                CardPhotoStore.savePhoto(photo, holderName, NativeCore.readCardDocumentNumber())
+            }
         }
         return result
     }
@@ -800,6 +807,10 @@ internal class CcidUsbSessionOpener(
 ) {
     fun open(device: UsbDevice): CcidSessionOpenResult {
         val candidates = CcidUsbEndpointFinder.findAll(device)
+        AppTrace.ccidUsbSurvey(
+            interfaceCount = device.interfaceCount,
+            ccidCount = candidates.size,
+        )
         if (candidates.isEmpty()) {
             AppTrace.ccidEndpointsMissing()
             return CcidSessionOpenResult.TransportError
@@ -819,7 +830,7 @@ internal class CcidUsbSessionOpener(
                         AppTrace.ccidOpenFailed()
                         return firstFailure ?: CcidSessionOpenResult.TransportError
                     }
-            when (val attempt = connection.openClaimed(endpoints)) {
+            when (val attempt = connection.openClaimed(endpoints, device)) {
                 is CcidSessionOpenResult.Ready,
                 is CcidSessionOpenResult.AccessNumberRequired,
                 is CcidSessionOpenResult.ActivationRequired,
@@ -843,7 +854,10 @@ internal class CcidUsbSessionOpener(
         return firstFailure ?: CcidSessionOpenResult.NoCard
     }
 
-    private fun UsbDeviceConnection.openClaimed(endpoints: CcidUsbEndpoints): CcidSessionOpenResult {
+    private fun UsbDeviceConnection.openClaimed(
+        endpoints: CcidUsbEndpoints,
+        device: UsbDevice,
+    ): CcidSessionOpenResult {
         var ownsConnection = true
         var isClaimed = false
         return try {
@@ -856,6 +870,14 @@ internal class CcidUsbSessionOpener(
             AppTrace.ccidDescriptorAccepted(
                 level = descriptor.exchangeLevel,
                 maximumMessageLength = descriptor.maximumMessageLength,
+                interfaceNumber = endpoints.usbInterface.id,
+                vendorId = device.vendorId,
+                productId = device.productId,
+            )
+            AppTrace.ccidEndpoints(
+                interfaceNumber = endpoints.usbInterface.id,
+                bulkInMaxPacketSize = endpoints.bulkIn.maxPacketSize,
+                bulkOutMaxPacketSize = endpoints.bulkOut.maxPacketSize,
             )
 
             isClaimed = claimInterface(endpoints.usbInterface, true)
@@ -906,7 +928,7 @@ internal class CcidUsbSessionOpener(
                 }
             }
         } catch (error: CcidDescriptorException) {
-            AppTrace.ccidDescriptorRejected(error.kind)
+            AppTrace.ccidDescriptorRejected(error.kind, detail = error.detail)
             CcidSessionOpenResult.TransportError
         } catch (_: SecurityException) {
             AppTrace.ccidSecurityFailure()

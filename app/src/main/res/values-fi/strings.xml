@@ -2,7 +2,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="section_document">Asiakirja</string>
     <string name="read_identity_card">Lue kortti</string>
-    <string name="pin1_optional" tools:ignore="Typos">PIN1 (valinnainen)</string>
+    <string name="pin1_optional">PIN 1 (valinnainen)</string>
     <string name="usb_reader">USB-lukija</string>
     <string name="not_connected">Ei yhteyttä</string>
     <string name="permission_required">Lupa vaaditaan</string>
@@ -21,6 +21,7 @@
     <string name="unlock">Avaa</string>
     <string name="wrong_can" tools:ignore="Typos">Väärä CAN</string>
     <string name="access_number_required" tools:ignore="Typos">CAN vaaditaan</string>
+    <string name="can_rejected_cooldown" tools:ignore="Typos,PluralsCandidate">Kortti hylkäsi CAN-koodin. Yritä uudelleen %1$d sekunnin kuluttua tai anna oikea CAN.</string>
     <string name="card_primed">Kortti tallennettu napautusta varten</string>
     <string name="forget">Unohda</string>
     <string name="present">Paikalla</string>
@@ -90,4 +91,23 @@
     <string name="recovery_guidance_pin1">PIN 1 on palautettava\nPalauta PIN 1 PUK-koodilla.</string>
     <string name="recovery_guidance_pin2">PIN 2 on palautettava\nPalauta PIN 2 PUK-koodilla.</string>
     <string name="unrecoverable_card">PUK on lukittu\nTätä korttia ei voi palauttaa ohjelmistolla.</string>
+    <string name="diagnostics">Diagnostiikka</string>
+    <string name="refresh">Päivitä</string>
+    <string name="copy_report">Kopioi raportti</string>
+    <string name="report_copied">Diagnostiikkaraportti kopioitu leikepöydälle</string>
+    <string name="clear_logs">Tyhjennä lokit</string>
+    <string name="card_not_activated">Korttia ei ole aktivoitu</string>
+    <string name="card_activation_needed_description">Kortti vaatii käyttöönoton ennen tunnistautumista tai sähköistä allekirjoitusta.</string>
+    <string name="show_pin">Näytä tunnusluku</string>
+    <string name="hide_pin">Piilota tunnusluku</string>
+    <string name="pins_do_not_match">Tunnusluvut eivät täsmää</string>
+    <string name="pin1_length_hint">4–12 numeroa</string>
+    <string name="pin2_length_hint">6–12 numeroa</string>
+    <string name="activation_code_length_hint" tools:ignore="PluralsCandidate">%1$d numeroa</string>
+    <string name="half_activated_pin1_needed">PIN 2 on jo aktivoitu. Syötä aktivointitunnusluku aktivoidaksesi PIN 1.</string>
+    <string name="half_activated_pin2_needed">PIN 1 on jo aktivoitu. Syötä aktivointitunnusluku aktivoidaksesi PIN 2.</string>
+    <string name="confirm_activation_dialog_msg_both">Olet ottamassa käyttöön sekä PIN 1- että PIN 2 -tunnusluvut. Ne tulevat voimaan heti. Varmista, että olet kirjoittanut ne muistiin.</string>
+    <string name="confirm_activation_dialog_msg_single">Olet aktivoimassa puuttuvan tunnusluvun (%1$s). Se tulee voimaan heti. Varmista, että olet kirjoittanut sen muistiin.</string>
+    <string name="pin1_section_title">Perustunnusluku (PIN 1)</string>
+    <string name="pin2_section_title">Allekirjoitus-PIN (PIN 2)</string>
 </resources>

@@ -156,6 +156,7 @@ internal class CcidFunctionalDescriptor private constructor(
                 throw descriptorError(
                     CcidDescriptorErrorKind.INVALID_APDU_CONFIGURATION,
                     "CCID declares conflicting automatic parameter handling",
+                    featuresDetail(features, declaredMessageLength = -1),
                 )
             }
             if (
@@ -165,6 +166,7 @@ internal class CcidFunctionalDescriptor private constructor(
                 throw descriptorError(
                     CcidDescriptorErrorKind.INVALID_APDU_CONFIGURATION,
                     "CCID APDU-level parameter handling is invalid",
+                    featuresDetail(features, declaredMessageLength = -1),
                 )
             }
 
@@ -174,6 +176,7 @@ internal class CcidFunctionalDescriptor private constructor(
                 throw descriptorError(
                     CcidDescriptorErrorKind.MESSAGE_LENGTH_OUT_OF_RANGE,
                     "CCID maximum message length exceeds the specification bound",
+                    featuresDetail(features, declaredMessageLength),
                 )
             }
             val minimumMessageLength =
@@ -188,6 +191,7 @@ internal class CcidFunctionalDescriptor private constructor(
                 throw descriptorError(
                     CcidDescriptorErrorKind.TRANSFER_MESSAGE_BOUND_TOO_SMALL,
                     "CCID maximum message length cannot carry one transfer block",
+                    featuresDetail(features, declaredMessageLength),
                 )
             }
 
@@ -195,6 +199,22 @@ internal class CcidFunctionalDescriptor private constructor(
                 exchangeLevel = exchangeLevel,
                 maximumMessageLength = declaredMessageLength.toInt(),
             )
+        }
+
+        /**
+         * Feature flags and message length as plain integers for the
+         * trace. A negative length omits it (not yet parsed at flag
+         * checks).
+         */
+        private fun featuresDetail(
+            features: Long,
+            declaredMessageLength: Long,
+        ): String {
+            var detail = "features=" + features.toString(HEX_RADIX)
+            if (declaredMessageLength >= 0) {
+                detail += " max-message=" + declaredMessageLength
+            }
+            return detail
         }
 
         private fun ByteArray.unsignedByte(offset: Int): Int = this[offset].toInt() and CcidWire.BYTE_MAX
@@ -211,8 +231,10 @@ internal class CcidFunctionalDescriptor private constructor(
         private fun descriptorError(
             kind: CcidDescriptorErrorKind,
             message: String,
-        ): CcidDescriptorException = CcidDescriptorException(kind, message)
+            detail: String = "",
+        ): CcidDescriptorException = CcidDescriptorException(kind, message, detail = detail)
 
+        private const val HEX_RADIX = 16
         private const val USB_DESCRIPTOR_HEADER_LENGTH = 2
         private const val DESCRIPTOR_TYPE_OFFSET = 1
 
@@ -266,4 +288,9 @@ internal enum class CcidDescriptorErrorKind {
 internal class CcidDescriptorException(
     val kind: CcidDescriptorErrorKind,
     message: String,
+    /**
+     * Integer-only framing detail (feature flags, lengths) — never
+     * descriptor strings, which may carry serial numbers.
+     */
+    val detail: String = "",
 ) : Exception(message)

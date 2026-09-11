@@ -108,9 +108,16 @@ internal class CcidCardActivator(
                             }
                         }
 
-                        is CcidTimeExtension,
-                        is CcidSlotStatus,
-                        -> {
+                        is CcidTimeExtension -> {
+                            AppTrace.ccidTimeExtension(
+                                count = 1,
+                                multiplier = response.multiplier,
+                            )
+                            CcidActivationResult.TRANSPORT_ERROR
+                        }
+
+                        is CcidSlotStatus -> {
+                            AppTrace.ccidCardState(response.cardStatus)
                             CcidActivationResult.TRANSPORT_ERROR
                         }
                     }
@@ -131,6 +138,11 @@ internal class CcidCardActivator(
                 response.chainParameter != CcidChainParameter.COMPLETE ||
                 response.payloadLength > MAXIMUM_ATR_LENGTH
             ) {
+                AppTrace.ccidPowerResult(
+                    cardStatus = response.cardStatus,
+                    chainParameter = response.chainParameter.toString(),
+                    payloadLength = response.payloadLength,
+                )
                 CcidActivationResult.CARD_ERROR
             } else {
                 val atr = response.copyPayload()
@@ -141,6 +153,7 @@ internal class CcidCardActivator(
                         length = atr.size,
                         validation = validation,
                         isSupported = result == CcidActivationResult.READY,
+                        atrHex = atr.toHex(),
                     )
                     result
                 } finally {
@@ -184,3 +197,16 @@ internal class CcidCardActivator(
         const val MAXIMUM_ATR_LENGTH = 33
     }
 }
+
+/** Lowercase hex of public reset bytes; the ATR identifies the card model. */
+private fun ByteArray.toHex(): String =
+    joinToString("") {
+        it
+            .toInt()
+            .and(CcidWire.BYTE_MAX)
+            .toString(HEX_RADIX)
+            .padStart(BYTE_HEX_DIGITS, '0')
+    }
+
+private const val HEX_RADIX = 16
+private const val BYTE_HEX_DIGITS = 2

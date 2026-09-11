@@ -2,6 +2,7 @@ package fi.refineid.android.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -101,6 +102,31 @@ internal class MainScreenTest {
             .performScrollTo()
             .assertIsDisplayed()
             .assertIsEnabled()
+    }
+
+    @Test
+    fun activationRequiredReaderHidesCardActionsAndShowsBanner() {
+        show(
+            snapshot =
+                UsbReaderSnapshot(
+                    status = ReaderConnectionStatus.ACTIVATION_REQUIRED,
+                    cardPresence = CardPresence.PRESENT,
+                    holderName = SYNTHETIC_HOLDER_NAME,
+                ),
+            browserCardService = INERT_BROWSER_CARD_SERVICE,
+        )
+
+        composeRule
+            .onNodeWithTag(UiAutomationIds.ACTIVATION_BANNER)
+            .assertIsDisplayed()
+
+        composeRule
+            .onNodeWithTag(UiAutomationIds.BROWSER_ACTION)
+            .assertDoesNotExist()
+
+        composeRule
+            .onNodeWithTag(UiAutomationIds.SIGN_ROW)
+            .assertDoesNotExist()
     }
 
     private fun show(

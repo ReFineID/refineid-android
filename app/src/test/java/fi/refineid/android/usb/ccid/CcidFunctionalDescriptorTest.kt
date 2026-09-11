@@ -266,6 +266,24 @@ class CcidFunctionalDescriptorTest {
     }
 
     @Test
+    fun invalidApduConfigurationCarriesFeatureFlags() {
+        val exception =
+            assertThrows(CcidDescriptorException::class.java) {
+                CcidFunctionalDescriptor.parse(
+                    rawDescriptors = descriptors(features = SHORT_APDU_EXCHANGE),
+                    interfaceNumber = TARGET_INTERFACE,
+                    alternateSetting = TARGET_ALTERNATE_SETTING,
+                )
+            }
+
+        assertEquals(CcidDescriptorErrorKind.INVALID_APDU_CONFIGURATION, exception.kind)
+        assertEquals(
+            "features=" + SHORT_APDU_EXCHANGE.toString(HEX_RADIX),
+            exception.detail,
+        )
+    }
+
+    @Test
     fun rejectsMessageBoundBelowOneShortApdu() {
         assertDescriptorError(CcidDescriptorErrorKind.TRANSFER_MESSAGE_BOUND_TOO_SMALL) {
             CcidFunctionalDescriptor.parse(
@@ -372,6 +390,7 @@ class CcidFunctionalDescriptorTest {
         const val AUTOMATIC_PARAMETER_NEGOTIATION = 0x00000040L
         const val AUTOMATIC_PPS = 0x00000080L
         const val TPDU_EXCHANGE = 0x00010000L
+        const val HEX_RADIX = 16
         const val SHORT_APDU_EXCHANGE = 0x00020000L
         const val SHORT_AND_EXTENDED_APDU_EXCHANGE = 0x00040000L
         const val CHARACTER_EXCHANGE = 0L

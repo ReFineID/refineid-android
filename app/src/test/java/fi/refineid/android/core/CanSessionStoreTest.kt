@@ -13,7 +13,7 @@ import org.junit.Test
 class CanSessionStoreTest {
     @Before
     fun setUp() {
-        CanSessionStore.drop()
+        CanSessionStore.clearForTesting()
     }
 
     @Test

@@ -27,10 +27,11 @@ use card_certificate::{
 };
 use card_transport::{AndroidCardTransport, CardExchangeLevel};
 use contactless::{
-    contactless_authenticate_and_sign, contactless_authenticate_and_sign_on_session,
-    contactless_close, contactless_connect, contactless_open, contactless_probe_pin2,
-    contactless_qualified_sign, contactless_read_face_photo,
-    contactless_read_face_photo_on_session, contactless_read_qualified_certificate,
+    ContactlessOpenOutcome, contactless_authenticate_and_sign,
+    contactless_authenticate_and_sign_on_session, contactless_close, contactless_connect,
+    contactless_open, contactless_probe_pin2, contactless_qualified_sign,
+    contactless_read_face_photo, contactless_read_face_photo_on_session,
+    contactless_read_qualified_certificate,
 };
 use jni::objects::{JByteArray, JClass, JObject};
 use jni::sys::jint;
@@ -2029,11 +2030,9 @@ fn encode_certificate_reply(result: Result<CardCertificate, CertificateReadFailu
 /// `[CERTIFICATE_SUCCEEDED, preflight-reply length, preflight reply,
 /// certificate reply]` on success, or one certificate-vocabulary failure
 /// byte. Kotlin splits the wrapper and reuses both strict sub-decoders.
-fn encode_contactless_open_reply(
-    result: Result<(CardCertificate, Pin1Preflight), CertificateReadFailure>,
-) -> Vec<u8> {
-    match result {
-        Ok((certificate, preflight)) => {
+fn encode_contactless_open_reply(outcome: ContactlessOpenOutcome) -> Vec<u8> {
+    match outcome {
+        ContactlessOpenOutcome::Ready(certificate, preflight) => {
             let mut preflight_reply = encode_pin1_preflight_reply(Ok(preflight));
             let mut certificate_reply = encode_certificate_reply(Ok(certificate));
             let mut reply = Vec::with_capacity(
@@ -2045,7 +2044,12 @@ fn encode_contactless_open_reply(
             reply.append(&mut certificate_reply);
             reply
         }
-        Err(failure) => encode_certificate_reply(Err(failure)),
+        ContactlessOpenOutcome::ActivationRequired(certificate) => {
+            let mut certificate_reply = encode_certificate_reply(Ok(certificate));
+            certificate_reply[0] = CERTIFICATE_ACTIVATION_REQUIRED;
+            certificate_reply
+        }
+        ContactlessOpenOutcome::Failure(failure) => encode_certificate_reply(Err(failure)),
     }
 }
 
@@ -2252,9 +2256,10 @@ mod tests {
         CARD_ACCESS_BRIDGE_ERROR, CARD_ACCESS_CARD_UNAVAILABLE, CARD_ACCESS_INVALID,
         CARD_ACCESS_REJECTED, CARD_ACCESS_REPLY_LENGTH, CARD_ACCESS_SUCCEEDED,
         CARD_ACCESS_TRANSPORT_ERROR, CARD_OPERATION_CARD_UNAVAILABLE, CARD_OPERATION_REJECTED,
-        CARD_OPERATION_SUCCEEDED, CARD_OPERATION_TRANSPORT_ERROR, CERTIFICATE_CARD_UNAVAILABLE,
-        CERTIFICATE_INVALID, CERTIFICATE_PACE_REJECTED, CERTIFICATE_REPLY_HEADER_LENGTH,
-        CERTIFICATE_SUCCEEDED, EXCHANGE_LEVEL_APDU, EXCHANGE_LEVEL_T0_TPDU, KEY_PROFILE_RSA_2048,
+        CARD_OPERATION_SUCCEEDED, CARD_OPERATION_TRANSPORT_ERROR, CERTIFICATE_ACTIVATION_REQUIRED,
+        CERTIFICATE_CARD_UNAVAILABLE, CERTIFICATE_INVALID, CERTIFICATE_PACE_REJECTED,
+        CERTIFICATE_REPLY_HEADER_LENGTH, CERTIFICATE_SUCCEEDED, ContactlessOpenOutcome,
+        EXCHANGE_LEVEL_APDU, EXCHANGE_LEVEL_T0_TPDU, KEY_PROFILE_ECDSA_P256, KEY_PROFILE_RSA_2048,
         NO_RETRY_COUNT, PIN_REFERENCE_CITIZEN, PIN1_PREFLIGHT_BRIDGE_ERROR,
         PIN1_PREFLIGHT_CARD_UNAVAILABLE, PIN1_PREFLIGHT_REPLY_LENGTH,
         PIN1_PREFLIGHT_REPLY_LENGTH_BYTE, PIN1_PREFLIGHT_SUCCEEDED, PIN1_STATE_REMAINING,
@@ -2649,7 +2654,7 @@ mod tests {
     #[test]
     fn encodes_contactless_open_as_nested_established_replies() {
         const SYNTHETIC_DER: &[u8] = &[SYNTHETIC_DER_SEQUENCE_TAG, SYNTHETIC_DER_EMPTY_LENGTH];
-        let success = encode_contactless_open_reply(Ok((
+        let success = encode_contactless_open_reply(ContactlessOpenOutcome::Ready(
             CardCertificate {
                 profile: CardKeyProfile::Rsa2048,
                 der: SYNTHETIC_DER.to_vec(),
@@ -2659,7 +2664,7 @@ mod tests {
                 state: Pin1State::Remaining(SYNTHETIC_PIN_RETRY_COUNT),
                 consumer_authentication_permitted: true,
             },
-        )));
+        ));
         assert_eq!(
             success,
             [
@@ -2678,12 +2683,30 @@ mod tests {
             ]
             .concat()
         );
+        let activation_required = encode_contactless_open_reply(
+            ContactlessOpenOutcome::ActivationRequired(CardCertificate {
+                profile: CardKeyProfile::EcdsaP256,
+                der: SYNTHETIC_DER.to_vec(),
+            }),
+        );
         assert_eq!(
-            encode_contactless_open_reply(Err(CertificateReadFailure::PaceRejected)),
+            activation_required,
+            [
+                &[CERTIFICATE_ACTIVATION_REQUIRED, KEY_PROFILE_ECDSA_P256],
+                SYNTHETIC_DER,
+            ]
+            .concat()
+        );
+        assert_eq!(
+            encode_contactless_open_reply(ContactlessOpenOutcome::Failure(
+                CertificateReadFailure::PaceRejected
+            )),
             vec![CERTIFICATE_PACE_REJECTED]
         );
         assert_eq!(
-            encode_contactless_open_reply(Err(CertificateReadFailure::CardUnavailable)),
+            encode_contactless_open_reply(ContactlessOpenOutcome::Failure(
+                CertificateReadFailure::CardUnavailable
+            )),
             vec![CERTIFICATE_CARD_UNAVAILABLE]
         );
     }

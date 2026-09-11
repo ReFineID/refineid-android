@@ -5,6 +5,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
+import fi.refineid.android.diagnostics.AppTrace
 
 internal data class CcidUsbEndpoints(
     val usbInterface: UsbInterface,
@@ -76,18 +77,27 @@ internal class AndroidCcidBulkIo(
     private fun transfer(
         endpoint: UsbEndpoint,
         frame: ByteArray,
-    ): Int =
-        try {
-            connection.bulkTransfer(
-                endpoint,
-                frame,
-                0,
-                frame.size,
-                USB_TRANSFER_TIMEOUT_MILLISECONDS,
-            )
-        } catch (_: SecurityException) {
-            -1
-        }
+    ): Int {
+        val transferred =
+            try {
+                connection.bulkTransfer(
+                    endpoint,
+                    frame,
+                    0,
+                    frame.size,
+                    USB_TRANSFER_TIMEOUT_MILLISECONDS,
+                )
+            } catch (_: SecurityException) {
+                -1
+            }
+        // Counts only — never frame bytes, which may carry credentials.
+        AppTrace.ccidBulkTransfer(
+            direction = if (endpoint.direction == UsbConstants.USB_DIR_IN) "in" else "out",
+            requested = frame.size,
+            transferred = transferred,
+        )
+        return transferred
+    }
 
     private companion object {
         const val USB_TRANSFER_TIMEOUT_MILLISECONDS = 2_000

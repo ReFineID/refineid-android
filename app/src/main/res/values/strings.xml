@@ -3,7 +3,7 @@
     <string name="app_name" translatable="false">RefineID</string>
     <string name="section_document">Document</string>
     <string name="read_identity_card">Read card</string>
-    <string name="pin1_optional" tools:ignore="Typos">PIN1 (optional)</string>
+    <string name="pin1_optional">PIN 1 (optional)</string>
     <string name="usb_reader">USB reader</string>
     <string name="not_connected">Not connected</string>
     <string name="permission_required">Permission required</string>
@@ -24,12 +24,13 @@
     <string name="unlock">Unlock</string>
     <string name="wrong_can" tools:ignore="Typos">Wrong CAN</string>
     <string name="access_number_required" tools:ignore="Typos">CAN required</string>
+    <string name="can_rejected_cooldown" tools:ignore="Typos,PluralsCandidate">CAN was rejected by the card. Try again in %1$d seconds or enter the correct CAN.</string>
     <string name="card_primed">Card saved for tap</string>
     <string name="forget">Forget</string>
     <string name="present">Present</string>
     <string name="not_present">Not present</string>
     <string name="authentication">Authentication</string>
-    <string name="pin1" translatable="false">PIN1</string>
+    <string name="pin1" translatable="false">PIN 1</string>
     <string name="sign">Sign</string>
     <string name="verify">Verify</string>
     <string name="back">Back</string>
@@ -68,6 +69,13 @@
     <string name="reset_pin1">Reset PIN 1</string>
     <string name="reset_pin2">Reset PIN 2</string>
     <string name="activate_card">Activate Card</string>
+    <string name="diagnostics">Diagnostics</string>
+    <string name="refresh">Refresh</string>
+    <string name="copy_report">Copy report</string>
+    <string name="report_copied">Diagnostic report copied to clipboard</string>
+    <string name="clear_logs">Clear logs</string>
+    <string name="card_not_activated">Card not activated</string>
+    <string name="card_activation_needed_description">This card must be activated before it can be used for authentication or electronic signatures.</string>
     <string name="card_activation">Card activation</string>
     <string name="current_pin1">Current PIN 1</string>
     <string name="current_pin2">Current PIN 2</string>
@@ -94,4 +102,16 @@
     <string name="recovery_guidance_pin1">PIN 1 requires recovery\nReset PIN 1 with your PUK.</string>
     <string name="recovery_guidance_pin2">PIN 2 requires recovery\nReset PIN 2 with your PUK.</string>
     <string name="unrecoverable_card">The PUK is blocked\nThis card cannot be recovered with software.</string>
+    <string name="show_pin">Show PIN</string>
+    <string name="hide_pin">Hide PIN</string>
+    <string name="pins_do_not_match">PINs do not match</string>
+    <string name="pin1_length_hint">4–12 digits</string>
+    <string name="pin2_length_hint">6–12 digits</string>
+    <string name="activation_code_length_hint" tools:ignore="PluralsCandidate">%1$d digits</string>
+    <string name="half_activated_pin1_needed">PIN 2 is already activated. Enter the activation PIN to activate PIN 1.</string>
+    <string name="half_activated_pin2_needed">PIN 1 is already activated. Enter the activation PIN to activate PIN 2.</string>
+    <string name="confirm_activation_dialog_msg_both">You are activating both PIN 1 and PIN 2. They will take effect immediately. Please ensure you have memorized or noted them down.</string>
+    <string name="confirm_activation_dialog_msg_single">You are activating the missing %1$s. It will take effect immediately. Please ensure you have memorized or noted it down.</string>
+    <string name="pin1_section_title">Basic PIN (PIN 1)</string>
+    <string name="pin2_section_title">Signature PIN (PIN 2)</string>
 </resources>

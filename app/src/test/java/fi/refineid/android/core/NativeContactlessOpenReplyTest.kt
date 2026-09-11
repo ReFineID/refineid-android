@@ -27,6 +27,20 @@ class NativeContactlessOpenReplyTest {
     }
 
     @Test
+    fun decodesActivationRequiredWithCertificate() {
+        val reply =
+            byteArrayOf(
+                CERTIFICATE_ACTIVATION_REQUIRED,
+                KEY_PROFILE_RSA_3072,
+                *SYNTHETIC_DER,
+            )
+        val result = NativeContactlessOpenReply.decode(reply) as NativeContactlessOpenResult.ActivationRequired
+        assertEquals(NativeCardKeyProfile.RSA_3072, result.certificate.keyProfile)
+        assertArrayEquals(SYNTHETIC_DER, result.certificate.copyDer())
+        result.certificate.close()
+    }
+
+    @Test
     fun decodesEveryCertificateVocabularyFailure() {
         val expected =
             mapOf(

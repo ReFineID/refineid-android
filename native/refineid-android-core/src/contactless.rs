@@ -28,6 +28,7 @@ use crate::card_management::{
     CardManagementFailure, activate_card, change_pin1, change_pin2, probe_credential_health,
     unblock_pin1, unblock_pin2,
 };
+use crate::card_transport::CardExchangeLevel;
 use crate::card_transport::{AndroidCardTransport, SingleBlockExchange};
 use crate::pin1_status::{Pin1Preflight, Pin1PreflightFailure, probe_pin1_preflight};
 use crate::pin2_status::{Pin2Preflight, Pin2PreflightFailure, probe_pin2_preflight};
@@ -178,10 +179,13 @@ pub(crate) fn set_last_read_document_number(document_number: Option<String>) {
     }
 }
 
-fn check_activation_needs<T: CardTransport>(
-    transport: &mut T,
-    profile: CardKeyProfile,
-) -> Result<(), CertificateReadFailure> {
+pub(crate) enum ContactlessOpenOutcome {
+    Ready(CardCertificate, Pin1Preflight),
+    ActivationRequired(CardCertificate),
+    Failure(CertificateReadFailure),
+}
+
+fn is_activation_required<T: CardTransport>(transport: &mut T, profile: CardKeyProfile) -> bool {
     use refineid_auth::{ActivationScheme, PinManageOps};
     let scheme = match profile {
         CardKeyProfile::Rsa2048 | CardKeyProfile::Rsa3072 => {
@@ -193,11 +197,10 @@ fn check_activation_needs<T: CardTransport>(
     };
     if let Some(scheme) = scheme
         && let Ok(needs) = transport.activation_needs(scheme)
-        && needs.any()
     {
-        return Err(CertificateReadFailure::ActivationRequired);
+        return needs.any();
     }
-    Ok(())
+    false
 }
 
 /// One PACE handshake, then the PKCS#15 selection, authentication
@@ -207,28 +210,40 @@ fn check_activation_needs<T: CardTransport>(
 pub(crate) fn contactless_open<Exchange: SingleBlockExchange>(
     transport: AndroidCardTransport<Exchange>,
     can_bytes: Vec<u8>,
-) -> (
-    Result<(CardCertificate, Pin1Preflight), CertificateReadFailure>,
-    Exchange,
-) {
-    let mut secure = match open_secure_channel(transport, can_bytes) {
-        Ok(secure) => secure,
-        Err((exchange, failure)) => {
-            return (Err(certificate_channel_failure(failure)), exchange);
+) -> (ContactlessOpenOutcome, Exchange) {
+    let (outcome, transport) = match open_secure_channel(transport, can_bytes) {
+        Ok(mut secure) => {
+            let outcome = match secure.select_pkcs15_application().map_err(map_pkcs15_error) {
+                Err(failure) => ContactlessOpenOutcome::Failure(failure),
+                Ok(()) => match read_authentication_certificate(&mut secure) {
+                    Err(failure) => ContactlessOpenOutcome::Failure(failure),
+                    Ok(certificate) => {
+                        let _ = secure.select_pkcs15_application();
+                        read_emrtd_data_from_secure_channel(&mut secure);
+                        let _ = secure.select_pkcs15_application();
+                        if is_activation_required(&mut secure, certificate.profile) {
+                            ContactlessOpenOutcome::ActivationRequired(certificate)
+                        } else {
+                            match probe_pin1_preflight(&mut secure) {
+                                Ok(preflight) => {
+                                    ContactlessOpenOutcome::Ready(certificate, preflight)
+                                }
+                                Err(failure) => {
+                                    ContactlessOpenOutcome::Failure(open_preflight_failure(failure))
+                                }
+                            }
+                        }
+                    }
+                },
+            };
+            (outcome, secure.into_inner())
         }
+        Err((exchange, failure)) => (
+            ContactlessOpenOutcome::Failure(certificate_channel_failure(failure)),
+            AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu),
+        ),
     };
-
-    let result = secure
-        .select_pkcs15_application()
-        .map_err(map_pkcs15_error)
-        .and_then(|()| read_authentication_certificate(&mut secure))
-        .and_then(|certificate| {
-            check_activation_needs(&mut secure, certificate.profile)?;
-            probe_pin1_preflight(&mut secure)
-                .map(|preflight| (certificate, preflight))
-                .map_err(open_preflight_failure)
-        });
-    (result, secure.into_inner().into_exchange())
+    (outcome, transport.into_exchange())
 }
 
 /// PACE, then secure messaging, then the one-shot preflight, VERIFY,
@@ -272,33 +287,52 @@ pub(crate) fn contactless_authenticate_and_sign<Exchange: SingleBlockExchange>(
 pub(crate) fn contactless_connect<Exchange: SingleBlockExchange>(
     transport: AndroidCardTransport<Exchange>,
     can_bytes: Vec<u8>,
-) -> (
-    Result<(CardCertificate, Pin1Preflight), CertificateReadFailure>,
-    Exchange,
-) {
+) -> (ContactlessOpenOutcome, Exchange) {
     // A fresh connect supersedes any session a prior card left behind.
     contactless_close();
-    let mut secure = match open_secure_channel(transport, can_bytes) {
-        Ok(secure) => secure,
-        Err((exchange, failure)) => {
-            return (Err(certificate_channel_failure(failure)), exchange);
+    let (outcome, transport, session) = match open_secure_channel(transport, can_bytes) {
+        Ok(mut secure) => {
+            let outcome = match secure.select_pkcs15_application().map_err(map_pkcs15_error) {
+                Err(failure) => ContactlessOpenOutcome::Failure(failure),
+                Ok(()) => match read_authentication_certificate(&mut secure) {
+                    Err(failure) => ContactlessOpenOutcome::Failure(failure),
+                    Ok(certificate) => {
+                        let _ = secure.select_pkcs15_application();
+                        read_emrtd_data_from_secure_channel(&mut secure);
+                        let _ = secure.select_pkcs15_application();
+                        if is_activation_required(&mut secure, certificate.profile) {
+                            ContactlessOpenOutcome::ActivationRequired(certificate)
+                        } else {
+                            match probe_pin1_preflight(&mut secure) {
+                                Ok(preflight) => {
+                                    ContactlessOpenOutcome::Ready(certificate, preflight)
+                                }
+                                Err(failure) => {
+                                    ContactlessOpenOutcome::Failure(open_preflight_failure(failure))
+                                }
+                            }
+                        }
+                    }
+                },
+            };
+            let (transport, session) = secure.into_parts();
+            (outcome, transport, Some(session))
         }
+        Err((exchange, failure)) => (
+            ContactlessOpenOutcome::Failure(certificate_channel_failure(failure)),
+            AndroidCardTransport::new(exchange, CardExchangeLevel::Apdu),
+            None,
+        ),
     };
-    let result = secure
-        .select_pkcs15_application()
-        .map_err(map_pkcs15_error)
-        .and_then(|()| read_authentication_certificate(&mut secure))
-        .and_then(|certificate| {
-            check_activation_needs(&mut secure, certificate.profile)?;
-            probe_pin1_preflight(&mut secure)
-                .map(|preflight| (certificate, preflight))
-                .map_err(open_preflight_failure)
-        });
-    let (transport, session) = secure.into_parts();
-    if result.is_ok() || matches!(result, Err(CertificateReadFailure::ActivationRequired)) {
+
+    if matches!(
+        outcome,
+        ContactlessOpenOutcome::Ready(_, _) | ContactlessOpenOutcome::ActivationRequired(_)
+    ) && let Some(session) = session
+    {
         store_held_session(session);
     }
-    (result, transport.into_exchange())
+    (outcome, transport.into_exchange())
 }
 
 /// The authentication signature on an already-open session: no PACE, only

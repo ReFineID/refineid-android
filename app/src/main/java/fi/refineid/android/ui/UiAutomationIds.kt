@@ -62,6 +62,18 @@ internal object UiAutomationIds {
     const val EXTERNAL_KEY_PIN1_FIELD = "externalKeyPin1Field"
     const val EXTERNAL_KEY_CANCEL_ACTION = "externalKeyCancelAction"
     const val EXTERNAL_KEY_AUTHENTICATE_ACTION = "externalKeyAuthenticateAction"
+    const val DIAGNOSTICS_BUTTON = "diagnosticsButton"
+    const val DIAGNOSTICS_SCREEN = "diagnosticsScreen"
+    const val COPY_REPORT_ACTION = "copyReportAction"
+    const val CLEAR_LOGS_ACTION = "clearLogsAction"
+    const val ACTIVATION_BANNER = "activationBanner"
+    const val ACTIVATION_BUTTON = "activationButton"
+    const val ACTIVATION_CODE_FIELD = "managementActivationCode"
+    const val ACTIVATION_NEW_PIN1_FIELD = "managementNewPin1"
+    const val ACTIVATION_NEW_PIN1_REPEAT_FIELD = "managementNewPin1Repeat"
+    const val ACTIVATION_NEW_PIN2_FIELD = "managementNewPin2"
+    const val ACTIVATION_NEW_PIN2_REPEAT_FIELD = "managementNewPin2Repeat"
+    const val ACTIVATION_SUBMIT_ACTION = "managementActivate"
 
     fun timestampAddressField(index: Int): String = TIMESTAMP_ADDRESS_FIELD_PREFIX + index
 

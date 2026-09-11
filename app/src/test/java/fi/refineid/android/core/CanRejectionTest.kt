@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber")
+
 // Copyright 2026 Petri Koistinen. Licensed under the Apache License, Version 2.0.
 
 package fi.refineid.android.core
@@ -13,7 +15,7 @@ import org.junit.Test
 class CanRejectionTest {
     @Before
     fun setUp() {
-        CanSessionStore.drop()
+        CanSessionStore.clearForTesting()
     }
 
     @Test
@@ -25,12 +27,13 @@ class CanRejectionTest {
         // Simulate wrong CAN rejection event
         val status = NfcReaderStatus.WRONG_CAN
         if (status == NfcReaderStatus.WRONG_CAN) {
-            CanSessionStore.drop()
+            CanSessionStore.recordRejected("123456")
         }
 
         assertFalse(CanSessionStore.hasCan)
         assertNull(CanSessionStore.currentCan)
         assertNull(CanSessionStore.canBytes())
+        assertTrue(CanSessionStore.isBlocked("123456"))
     }
 
     @Test
@@ -40,11 +43,12 @@ class CanRejectionTest {
 
         val status = fi.refineid.android.usb.ReaderConnectionStatus.WRONG_ACCESS_NUMBER
         if (status == fi.refineid.android.usb.ReaderConnectionStatus.WRONG_ACCESS_NUMBER) {
-            CanSessionStore.drop()
+            CanSessionStore.recordRejected("654321")
         }
 
         assertFalse(CanSessionStore.hasCan)
         assertNull(CanSessionStore.currentCan)
+        assertTrue(CanSessionStore.isBlocked("654321"))
     }
 
     @Test
@@ -54,10 +58,43 @@ class CanRejectionTest {
 
         val failure = NativeCertificateReadFailure.PACE_REJECTED
         if (failure == NativeCertificateReadFailure.PACE_REJECTED) {
-            CanSessionStore.drop()
+            CanSessionStore.recordRejected("112233")
         }
 
         assertFalse(CanSessionStore.hasCan)
         assertNull(CanSessionStore.currentCan)
+        assertTrue(CanSessionStore.isBlocked("112233"))
+    }
+
+    @Test
+    fun blocklistCooldownBlocksRejectedCanForThreeMinutes() {
+        val baseTime = 1_000_000L
+        CanSessionStore.remember("987654")
+        CanSessionStore.recordRejected("987654", now = baseTime)
+
+        assertFalse(CanSessionStore.hasCan)
+        assertTrue(CanSessionStore.isBlocked("987654", now = baseTime))
+        assertEquals(180, CanSessionStore.remainingCooldownSeconds("987654", now = baseTime))
+
+        // After 60 seconds, remaining cooldown is 120
+        assertEquals(120, CanSessionStore.remainingCooldownSeconds("987654", now = baseTime + 60_000L))
+        assertTrue(CanSessionStore.isBlocked("987654", now = baseTime + 60_000L))
+
+        // Attempting to remember blocked CAN while cooldown is active is ignored
+        CanSessionStore.remember("987654", now = baseTime)
+        assertFalse(CanSessionStore.hasCan)
+
+        // Remembering a different (non-blocked) CAN is permitted immediately
+        CanSessionStore.remember("654321", now = baseTime)
+        assertTrue(CanSessionStore.hasCan)
+        assertEquals("654321", CanSessionStore.currentCan)
+
+        // After 180 seconds (3 minutes), cooldown has expired
+        val expiryTime = baseTime + CanSessionStore.BLOCKLIST_DURATION_MS
+        assertFalse(CanSessionStore.isBlocked("987654", now = expiryTime))
+        assertEquals(0, CanSessionStore.remainingCooldownSeconds("987654", now = expiryTime))
+        CanSessionStore.remember("987654", now = expiryTime)
+        assertTrue(CanSessionStore.hasCan)
+        assertEquals("987654", CanSessionStore.currentCan)
     }
 }

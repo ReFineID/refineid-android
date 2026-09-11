@@ -32,7 +32,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +55,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,12 +72,16 @@ import java.io.FileOutputStream
 internal fun PersonScreen(
     details: PersonCardDetails,
     modifier: Modifier = Modifier,
+    activationRequired: Boolean = false,
+    onActivate: (() -> Unit)? = null,
     onReadPhoto: (((ByteArray?) -> Unit) -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    var currentPhotoBytes by remember(details.holderName) {
-        mutableStateOf(details.photoBytes ?: CardPhotoStore.getPhoto(details.holderName))
-    }
+    var onDemandPhotoBytes by remember(details.holderName) { mutableStateOf<ByteArray?>(null) }
+    val currentPhotoBytes =
+        details.photoBytes
+            ?: onDemandPhotoBytes
+            ?: CardPhotoStore.getPhoto(details.holderName)
     var isLoadingPhoto by remember { mutableStateOf(false) }
 
     val photoBitmap =
@@ -87,9 +96,8 @@ internal fun PersonScreen(
         }
 
     fun requestPhoto(andAction: ((Bitmap, ByteArray) -> Unit)? = null) {
-        val existingBytes = currentPhotoBytes ?: CardPhotoStore.getPhoto(details.holderName)
+        val existingBytes = currentPhotoBytes
         if (existingBytes != null) {
-            currentPhotoBytes = existingBytes
             val bitmap =
                 photoBitmap ?: try {
                     BitmapFactory.decodeByteArray(existingBytes, 0, existingBytes.size)
@@ -107,7 +115,7 @@ internal fun PersonScreen(
             isLoadingPhoto = false
             if (bytes != null && bytes.isNotEmpty()) {
                 CardPhotoStore.savePhoto(bytes, details.holderName, details.documentNumber)
-                currentPhotoBytes = bytes
+                onDemandPhotoBytes = bytes
                 val bitmap =
                     try {
                         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
@@ -125,6 +133,10 @@ internal fun PersonScreen(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(SUBSCREEN_ITEM_SPACING),
     ) {
+        if (activationRequired) {
+            ActivationBanner(onActivate = onActivate)
+        }
+
         // Photo Card
         NavigationGroup {
             Column(
@@ -394,7 +406,7 @@ private const val BADGE_TEXT_Y = 200f
 private const val BADGE_MAX_NAME_CHARS = 16
 private const val PNG_QUALITY = 100
 
-private val CopyIcon: ImageVector by lazy {
+internal val CopyIcon: ImageVector by lazy {
     ImageVector
         .Builder(
             name = "Copy",

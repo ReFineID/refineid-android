@@ -306,7 +306,16 @@ internal object AppTrace {
         commandLength: Int,
         responseLength: Int,
         durationMicros: Long,
+        sw: Int = 0,
+        cla: Int = -1,
+        ins: Int = -1,
+        p1: Int = -1,
+        p2: Int = -1,
     ) = Unit
+
+    fun getTraceLog(): List<String> = emptyList()
+
+    fun clearTraceLog(): Unit = Unit
 
     fun nfcProbeResultDiscarded() = Unit
 
@@ -334,11 +343,17 @@ internal object AppTrace {
 
     fun ccidOpenFailed() = Unit
 
-    fun ccidDescriptorRejected(kind: CcidDescriptorErrorKind) = Unit
+    fun ccidDescriptorRejected(
+        kind: CcidDescriptorErrorKind,
+        detail: String = "",
+    ) = Unit
 
     fun ccidDescriptorAccepted(
         level: CcidExchangeLevel,
         maximumMessageLength: Int,
+        interfaceNumber: Int = -1,
+        vendorId: Int = -1,
+        productId: Int = -1,
     ) = Unit
 
     fun ccidClaimFailed() = Unit
@@ -362,6 +377,7 @@ internal object AppTrace {
         length: Int,
         validation: AtrValidation,
         isSupported: Boolean,
+        atrHex: String = "",
     ) = Unit
 
     fun ccidTimeExtension(
@@ -369,9 +385,52 @@ internal object AppTrace {
         multiplier: Int,
     ) = Unit
 
-    fun ccidResponseRejected(kind: CcidProtocolErrorKind) = Unit
+    fun ccidResponseRejected(
+        kind: CcidProtocolErrorKind,
+        expected: Int = -1,
+        actual: Int = -1,
+        frameLength: Int = -1,
+        detail: String = "",
+    ) = Unit
 
-    fun ccidCommandExchangeFailed(kind: CcidExchangeFailureKind) = Unit
+    fun ccidExchangeStarted(
+        messageType: Int,
+        slot: Int,
+        sequence: Int,
+        length: Int,
+    ) = Unit
+
+    fun ccidCommandExchangeFailed(
+        kind: CcidExchangeFailureKind,
+        messageType: Int = -1,
+        slot: Int = -1,
+        sequence: Int = -1,
+    ) = Unit
+
+    fun ccidBulkTransfer(
+        direction: String,
+        requested: Int,
+        transferred: Int,
+    ) = Unit
+
+    fun ccidUsbSurvey(
+        interfaceCount: Int,
+        ccidCount: Int,
+    ) = Unit
+
+    fun ccidEndpoints(
+        interfaceNumber: Int,
+        bulkInMaxPacketSize: Int,
+        bulkOutMaxPacketSize: Int,
+    ) = Unit
+
+    fun nfcAwaitingCard() = Unit
+
+    fun ccidPowerResult(
+        cardStatus: CcidCardStatus,
+        chainParameter: String,
+        payloadLength: Int,
+    ) = Unit
 
     fun cardPublicCommandStarted(
         classByte: Int,

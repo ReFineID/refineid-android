@@ -40,7 +40,10 @@ import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 /** Debug-only application trace. Arguments must already be sanitized. */
 internal object AppTrace {
     fun activityCreated() {
-        debug("app:activity-created")
+        debug(
+            "app:activity-created version=" + fi.refineid.android.BuildConfig.VERSION_NAME +
+                " (" + fi.refineid.android.BuildConfig.BUILD_NUMBER + ")",
+        )
     }
 
     fun activityReceivedIntent() {
@@ -686,14 +689,37 @@ internal object AppTrace {
         debug("nfc:transceive-failed")
     }
 
+    /**
+     * One ISO-DEP exchange. The APDU header (CLA/INS/P1/P2) is public
+     * routing data and is logged; command/response bodies never are, so a
+     * CAN, PIN, or certificate body can never reach the trace. A negative
+     * header byte means the command was shorter than a header.
+     */
     fun nfcTransceive(
         commandLength: Int,
         responseLength: Int,
         durationMicros: Long,
+        sw: Int = 0,
+        cla: Int = -1,
+        ins: Int = -1,
+        p1: Int = -1,
+        p2: Int = -1,
     ) {
+        val header =
+            if (cla < 0 || ins < 0 || p1 < 0 || p2 < 0) {
+                "header=short"
+            } else {
+                "cla=" + hexByte(cla) +
+                    " ins=" + hexByte(ins) +
+                    " p1=" + hexByte(p1) +
+                    " p2=" + hexByte(p2)
+            }
+        val swString = if (sw != 0) " sw=" + hexStatus(sw) else ""
         debug(
-            "nfc:transceive cmd=" + commandLength +
+            "nfc:transceive " + header +
+                " cmd=" + commandLength +
                 " rsp=" + responseLength +
+                swString +
                 " us=" + durationMicros,
         )
     }
@@ -750,18 +776,34 @@ internal object AppTrace {
         debug("ccid:open-failed")
     }
 
-    fun ccidDescriptorRejected(kind: CcidDescriptorErrorKind) {
-        debug("ccid:descriptor-rejected kind=" + kind)
+    fun ccidDescriptorRejected(
+        kind: CcidDescriptorErrorKind,
+        detail: String = "",
+    ) {
+        var line = "ccid:descriptor-rejected kind=" + kind
+        if (detail.isNotEmpty()) {
+            line += " " + detail
+        }
+        debug(line)
     }
 
     fun ccidDescriptorAccepted(
         level: CcidExchangeLevel,
         maximumMessageLength: Int,
+        interfaceNumber: Int = -1,
+        vendorId: Int = -1,
+        productId: Int = -1,
     ) {
-        debug(
+        var line =
             "ccid:descriptor-accepted level=" + level +
-                " max-message=" + maximumMessageLength,
-        )
+                " max-message=" + maximumMessageLength
+        if (interfaceNumber >= 0) {
+            line += " iface=" + interfaceNumber
+        }
+        if (vendorId >= 0 && productId >= 0) {
+            line += " vid=" + hexShort(vendorId) + " pid=" + hexShort(productId)
+        }
+        debug(line)
     }
 
     fun ccidClaimFailed() {
@@ -798,16 +840,24 @@ internal object AppTrace {
         )
     }
 
+    /**
+     * The ATR is emitted by the card at reset before any application is
+     * selected, so its hex is safe to log and identifies the card model.
+     */
     fun ccidAtrResult(
         length: Int,
         validation: AtrValidation,
         isSupported: Boolean,
+        atrHex: String = "",
     ) {
-        debug(
+        var line =
             "ccid:atr length=" + length +
                 " validation=" + validation +
-                " supported=" + isSupported,
-        )
+                " supported=" + isSupported
+        if (atrHex.isNotEmpty()) {
+            line += " atr=" + atrHex
+        }
+        debug(line)
     }
 
     fun ccidTimeExtension(
@@ -820,12 +870,124 @@ internal object AppTrace {
         )
     }
 
-    fun ccidResponseRejected(kind: CcidProtocolErrorKind) {
-        debug("ccid:response-rejected kind=" + kind)
+    /**
+     * A CCID framing violation. Expected/actual carry the response message
+     * type bytes when the kind is UNEXPECTED_MESSAGE_TYPE, otherwise -1.
+     * Detail carries integers only (slots, sequences, status bytes,
+     * lengths) — never response payloads.
+     */
+    fun ccidResponseRejected(
+        kind: CcidProtocolErrorKind,
+        expected: Int = -1,
+        actual: Int = -1,
+        frameLength: Int = -1,
+        detail: String = "",
+    ) {
+        var line = "ccid:response-rejected kind=" + kind
+        if (expected >= 0 && actual >= 0) {
+            line += " expected=" + hexByte(expected) + " actual=" + hexByte(actual)
+        }
+        if (frameLength >= 0) {
+            line += " frame-length=" + frameLength
+        }
+        if (detail.isNotEmpty()) {
+            line += " " + detail
+        }
+        debug(line)
     }
 
-    fun ccidCommandExchangeFailed(kind: CcidExchangeFailureKind) {
-        debug("ccid:exchange-failed kind=" + kind)
+    /**
+     * One CCID command submitted to bulk out. Only the message type,
+     * slot, sequence, and total length are logged — never block bytes,
+     * which may carry a CAN, PIN, PUK, or activation code.
+     */
+    fun ccidExchangeStarted(
+        messageType: Int,
+        slot: Int,
+        sequence: Int,
+        length: Int,
+    ) {
+        debug(
+            "ccid:exchange cmd=" + hexByte(messageType) +
+                " slot=" + slot +
+                " seq=" + sequence +
+                " length=" + length,
+        )
+    }
+
+    fun ccidCommandExchangeFailed(
+        kind: CcidExchangeFailureKind,
+        messageType: Int = -1,
+        slot: Int = -1,
+        sequence: Int = -1,
+    ) {
+        var line = "ccid:exchange-failed kind=" + kind
+        if (messageType >= 0) {
+            line += " cmd=" + hexByte(messageType) + " slot=" + slot + " seq=" + sequence
+        }
+        debug(line)
+    }
+
+    /**
+     * One bulk transfer outcome. Counts only: a short or negative
+     * transfer distinguishes a timeout from a framing violation.
+     */
+    fun ccidBulkTransfer(
+        direction: String,
+        requested: Int,
+        transferred: Int,
+    ) {
+        debug(
+            "ccid:bulk dir=" + direction +
+                " requested=" + requested +
+                " transferred=" + transferred,
+        )
+    }
+
+    /** USB interface survey before claiming: which interfaces are CCID. */
+    fun ccidUsbSurvey(
+        interfaceCount: Int,
+        ccidCount: Int,
+    ) {
+        debug(
+            "ccid:usb-survey interfaces=" + interfaceCount +
+                " ccid=" + ccidCount,
+        )
+    }
+
+    /** Bulk endpoint packet sizes of one claimed CCID interface. */
+    fun ccidEndpoints(
+        interfaceNumber: Int,
+        bulkInMaxPacketSize: Int,
+        bulkOutMaxPacketSize: Int,
+    ) {
+        debug(
+            "ccid:endpoints iface=" + interfaceNumber +
+                " in-max=" + bulkInMaxPacketSize +
+                " out-max=" + bulkOutMaxPacketSize,
+        )
+    }
+
+    /** The holder was prompted to present the card (Apple-sheet equivalent). */
+    fun nfcAwaitingCard() {
+        debug("nfc:awaiting-card")
+    }
+
+    /**
+     * A power-on answered with a data block the activator rejects:
+     * card/chain state plus ATR length. The ATR bytes themselves stay
+     * out — an over-long payload may carry more than reset bytes.
+     */
+    fun ccidPowerResult(
+        cardStatus: CcidCardStatus,
+        chainParameter: String,
+        payloadLength: Int,
+    ) {
+        debug(
+            "ccid:power-result card=" + cardStatus +
+                " chain=" + chainParameter +
+                " payload-length=" + payloadLength,
+        )
     }
 
     fun cardPublicCommandStarted(
@@ -928,6 +1090,9 @@ internal object AppTrace {
     private fun hexByte(value: Int): String =
         value.and(UNSIGNED_BYTE_MASK).toString(HEX_RADIX).padStart(BYTE_HEX_DIGITS, '0')
 
+    private fun hexShort(value: Int): String =
+        value.and(UNSIGNED_SHORT_MASK).toString(HEX_RADIX).padStart(HEX_DIGITS_SHORT, '0')
+
     private fun hexStatus(value: Int): String =
         value.and(UNSIGNED_SHORT_MASK).toString(HEX_RADIX).padStart(STATUS_HEX_DIGITS, '0')
 
@@ -942,7 +1107,32 @@ internal object AppTrace {
         }
     }
 
+    private const val MAX_TRACE_LINES = 500
+    private val traceLogBuffer = ArrayDeque<String>(MAX_TRACE_LINES)
+
+    fun getTraceLog(): List<String> =
+        synchronized(traceLogBuffer) {
+            traceLogBuffer.toList()
+        }
+
+    fun clearTraceLog(): Unit =
+        synchronized(traceLogBuffer) {
+            traceLogBuffer.clear()
+        }
+
+    /**
+     * Every trace line carries a wall-clock timestamp so a pasted report
+     * stays self-describing; the app version is logged at session start
+     * (see [activityCreated]).
+     */
     private fun debug(message: String) {
+        val line = timestampPrefix() + " " + message
+        synchronized(traceLogBuffer) {
+            if (traceLogBuffer.size >= MAX_TRACE_LINES) {
+                traceLogBuffer.removeFirst()
+            }
+            traceLogBuffer.addLast(line)
+        }
         try {
             Log.d(TAG, message)
         } catch (_: RuntimeException) {
@@ -950,9 +1140,17 @@ internal object AppTrace {
         }
     }
 
+    private fun timestampPrefix(): String = UTC_TRACE_FORMAT.format(java.time.Instant.now())
+
+    private val UTC_TRACE_FORMAT =
+        java.time.format.DateTimeFormatter
+            .ofPattern("MM-dd HH:mm:ss.SSS'Z'")
+            .withZone(java.time.ZoneOffset.UTC)
+
     private const val TAG = "RefineID"
     private const val HEX_RADIX = 16
     private const val BYTE_HEX_DIGITS = 2
+    private const val HEX_DIGITS_SHORT = 4
     private const val STATUS_HEX_DIGITS = 4
     private const val UNSIGNED_BYTE_MASK = 0xFF
     private const val UNSIGNED_SHORT_MASK = 0xFFFF

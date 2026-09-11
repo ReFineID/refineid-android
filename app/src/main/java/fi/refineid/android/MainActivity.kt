@@ -18,6 +18,7 @@ import fi.refineid.android.nfc.NfcReaderController
 import fi.refineid.android.nfc.NfcReaderSnapshot
 import fi.refineid.android.ui.MainScreen
 import fi.refineid.android.ui.ReFineIdTheme
+import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.UsbReaderController
 import fi.refineid.android.usb.UsbReaderSnapshot
 import kotlinx.coroutines.CoroutineScope
@@ -93,7 +94,13 @@ class MainActivity : ComponentActivity() {
                     rappPairingModel = model,
                     rappInbox = rappInbox,
                     remoteCardModel = (application as ReFineIdApplication).remoteCardModel,
-                    onReadPhoto = nfcReaderController::readPhoto,
+                    onReadPhoto = { onResult ->
+                        if (readerSnapshot.cardPresence == CardPresence.PRESENT) {
+                            readerController.readPhoto(onResult)
+                        } else {
+                            nfcReaderController.readPhoto(onResult)
+                        }
+                    },
                 )
             }
         }
