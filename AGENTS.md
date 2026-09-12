@@ -6,11 +6,11 @@
   PIN1 stays cached on the mobile device. PIN2 prompts appear strictly on the mobile
   device screen. Remote clients and browsers operate via a protected authentication
   path and never prompt for, receive, or handle PIN codes.
-- RULE #2: ZERO PIN AND PIN-LENGTH LOGGING ACROSS ALL ENVIRONMENTS.
-  Never log, trace, display, or format PIN bytes, candidate PIN lengths (e.g. `got {len}`,
-  `input.length`), or development PIN role identifiers in log sinks, audit records, or
-  error strings. Length disclosures leak secret entropy and reduce keyspace security.
-  Never commit test PINs or card secrets.
+- RULE #2: ZERO PIN DATA AND CANDIDATE PIN-LENGTH LOGGING ACROSS ALL ENVIRONMENTS.
+  Never log, trace, display, or format PIN bytes, character offsets, supplied/candidate
+  PIN lengths, or development PIN role identifiers in log sinks, audit records, or
+  error strings. Only static specification policy bounds may be reported. Never commit
+  test PINs or card secrets.
 
 ## Product
 
