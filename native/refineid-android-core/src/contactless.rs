@@ -185,21 +185,12 @@ pub(crate) enum ContactlessOpenOutcome {
     Failure(CertificateReadFailure),
 }
 
-fn is_activation_required<T: CardTransport>(transport: &mut T, profile: CardKeyProfile) -> bool {
-    use refineid_auth::{ActivationScheme, PinManageOps};
-    let scheme = match profile {
-        CardKeyProfile::Rsa2048 | CardKeyProfile::Rsa3072 => {
-            Some(ActivationScheme::ActivationCodeIsPuk)
-        }
-        CardKeyProfile::EcdsaP256 | CardKeyProfile::EcdsaP384 => {
-            Some(ActivationScheme::PresetActivationPin)
-        }
-    };
-    if let Some(scheme) = scheme
-        && let Ok(needs) = transport.activation_needs(scheme)
-    {
-        return needs.any();
-    }
+fn is_activation_required<T: CardTransport>(_transport: &mut T, _profile: CardKeyProfile) -> bool {
+    // Probing activation records via GET DATA (0xCB) or PIN2 counters tears down
+    // the PACE secure channel (SW=0x6988) on Finnish ID cards because those probes
+    // answer only in the card-management or DF.5016 context outside PKCS#15.
+    // Contactless sessions stay strictly within PKCS#15 and eMRTD; full card
+    // activation requires the contact interface.
     false
 }
 

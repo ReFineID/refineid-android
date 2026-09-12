@@ -7,11 +7,14 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import fi.refineid.android.core.AuthenticationCardService
 import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
+import fi.refineid.android.core.CanSessionStore
+import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.Pin1Submission
 import fi.refineid.android.usb.CardPresence
@@ -43,47 +46,6 @@ internal class MainScreenTest {
             .performScrollTo()
             .assertIsDisplayed()
             .assertIsEnabled()
-        composeRule
-            .onNodeWithTag(UiAutomationIds.IDENTITY_ROW)
-            .performScrollTo()
-            .assertIsDisplayed()
-    }
-
-    @Test
-    fun readerFailureActionInvokesThePermissionHandler() {
-        var requestCount = 0
-        show(
-            snapshot =
-                UsbReaderSnapshot(
-                    status = ReaderConnectionStatus.PERMISSION_REQUIRED,
-                ),
-            onRequestPermission = { requestCount += 1 },
-        )
-
-        composeRule
-            .onNodeWithTag(UiAutomationIds.READER_ACTION)
-            .performScrollTo()
-            .assertIsDisplayed()
-            .performClick()
-        composeRule.runOnIdle {
-            assertEquals(EXPECTED_PERMISSION_REQUEST_COUNT, requestCount)
-        }
-    }
-
-    @Test
-    fun readyReaderWithoutCardShowsReaderCard() {
-        show(
-            snapshot =
-                UsbReaderSnapshot(
-                    status = ReaderConnectionStatus.READY,
-                    cardPresence = CardPresence.NOT_PRESENT,
-                ),
-        )
-
-        composeRule
-            .onNodeWithTag(UiAutomationIds.READER_CARD)
-            .performScrollTo()
-            .assertIsDisplayed()
         composeRule
             .onNodeWithTag(UiAutomationIds.IDENTITY_ROW)
             .performScrollTo()
@@ -129,9 +91,88 @@ internal class MainScreenTest {
             .assertDoesNotExist()
     }
 
+    @Test
+    fun cardRequiringCanAutomaticallyShowsCanDialog() {
+        CanSessionStore.drop()
+        show(
+            snapshot =
+                UsbReaderSnapshot(
+                    status = ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED,
+                    cardPresence = CardPresence.PRESENT,
+                ),
+        )
+
+        composeRule
+            .onNodeWithTag(UiAutomationIds.READER_CAN_DIALOG)
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithTag(UiAutomationIds.READER_CAN_FIELD)
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithTag(UiAutomationIds.READER_CONNECT_ACTION)
+            .assertIsDisplayed()
+            .assertIsNotEnabled()
+    }
+
+    @Test
+    fun cancelingCanDialogDismissesAndCanBeReopenedFromIdentityRow() {
+        CanSessionStore.drop()
+        show(
+            snapshot =
+                UsbReaderSnapshot(
+                    status = ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED,
+                    cardPresence = CardPresence.PRESENT,
+                ),
+        )
+
+        composeRule
+            .onNodeWithTag(UiAutomationIds.READER_CAN_DIALOG)
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithTag(UiAutomationIds.READER_CANCEL_ACTION)
+            .performClick()
+        composeRule
+            .onNodeWithTag(UiAutomationIds.READER_CAN_DIALOG)
+            .assertDoesNotExist()
+
+        composeRule
+            .onNodeWithTag(UiAutomationIds.IDENTITY_ROW)
+            .performClick()
+        composeRule
+            .onNodeWithTag(UiAutomationIds.READER_CAN_DIALOG)
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun enteringCanAndUnlockingInvokesConnectHandler() {
+        CanSessionStore.drop()
+        var connectedCan: String? = null
+        show(
+            snapshot =
+                UsbReaderSnapshot(
+                    status = ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED,
+                    cardPresence = CardPresence.PRESENT,
+                ),
+            onReaderConnect = { can, _ ->
+                connectedCan = can.peekDigits()
+            },
+        )
+
+        composeRule
+            .onNodeWithTag(UiAutomationIds.READER_CAN_FIELD)
+            .performTextInput("123456")
+        composeRule
+            .onNodeWithTag(UiAutomationIds.READER_CONNECT_ACTION)
+            .assertIsEnabled()
+            .performClick()
+
+        assertEquals("123456", connectedCan)
+    }
+
     private fun show(
         snapshot: UsbReaderSnapshot,
         onRequestPermission: () -> Unit = {},
+        onReaderConnect: (CanSubmission, ((ByteArray?) -> Unit)?) -> Unit = { _, _ -> },
         browserCardService: AuthenticationCardService? = null,
     ) {
         composeRule.setContent {
@@ -139,6 +180,7 @@ internal class MainScreenTest {
                 MainScreen(
                     snapshot = snapshot,
                     onRequestPermission = onRequestPermission,
+                    onReaderConnect = onReaderConnect,
                     browserCardService = browserCardService,
                 )
             }

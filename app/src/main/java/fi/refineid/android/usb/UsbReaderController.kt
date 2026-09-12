@@ -490,34 +490,32 @@ internal class UsbReaderController(
             val photoBytes = NativeCore.readCardFacePhoto()
             val documentNumber = NativeCore.readCardDocumentNumber()
             val tamperProofVerified = NativeVerification.readCardVerificationPassed()
+            val certificate =
+                when (result) {
+                    is NativeContactlessOpenResult.Success -> result.certificate
+                    is NativeContactlessOpenResult.ActivationRequired -> result.certificate
+                    is NativeContactlessOpenResult.Failure -> null
+                }
+            val holderNameFromCert = certificate?.let(CertificateHolderName::fromCertificate)
             var cardDetails: PersonCardDetails? = null
             val holder =
-                if (result is NativeContactlessOpenResult.Success ||
-                    result is NativeContactlessOpenResult.ActivationRequired
-                ) {
+                if (certificate != null) {
                     try {
-                        val cert = activeSession?.copyAuthenticationCertificate()
-                        cert?.let { c ->
-                            try {
-                                cardDetails =
-                                    PersonCardDetails.fromDer(
-                                        c.copyDer(),
-                                        photoBytes,
-                                        documentNumber,
-                                        tamperProofVerified,
-                                    )
-                                cardDetails?.holderName ?: CertificateHolderName.fromCertificate(c)
-                            } finally {
-                                c.close()
-                            }
-                        }
+                        cardDetails =
+                            PersonCardDetails.fromDer(
+                                certificate.copyDer(),
+                                photoBytes,
+                                documentNumber,
+                                tamperProofVerified,
+                            )
+                        cardDetails?.holderName ?: holderNameFromCert
                     } catch (_: Exception) {
-                        null
+                        holderNameFromCert
                     }
                 } else {
                     null
                 }
-            val effectiveHolder = holder ?: previousHolderName
+            val effectiveHolder = holder ?: holderNameFromCert ?: previousHolderName
             if (photoBytes != null && photoBytes.isNotEmpty()) {
                 CardPhotoStore.savePhoto(photoBytes, effectiveHolder, documentNumber)
             }
@@ -527,7 +525,7 @@ internal class UsbReaderController(
                         UsbReaderSnapshot(
                             status = ReaderConnectionStatus.READY,
                             cardPresence = CardPresence.PRESENT,
-                            holderName = holder ?: previousHolderName,
+                            holderName = effectiveHolder,
                             cardDetails = cardDetails ?: previousCardDetails,
                         )
                     }
@@ -536,7 +534,7 @@ internal class UsbReaderController(
                         UsbReaderSnapshot(
                             status = ReaderConnectionStatus.ACTIVATION_REQUIRED,
                             cardPresence = CardPresence.PRESENT,
-                            holderName = holder ?: previousHolderName,
+                            holderName = effectiveHolder,
                             cardDetails = cardDetails ?: previousCardDetails,
                         )
                     }

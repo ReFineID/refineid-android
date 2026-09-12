@@ -67,18 +67,18 @@ class CanRejectionTest {
     }
 
     @Test
-    fun blocklistCooldownBlocksRejectedCanForThreeMinutes() {
+    fun blocklistCooldownBlocksRejectedCanForCooldownDuration() {
         val baseTime = 1_000_000L
-        CanSessionStore.remember("987654")
+        CanSessionStore.remember("987654", now = baseTime)
         CanSessionStore.recordRejected("987654", now = baseTime)
 
         assertFalse(CanSessionStore.hasCan)
         assertTrue(CanSessionStore.isBlocked("987654", now = baseTime))
-        assertEquals(180, CanSessionStore.remainingCooldownSeconds("987654", now = baseTime))
+        assertEquals(5, CanSessionStore.remainingCooldownSeconds("987654", now = baseTime))
 
-        // After 60 seconds, remaining cooldown is 120
-        assertEquals(120, CanSessionStore.remainingCooldownSeconds("987654", now = baseTime + 60_000L))
-        assertTrue(CanSessionStore.isBlocked("987654", now = baseTime + 60_000L))
+        // After 2 seconds, remaining cooldown is 3
+        assertEquals(3, CanSessionStore.remainingCooldownSeconds("987654", now = baseTime + 2_000L))
+        assertTrue(CanSessionStore.isBlocked("987654", now = baseTime + 2_000L))
 
         // Attempting to remember blocked CAN while cooldown is active is ignored
         CanSessionStore.remember("987654", now = baseTime)
@@ -89,7 +89,7 @@ class CanRejectionTest {
         assertTrue(CanSessionStore.hasCan)
         assertEquals("654321", CanSessionStore.currentCan)
 
-        // After 180 seconds (3 minutes), cooldown has expired
+        // After 5 seconds, cooldown has expired
         val expiryTime = baseTime + CanSessionStore.BLOCKLIST_DURATION_MS
         assertFalse(CanSessionStore.isBlocked("987654", now = expiryTime))
         assertEquals(0, CanSessionStore.remainingCooldownSeconds("987654", now = expiryTime))

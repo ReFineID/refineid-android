@@ -20,6 +20,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -58,6 +59,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
@@ -221,7 +223,7 @@ internal fun PersonScreen(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     OutlinedButton(
                         onClick = {
@@ -233,6 +235,8 @@ internal fun PersonScreen(
                                 }
                             }
                         },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(),
                     ) {
                         Icon(
@@ -241,10 +245,12 @@ internal fun PersonScreen(
                             modifier = Modifier.size(BUTTON_ICON_SIZE),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(stringResource(R.string.copy_photo))
+                        Text(
+                            text = stringResource(R.string.copy_photo),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
-
-                    Spacer(modifier = Modifier.width(12.dp))
 
                     OutlinedButton(
                         onClick = {
@@ -256,6 +262,8 @@ internal fun PersonScreen(
                                 }
                             }
                         },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(),
                     ) {
                         Icon(
@@ -264,7 +272,11 @@ internal fun PersonScreen(
                             modifier = Modifier.size(BUTTON_ICON_SIZE),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(stringResource(R.string.share_photo))
+                        Text(
+                            text = stringResource(R.string.share_photo),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }

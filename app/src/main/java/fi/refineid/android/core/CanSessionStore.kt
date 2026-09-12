@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
  * to prevent rapid retries of the invalid access number.
  */
 internal object CanSessionStore {
-    const val BLOCKLIST_DURATION_MS = 3 * 60 * 1000L // 3 minutes
+    const val BLOCKLIST_DURATION_MS = 5 * 1000L // 5 seconds
     private const val MILLIS_CEILING_ROUNDING = 999L
     private const val MILLIS_PER_SECOND = 1000L
 
