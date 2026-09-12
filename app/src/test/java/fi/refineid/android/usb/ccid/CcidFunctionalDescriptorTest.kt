@@ -244,33 +244,30 @@ class CcidFunctionalDescriptorTest {
     }
 
     @Test
-    fun rejectsInvalidAutomaticParameterConfiguration() {
-        val cases =
-            listOf(
-                SHORT_APDU_EXCHANGE or AUTOMATIC_PARAMETER_NEGOTIATION,
-                SHORT_APDU_EXCHANGE or AUTOMATIC_PARAMETER_CONFIGURATION,
-                SHORT_APDU_EXCHANGE or
-                    AUTOMATIC_PARAMETER_CONFIGURATION or
-                    AUTOMATIC_PARAMETER_NEGOTIATION or
-                    AUTOMATIC_PPS,
+    fun rejectsConflictingAutomaticParameterHandling() {
+        val conflictingFeatures =
+            SHORT_APDU_EXCHANGE or
+                AUTOMATIC_PARAMETER_NEGOTIATION or
+                AUTOMATIC_PPS
+        assertDescriptorError(CcidDescriptorErrorKind.INVALID_APDU_CONFIGURATION) {
+            CcidFunctionalDescriptor.parse(
+                rawDescriptors = descriptors(features = conflictingFeatures),
+                interfaceNumber = TARGET_INTERFACE,
+                alternateSetting = TARGET_ALTERNATE_SETTING,
             )
-        for (features in cases) {
-            assertDescriptorError(CcidDescriptorErrorKind.INVALID_APDU_CONFIGURATION) {
-                CcidFunctionalDescriptor.parse(
-                    rawDescriptors = descriptors(features = features),
-                    interfaceNumber = TARGET_INTERFACE,
-                    alternateSetting = TARGET_ALTERNATE_SETTING,
-                )
-            }
         }
     }
 
     @Test
     fun invalidApduConfigurationCarriesFeatureFlags() {
+        val conflictingFeatures =
+            SHORT_APDU_EXCHANGE or
+                AUTOMATIC_PARAMETER_NEGOTIATION or
+                AUTOMATIC_PPS
         val exception =
             assertThrows(CcidDescriptorException::class.java) {
                 CcidFunctionalDescriptor.parse(
-                    rawDescriptors = descriptors(features = SHORT_APDU_EXCHANGE),
+                    rawDescriptors = descriptors(features = conflictingFeatures),
                     interfaceNumber = TARGET_INTERFACE,
                     alternateSetting = TARGET_ALTERNATE_SETTING,
                 )
@@ -278,9 +275,22 @@ class CcidFunctionalDescriptorTest {
 
         assertEquals(CcidDescriptorErrorKind.INVALID_APDU_CONFIGURATION, exception.kind)
         assertEquals(
-            "features=" + SHORT_APDU_EXCHANGE.toString(HEX_RADIX),
+            "features=" + conflictingFeatures.toString(HEX_RADIX),
             exception.detail,
         )
+    }
+
+    @Test
+    fun acceptsOmnikey3021Features() {
+        val omnikeyFeatures = 0x000407B8L
+        val descriptor =
+            CcidFunctionalDescriptor.parse(
+                rawDescriptors = descriptors(features = omnikeyFeatures),
+                interfaceNumber = TARGET_INTERFACE,
+                alternateSetting = TARGET_ALTERNATE_SETTING,
+            )
+        assertEquals(CcidExchangeLevel.SHORT_AND_EXTENDED_APDU, descriptor.exchangeLevel)
+        assertEquals(omnikeyFeatures, descriptor.features)
     }
 
     @Test

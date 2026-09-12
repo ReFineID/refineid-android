@@ -70,6 +70,11 @@ internal class CcidCardActivator(
                             response.close()
                             CcidActivationResult.TRANSPORT_ERROR
                         }
+
+                        is CcidParameters -> {
+                            response.close()
+                            CcidActivationResult.TRANSPORT_ERROR
+                        }
                     }
                 }
             }
@@ -97,7 +102,7 @@ internal class CcidCardActivator(
                 is CcidExchangeResult.Response -> {
                     when (val response = result.value) {
                         is CcidDataBlock -> {
-                            validatePoweredCard(response, exchangeLevel)
+                            validatePoweredCard(response, exchangeLevel, exchange)
                         }
 
                         is CcidCommandFailure -> {
@@ -120,6 +125,11 @@ internal class CcidCardActivator(
                             AppTrace.ccidCardState(response.cardStatus)
                             CcidActivationResult.TRANSPORT_ERROR
                         }
+
+                        is CcidParameters -> {
+                            response.close()
+                            CcidActivationResult.TRANSPORT_ERROR
+                        }
                     }
                 }
             }
@@ -131,6 +141,7 @@ internal class CcidCardActivator(
     private fun validatePoweredCard(
         response: CcidDataBlock,
         exchangeLevel: CcidExchangeLevel,
+        exchange: CcidCommandExchange,
     ): CcidActivationResult =
         response.use {
             if (
@@ -155,12 +166,103 @@ internal class CcidCardActivator(
                         isSupported = result == CcidActivationResult.READY,
                         atrHex = atr.toHex(),
                     )
+                    if (result == CcidActivationResult.READY && exchangeLevel != CcidExchangeLevel.TPDU) {
+                        configureParametersIfRequired(exchange, validation)
+                    }
                     result
                 } finally {
                     atr.fill(0)
                 }
             }
         }
+
+    private fun configureParametersIfRequired(
+        exchange: CcidCommandExchange,
+        validation: AtrValidation,
+    ) {
+        val isT0 =
+            validation == AtrValidation.VALID_T0_DIRECT ||
+                validation == AtrValidation.VALID_T0_INVERSE
+        if (!isT0) return
+
+        val getCmd =
+            CcidCommand.getParameters(
+                slot = FIRST_SLOT,
+                sequence = sequenceCounter.take(),
+            )
+        var currentProtocol: Int? = null
+        try {
+            when (val getResult = exchange.exchange(getCmd)) {
+                is CcidExchangeResult.Response -> {
+                    when (val res = getResult.value) {
+                        is CcidParameters -> {
+                            res.use {
+                                currentProtocol = res.protocolNum
+                                AppTrace.ccidParameters(res.protocolNum, res.copyPayload().toHex())
+                            }
+                        }
+
+                        is CcidCommandFailure -> {
+                            AppTrace.ccidParametersFailure(res.errorCode)
+                        }
+
+                        is CcidDataBlock -> {
+                            res.close()
+                        }
+
+                        else -> {}
+                    }
+                }
+
+                is CcidExchangeResult.Failure -> {
+                    AppTrace.ccidParametersExchangeFailed(getResult.kind)
+                }
+            }
+        } finally {
+            getCmd.close()
+        }
+
+        if (currentProtocol != 0) {
+            val setCmd =
+                CcidCommand.setParametersT0(
+                    slot = FIRST_SLOT,
+                    sequence = sequenceCounter.take(),
+                    fiDi = 0x11,
+                    inverseConvention = validation == AtrValidation.VALID_T0_INVERSE,
+                )
+            try {
+                when (val setResult = exchange.exchange(setCmd)) {
+                    is CcidExchangeResult.Response -> {
+                        when (val res = setResult.value) {
+                            is CcidParameters -> {
+                                res.use {
+                                    AppTrace.ccidSetParametersResult(true, "protocol=" + res.protocolNum)
+                                }
+                            }
+
+                            is CcidCommandFailure -> {
+                                AppTrace.ccidSetParametersResult(false, "error=" + res.errorCode)
+                            }
+
+                            is CcidDataBlock -> {
+                                res.close()
+                            }
+
+                            else -> {
+                                AppTrace.ccidSetParametersResult(false, "unexpected")
+                            }
+                        }
+                    }
+
+                    is CcidExchangeResult.Failure -> {
+                        AppTrace.ccidSetParametersResult(false, "failure=" + setResult.kind)
+                    }
+                }
+            } finally {
+                setCmd.close()
+            }
+        }
+    }
 
     private fun mapAtrValidation(
         validation: AtrValidation,

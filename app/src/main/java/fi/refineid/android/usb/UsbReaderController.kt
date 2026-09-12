@@ -118,13 +118,19 @@ internal class UsbReaderController(
     @Volatile
     private var probeGeneration = 0
 
-    private val cardPresencePollRunnable =
+    private val cardPresencePollRunnable: Runnable =
         Runnable {
             if (isStarted) {
                 val device = selectedDevice
                 if (device != null && usbManager.hasPermission(device)) {
+                    if (latestSnapshot.authenticationStatus == AuthenticationStatus.SIGNING) {
+                        mainHandler.postDelayed(cardPresencePollRunnable, CARD_POLL_INTERVAL_MILLISECONDS)
+                        return@Runnable
+                    }
                     if (latestSnapshot.cardPresence != CardPresence.PRESENT) {
                         beginSessionOpen(device, probeGeneration)
+                    } else if (activeSession?.hasInterruptEndpoint != true) {
+                        checkCardPresence(device, probeGeneration)
                     }
                 }
             }
@@ -728,6 +734,7 @@ internal class UsbReaderController(
             if (result is CcidSessionOpenResult.Ready) {
                 activeSession = result.session
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
+                setupRemovalListener(result.session, device, generation)
                 try {
                     val cert = result.session.copyAuthenticationCertificate()
                     try {
@@ -743,9 +750,11 @@ internal class UsbReaderController(
                 // Hold the contactless session so a CAN entry can run PACE on it.
                 // No provider generation until connect() actually opens the card.
                 activeSession = result.session
+                setupRemovalListener(result.session, device, generation)
             } else if (result is CcidSessionOpenResult.ActivationRequired) {
                 activeSession = result.session
                 activeProviderGeneration = providerGenerationRandom.nextProviderGeneration()
+                setupRemovalListener(result.session, device, generation)
                 try {
                     val cert = result.session.copyAuthenticationCertificate()
                     try {
@@ -836,6 +845,86 @@ internal class UsbReaderController(
         }
     }
 
+    private fun checkCardPresence(
+        device: UsbDevice,
+        generation: Int,
+    ) {
+        ioExecutor.execute {
+            if (!isStarted || generation != probeGeneration || selectedDevice?.deviceId != device.deviceId) {
+                return@execute
+            }
+            val session = activeSession
+            if (session == null) {
+                mainHandler.post {
+                    if (isStarted && generation == probeGeneration && selectedDevice?.deviceId == device.deviceId) {
+                        publish(
+                            UsbReaderSnapshot(
+                                status = ReaderConnectionStatus.READY,
+                                cardPresence = CardPresence.NOT_PRESENT,
+                            ),
+                        )
+                    }
+                }
+                return@execute
+            }
+            val isPresent = session.isCardPresent()
+            if (!isPresent) {
+                closeActiveSession()
+                mainHandler.post {
+                    if (isStarted && generation == probeGeneration && selectedDevice?.deviceId == device.deviceId) {
+                        publish(
+                            UsbReaderSnapshot(
+                                status = ReaderConnectionStatus.READY,
+                                cardPresence = CardPresence.NOT_PRESENT,
+                            ),
+                        )
+                    }
+                }
+            } else if (session.hasInterruptEndpoint != true) {
+                mainHandler.post {
+                    if (
+                        isStarted &&
+                        generation == probeGeneration &&
+                        selectedDevice?.deviceId == device.deviceId &&
+                        latestSnapshot.cardPresence == CardPresence.PRESENT
+                    ) {
+                        mainHandler.removeCallbacks(cardPresencePollRunnable)
+                        mainHandler.postDelayed(cardPresencePollRunnable, CARD_POLL_INTERVAL_MILLISECONDS)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setupRemovalListener(
+        session: CcidUsbSession,
+        device: UsbDevice,
+        generation: Int,
+    ) {
+        if (!session.hasInterruptEndpoint) {
+            return
+        }
+        session.startRemovalListener {
+            mainHandler.post {
+                if (
+                    !isStarted ||
+                    generation != probeGeneration ||
+                    selectedDevice?.deviceId != device.deviceId
+                ) {
+                    return@post
+                }
+                AppTrace.usbCardRemoved()
+                closeActiveSessionAsync()
+                publish(
+                    UsbReaderSnapshot(
+                        status = ReaderConnectionStatus.READY,
+                        cardPresence = CardPresence.NOT_PRESENT,
+                    ),
+                )
+            }
+        }
+    }
+
     private fun closeActiveSessionAsync() {
         ioExecutor.execute(::closeActiveSession)
     }
@@ -887,15 +976,32 @@ internal class UsbReaderController(
             cardPresence = enrichedSnapshot.cardPresence,
         )
         mainHandler.removeCallbacks(cardPresencePollRunnable)
-        if (
-            isStarted &&
-            selectedDevice != null &&
-            enrichedSnapshot.status == ReaderConnectionStatus.READY &&
-            enrichedSnapshot.cardPresence != CardPresence.PRESENT
-        ) {
+        if (shouldPoll(enrichedSnapshot)) {
             mainHandler.postDelayed(cardPresencePollRunnable, CARD_POLL_INTERVAL_MILLISECONDS)
         }
         stateListeners.toList().forEach { listener -> listener(enrichedSnapshot) }
+    }
+
+    private fun shouldPoll(snapshot: UsbReaderSnapshot): Boolean {
+        if (!isStarted || selectedDevice == null) {
+            return false
+        }
+        val isPollableStatus =
+            when (snapshot.status) {
+                ReaderConnectionStatus.READY,
+                ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED,
+                ReaderConnectionStatus.ACTIVATION_REQUIRED,
+                ReaderConnectionStatus.CARD_ERROR,
+                ReaderConnectionStatus.TRANSPORT_ERROR,
+                -> true
+
+                else -> false
+            }
+        if (!isPollableStatus) {
+            return false
+        }
+        return snapshot.cardPresence != CardPresence.PRESENT ||
+            activeSession?.hasInterruptEndpoint != true
     }
 
     private companion object {

@@ -2,6 +2,7 @@ package fi.refineid.android.usb.ccid
 
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import fi.refineid.android.core.ActivationReport
@@ -45,6 +46,7 @@ import fi.refineid.android.core.QualifiedSignatureVerifier
 import fi.refineid.android.core.QualifiedSigningAlgorithm
 import fi.refineid.android.core.QualifiedSigningInputMode
 import fi.refineid.android.diagnostics.AppTrace
+import kotlin.concurrent.thread
 
 internal sealed interface CcidSessionOpenResult {
     class Ready(
@@ -82,8 +84,9 @@ internal class CcidUsbSession(
     private val connection: UsbDeviceConnection,
     private val usbInterface: UsbInterface,
     descriptor: CcidFunctionalDescriptor,
-    exchange: CcidCommandExchange,
-    sequenceCounter: CcidSequenceCounter,
+    private val exchange: CcidCommandExchange,
+    private val sequenceCounter: CcidSequenceCounter,
+    private val interruptIn: UsbEndpoint? = null,
 ) : AutoCloseable {
     private val ownerThread = Thread.currentThread()
     private val exchangeLevel =
@@ -102,13 +105,94 @@ internal class CcidUsbSession(
                 sequenceCounter = sequenceCounter,
             ),
         )
+
+    @Volatile
     private var isClosed = false
+
+    @Volatile
+    private var cardRemoved = false
+
+    @Volatile
+    private var cardRemovalListener: (() -> Unit)? = null
+
+    @Volatile
+    private var interruptThread: Thread? = null
+
+    val hasInterruptEndpoint: Boolean
+        get() = interruptIn != null
 
     // True once openContactless has run PACE and a live secure-messaging
     // session is held natively. It routes signing over the retained channel
     // (no second PACE) and asks the native side to drop the session at close.
     private var contactlessSessionActive = false
     private val sessionMaterial = NativeCardSessionMaterial()
+
+    fun startRemovalListener(onCardRemoved: () -> Unit) {
+        checkOwnerThread()
+        if (isClosed || cardRemoved || interruptIn == null) {
+            return
+        }
+        cardRemovalListener = onCardRemoved
+        if (interruptThread != null) {
+            return
+        }
+        val thread =
+            thread(
+                name = "refineid-ccid-interrupt",
+                isDaemon = true,
+            ) {
+                val maxPacketSize = interruptIn.maxPacketSize.coerceAtLeast(8)
+                val buffer = ByteArray(maxPacketSize)
+                while (!isClosed && !cardRemoved && !Thread.currentThread().isInterrupted) {
+                    val bytesRead =
+                        try {
+                            connection.bulkTransfer(
+                                interruptIn,
+                                buffer,
+                                0,
+                                buffer.size,
+                                INTERRUPT_POLL_TIMEOUT_MILLISECONDS,
+                            )
+                        } catch (_: Exception) {
+                            -1
+                        }
+                    if (!isClosed && !cardRemoved) {
+                        handleInterruptBuffer(buffer, bytesRead)
+                    }
+                }
+            }
+        interruptThread = thread
+    }
+
+    private fun handleInterruptBuffer(
+        buffer: ByteArray,
+        bytesRead: Int,
+    ) {
+        if (bytesRead < 2) {
+            return
+        }
+        val messageType = buffer[0].toInt() and 0xFF
+        val isRemoval =
+            when (messageType) {
+                CcidWire.RDR_TO_PC_NOTIFY_SLOT_CHANGE -> {
+                    val slotIccState = buffer[1].toInt() and 0xFF
+                    (slotIccState and 0x01) == 0
+                }
+
+                CcidWire.RDR_TO_PC_HARDWARE_ERROR -> {
+                    true
+                }
+
+                else -> {
+                    false
+                }
+            }
+        if (isRemoval) {
+            cardRemoved = true
+            AppTrace.ccidCardRemovalDetected()
+            cardRemovalListener?.invoke()
+        }
+    }
 
     fun selectPkcs15Application(): NativeCardOperationResult {
         checkOwnerThread()
@@ -242,6 +326,58 @@ internal class CcidUsbSession(
             exchangeLevel = exchangeLevel,
             exchange = nativeExchange,
         )
+    }
+
+    fun isCardPresent(): Boolean {
+        checkOwnerThread()
+        if (isClosed || cardRemoved) {
+            return false
+        }
+        val command =
+            CcidCommand.getSlotStatus(
+                slot = FIRST_SLOT,
+                sequence = sequenceCounter.take(),
+            )
+        return try {
+            when (val result = exchange.exchange(command)) {
+                is CcidExchangeResult.Failure -> {
+                    AppTrace.ccidSlotExchangeFailed(result.kind)
+                    false
+                }
+
+                is CcidExchangeResult.Response -> {
+                    when (val response = result.value) {
+                        is CcidSlotStatus -> {
+                            if (response.cardStatus == CcidCardStatus.NOT_PRESENT) {
+                                AppTrace.ccidCardState(response.cardStatus)
+                            }
+                            response.cardStatus != CcidCardStatus.NOT_PRESENT
+                        }
+
+                        is CcidCommandFailure -> {
+                            AppTrace.ccidCommandFailed(response.errorCode, response.cardStatus)
+                            response.cardStatus != CcidCardStatus.NOT_PRESENT
+                        }
+
+                        is CcidTimeExtension -> {
+                            false
+                        }
+
+                        is CcidDataBlock -> {
+                            response.close()
+                            false
+                        }
+
+                        is CcidParameters -> {
+                            response.close()
+                            false
+                        }
+                    }
+                }
+            }
+        } finally {
+            command.close()
+        }
     }
 
     fun copyAuthenticationCertificate(): NativeAuthenticationCertificate {
@@ -530,6 +666,9 @@ internal class CcidUsbSession(
             return
         }
         isClosed = true
+        cardRemovalListener = null
+        interruptThread?.interrupt()
+        interruptThread = null
         if (contactlessSessionActive) {
             // The card's half dies with the field; drop the host's keys too.
             NativeContactlessSession.close()
@@ -648,6 +787,11 @@ internal class CcidUsbSession(
         check(Thread.currentThread() === ownerThread) {
             "CCID session used from a different thread"
         }
+    }
+
+    private companion object {
+        const val FIRST_SLOT = 0
+        const val INTERRUPT_POLL_TIMEOUT_MILLISECONDS = 500
     }
 }
 
@@ -870,6 +1014,7 @@ internal class CcidUsbSessionOpener(
             AppTrace.ccidDescriptorAccepted(
                 level = descriptor.exchangeLevel,
                 maximumMessageLength = descriptor.maximumMessageLength,
+                features = descriptor.features,
                 interfaceNumber = endpoints.usbInterface.id,
                 vendorId = device.vendorId,
                 productId = device.productId,
@@ -879,6 +1024,7 @@ internal class CcidUsbSessionOpener(
                 interfaceNumber = endpoints.usbInterface.id,
                 bulkInMaxPacketSize = endpoints.bulkIn.maxPacketSize,
                 bulkOutMaxPacketSize = endpoints.bulkOut.maxPacketSize,
+                interruptInMaxPacketSize = endpoints.interruptIn?.maxPacketSize,
             )
 
             isClaimed = claimInterface(endpoints.usbInterface, true)
@@ -909,6 +1055,7 @@ internal class CcidUsbSessionOpener(
                                 descriptor = descriptor,
                                 exchange = exchange,
                                 sequenceCounter = sequenceCounter,
+                                interruptIn = endpoints.interruptIn,
                             )
                         ownsConnection = false
                         isClaimed = false

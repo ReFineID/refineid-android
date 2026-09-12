@@ -26,14 +26,18 @@ Three independent borders admit bytes:
    not expose an arbitrary application-facing APDU constructor.
 2. USB descriptors originate in the reader. A Kotlin constructor validates
    descriptor framing, the selected CCID interface, one defined exchange
-   level, automatic APDU parameter handling, and the declared message bound.
+   level, automatic activation/PPS capabilities, and declared message bounds
+   (ADR 0040).
 3. CCID replies originate in the reader and remain untrusted until the common
    parser validates length, type, slot, sequence, status, and response-specific
    fields. An APDU reply must contain at least its two status bytes.
 
 Readers declaring T=0 TPDU, short-APDU, or short-and-extended-APDU exchange are
-admitted. Character-level and T=1 TPDU exchange require protocol engines that
-are outside this slice. Treating a TPDU payload as an APDU would be wrong.
+admitted. For APDU-level readers supporting automatic parameters (`AUTO_PPS_CUR`),
+the slot protocol is explicitly configured via `PC_to_RDR_SetParameters` before
+APDU exchange (ADR 0040). Character-level and T=1 TPDU exchange require protocol
+engines that are outside this slice. Treating a TPDU payload as an APDU would be wrong.
+
 
 ## Decision
 

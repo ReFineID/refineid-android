@@ -9,6 +9,8 @@ internal enum class CcidExchangeLevel {
 internal class CcidFunctionalDescriptor private constructor(
     val exchangeLevel: CcidExchangeLevel,
     val maximumMessageLength: Int,
+    val features: Long,
+    val protocols: Long,
 ) {
     val maximumPayloadLength: Int
         get() = maximumMessageLength - CcidWire.HEADER_SIZE
@@ -31,7 +33,9 @@ internal class CcidFunctionalDescriptor private constructor(
 
     override fun toString(): String =
         "CcidFunctionalDescriptor(exchangeLevel=" + exchangeLevel +
-            ", maximumMessageLength=" + maximumMessageLength + ")"
+            ", maximumMessageLength=" + maximumMessageLength +
+            ", features=" + features.toString(HEX_RADIX) +
+            ", protocols=" + protocols.toString(HEX_RADIX) + ")"
 
     companion object {
         fun parse(
@@ -147,8 +151,6 @@ internal class CcidFunctionalDescriptor private constructor(
                     }
                 }
 
-            val hasAutomaticConfiguration =
-                features and AUTOMATIC_PARAMETER_CONFIGURATION != 0L
             val automaticNegotiation =
                 features and AUTOMATIC_PARAMETER_NEGOTIATION != 0L
             val automaticPps = features and AUTOMATIC_PPS != 0L
@@ -156,16 +158,6 @@ internal class CcidFunctionalDescriptor private constructor(
                 throw descriptorError(
                     CcidDescriptorErrorKind.INVALID_APDU_CONFIGURATION,
                     "CCID declares conflicting automatic parameter handling",
-                    featuresDetail(features, declaredMessageLength = -1),
-                )
-            }
-            if (
-                exchangeLevel != CcidExchangeLevel.TPDU &&
-                (!hasAutomaticConfiguration || (!automaticNegotiation && !automaticPps))
-            ) {
-                throw descriptorError(
-                    CcidDescriptorErrorKind.INVALID_APDU_CONFIGURATION,
-                    "CCID APDU-level parameter handling is invalid",
                     featuresDetail(features, declaredMessageLength = -1),
                 )
             }
@@ -195,9 +187,12 @@ internal class CcidFunctionalDescriptor private constructor(
                 )
             }
 
+            val protocols = bytes.readUnsignedIntLittleEndian(offset + PROTOCOLS_OFFSET)
             return CcidFunctionalDescriptor(
                 exchangeLevel = exchangeLevel,
                 maximumMessageLength = declaredMessageLength.toInt(),
+                features = features,
+                protocols = protocols,
             )
         }
 
@@ -247,6 +242,7 @@ internal class CcidFunctionalDescriptor private constructor(
 
         private const val CCID_FUNCTIONAL_DESCRIPTOR_TYPE = 0x21
         private const val CCID_FUNCTIONAL_DESCRIPTOR_LENGTH = 54
+        private const val PROTOCOLS_OFFSET = 6
         private const val FEATURES_OFFSET = 40
         private const val MAXIMUM_MESSAGE_LENGTH_OFFSET = 44
 
