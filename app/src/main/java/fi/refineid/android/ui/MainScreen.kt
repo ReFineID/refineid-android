@@ -154,6 +154,34 @@ internal fun MainScreen(
         }
     }
 
+    var userDismissedUsbCanDialog by rememberSaveable { mutableStateOf(false) }
+    var isSubmittingUsbCan by remember { mutableStateOf(false) }
+
+    LaunchedEffect(snapshot.cardPresence) {
+        if (snapshot.cardPresence != CardPresence.PRESENT) {
+            userDismissedUsbCanDialog = false
+        }
+    }
+
+    LaunchedEffect(snapshot.status) {
+        if (snapshot.status != ReaderConnectionStatus.CHECKING) {
+            isSubmittingUsbCan = false
+        }
+    }
+
+    val usbCardAwaitsCan =
+        snapshot.cardPresence == CardPresence.PRESENT &&
+            !CanSessionStore.hasCan &&
+            (
+                snapshot.status == ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED ||
+                    snapshot.status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER
+            )
+
+    val showsUsbCanDialog =
+        !userDismissedUsbCanDialog &&
+            snapshot.cardPresence == CardPresence.PRESENT &&
+            (usbCardAwaitsCan || (isSubmittingUsbCan && snapshot.status == ReaderConnectionStatus.CHECKING))
+
     val fallbackRemoteName = remember { kotlinx.coroutines.flow.MutableStateFlow<String?>(null) }
     val fallbackRemoteDetails = remember { kotlinx.coroutines.flow.MutableStateFlow<PersonCardDetails?>(null) }
     val remoteHolderName by (remoteCardModel?.holderName ?: fallbackRemoteName).collectAsState()
@@ -391,6 +419,12 @@ internal fun MainScreen(
                 onOpenSign = { destination = MainDestination.SIGN },
                 onOpenPairing = { destination = MainDestination.PAIRING },
                 onOpenCardManagement = { destination = MainDestination.CARD_MANAGEMENT },
+                onRequestUsbCan =
+                    if (usbCardAwaitsCan) {
+                        { userDismissedUsbCanDialog = false }
+                    } else {
+                        null
+                    },
             )
         }
 
@@ -558,6 +592,19 @@ internal fun MainScreen(
         }
     }
 
+    if (showsUsbCanDialog) {
+        ReaderCanDialog(
+            status = snapshot.status,
+            onDismiss = {
+                userDismissedUsbCanDialog = true
+            },
+            onConnect = { can ->
+                isSubmittingUsbCan = true
+                onReaderConnect(can, null)
+            },
+        )
+    }
+
     if (showsPhotoReadNfcDialog) {
         ReadCardNfcDialog(
             onDismiss = {
@@ -625,6 +672,7 @@ private fun HomeScreen(
     onOpenSign: () -> Unit,
     onOpenPairing: () -> Unit,
     onOpenCardManagement: () -> Unit,
+    onRequestUsbCan: (() -> Unit)? = null,
 ) {
     Scaffold(
         modifier =
@@ -730,6 +778,7 @@ private fun HomeScreen(
                 pinCache = pinCache,
                 cards = cards,
                 onOpenPersonForCard = onOpenPersonForCard,
+                onRequestUsbCan = onRequestUsbCan,
             )
 
             if (BuildDiagnostics.TIMESTAMP_SETTINGS_ENABLED) {
@@ -790,6 +839,7 @@ private fun IdentitySection(
     pinCache: AuthenticationPinCache? = null,
     cards: List<CardIdentityItem> = emptyList(),
     onOpenPersonForCard: ((CardIdentityItem) -> Unit)? = null,
+    onRequestUsbCan: (() -> Unit)? = null,
 ) {
     var showsForgetConfirmation by remember { mutableStateOf(false) }
     var showsNfcReadDialog by remember { mutableStateOf(false) }
@@ -805,7 +855,9 @@ private fun IdentitySection(
                         card = card,
                         onClick = {
                             card.onSelect?.invoke()
-                            if (card.details != null || card.title.isNotEmpty()) {
+                            if (card.isSelected && onRequestUsbCan != null && card.details == null) {
+                                onRequestUsbCan()
+                            } else if (card.details != null || card.title.isNotEmpty()) {
                                 onOpenPersonForCard?.invoke(card) ?: onOpenPerson()
                             }
                         },
@@ -820,6 +872,8 @@ private fun IdentitySection(
                                 val personPageComplete = holderName != null
                                 if (personPageComplete) {
                                     onOpenPerson()
+                                } else if (onRequestUsbCan != null) {
+                                    onRequestUsbCan()
                                 } else if (!hasNfc) {
                                     onOpenPairing()
                                 } else {
@@ -840,7 +894,13 @@ private fun IdentitySection(
                         text =
                             holderName
                                 ?: stringResource(
-                                    if (hasNfc) R.string.read_identity_card else R.string.connect_id_card,
+                                    if (onRequestUsbCan != null) {
+                                        R.string.access_number_required
+                                    } else if (hasNfc) {
+                                        R.string.read_identity_card
+                                    } else {
+                                        R.string.connect_id_card
+                                    },
                                 ),
                         style = MaterialTheme.typography.bodyLarge,
                         color =
@@ -1042,6 +1102,131 @@ private fun ReadCardNfcDialog(
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+@Suppress("FunctionName", "ktlint:standard:function-naming")
+@Composable
+private fun ReaderCanDialog(
+    status: ReaderConnectionStatus,
+    onDismiss: () -> Unit,
+    onConnect: (CanSubmission) -> Unit,
+) {
+    val initialCan = remember { CanSessionStore.currentCan ?: "" }
+    val canState = remember { TextFieldState(initialCan) }
+    var lastSubmittedCan by remember { mutableStateOf<String?>(null) }
+
+    var remainingCooldown by remember {
+        mutableIntStateOf(
+            CanSessionStore.remainingCooldownSeconds(canState.text),
+        )
+    }
+    LaunchedEffect(canState.text) {
+        while (true) {
+            remainingCooldown =
+                CanSessionStore.remainingCooldownSeconds(canState.text)
+            if (remainingCooldown <= 0) break
+            delay(1000L)
+        }
+    }
+
+    val isCanBlocked = remainingCooldown > 0
+    val isChecking = status == ReaderConnectionStatus.CHECKING
+    val isWrongCan =
+        status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER &&
+            (lastSubmittedCan == null || canState.text.contentEquals(lastSubmittedCan))
+    val canReady = CanSubmission.isComplete(canState.text) && !isCanBlocked && !isChecking
+
+    val submit = {
+        if (canReady) {
+            lastSubmittedCan = canState.text.toString()
+            CanSessionStore.remember(canState.text)
+            val can = CanSubmission.from(canState.text)
+            onConnect(can)
+        }
+    }
+
+    AlertDialog(
+        modifier = Modifier.testTag(UiAutomationIds.READER_CAN_DIALOG),
+        onDismissRequest = {
+            if (!isChecking) {
+                onDismiss()
+            }
+        },
+        title = {
+            Text(
+                text =
+                    stringResource(
+                        if (status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER) {
+                            R.string.wrong_can
+                        } else {
+                            R.string.access_number_required
+                        },
+                    ),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                SecureTextField(
+                    state = canState,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag(UiAutomationIds.READER_CAN_FIELD),
+                    label = { Text(stringResource(R.string.can)) },
+                    inputTransformation = CanInputTransformation,
+                    textObfuscationMode = TextObfuscationMode.Visible,
+                    keyboardOptions =
+                        KeyboardOptions(
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.NumberPassword,
+                            imeAction = ImeAction.Done,
+                        ),
+                    isError = isCanBlocked || isWrongCan,
+                    supportingText = {
+                        if (isCanBlocked) {
+                            Text(
+                                text = stringResource(R.string.can_rejected_cooldown, remainingCooldown),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        } else if (isWrongCan) {
+                            Text(
+                                text = stringResource(R.string.wrong_can),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
+                    onKeyboardAction = { submit() },
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = submit,
+                enabled = canReady,
+                modifier = Modifier.testTag(UiAutomationIds.READER_CONNECT_ACTION),
+            ) {
+                Text(
+                    stringResource(
+                        if (isChecking) R.string.checking else R.string.unlock,
+                    ),
+                )
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                enabled = !isChecking,
+                modifier = Modifier.testTag(UiAutomationIds.READER_CANCEL_ACTION),
+            ) {
                 Text(stringResource(R.string.cancel))
             }
         },
