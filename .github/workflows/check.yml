@@ -87,4 +87,6 @@ jobs:
 
       - name: Run the full quality floor
         working-directory: refineid-android
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx5g -XX:+UseParallelGC -Dfile.encoding=UTF-8"
         run: ./gradlew check

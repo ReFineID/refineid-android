@@ -489,7 +489,7 @@ val verifyReleaseNoLogging =
                 )
             }
 
-            fun ByteArray.forEachDexMethodReference(action: (String, String) -> Unit) {
+            fun ByteArray.forEachDexMethodReference(action: (String, () -> String) -> Unit) {
                 check(
                     size >= dexHeaderMinimumSize &&
                         copyOfRange(0, 4).contentEquals("dex\n".toByteArray()),
@@ -506,6 +506,18 @@ val verifyReleaseNoLogging =
                     "release APK contains negative DEX table sizes"
                 }
 
+                val stringCache = arrayOfNulls<String>(stringIdsSize)
+
+                fun getDexString(index: Int): String {
+                    val cached = stringCache[index]
+                    if (cached != null) {
+                        return cached
+                    }
+                    val decoded = readDexString(stringIdsOffset, stringIdsSize, index)
+                    stringCache[index] = decoded
+                    return decoded
+                }
+
                 repeat(methodIdsSize) { methodIndex ->
                     val methodOffset = methodIdsOffset + methodIndex * dexMethodIdSize
                     val classIndex =
@@ -516,10 +528,9 @@ val verifyReleaseNoLogging =
                     val descriptorIndex =
                         readDexInt(typeIdsOffset + classIndex * Int.SIZE_BYTES)
                     val nameIndex = readDexInt(methodOffset + dexMethodNameIndexOffset)
-                    action(
-                        readDexString(stringIdsOffset, stringIdsSize, descriptorIndex),
-                        readDexString(stringIdsOffset, stringIdsSize, nameIndex),
-                    )
+                    action(getDexString(descriptorIndex)) {
+                        getDexString(nameIndex)
+                    }
                 }
             }
 
@@ -611,8 +622,9 @@ val verifyReleaseNoLogging =
                             return@forEachDexMethodReference
                         }
                         val forbiddenNames = forbiddenMethods[owner]
-                        check(forbiddenNames != null && method !in forbiddenNames) {
-                            "release APK retains an output method: " + owner + method
+                        val methodName = method()
+                        check(forbiddenNames != null && methodName !in forbiddenNames) {
+                            "release APK retains an output method: " + owner + methodName
                         }
                     }
                 }
