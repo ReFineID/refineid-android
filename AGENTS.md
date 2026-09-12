@@ -1,4 +1,4 @@
-# ReFineID Android repository instructions
+# RefineID Android repository instructions
 
 - RULE #1: PIN CODES NEVER TRAVEL OVER ANY NETWORK.
   PIN1 and PIN2 NEVER leave the phone when accessed via RAPP.
@@ -17,7 +17,7 @@
 - System-browser authentication remains the end state. The in-app browser is
   a supported login vehicle on stock Android: any HTTPS site, both card
   transports, every signature behind the holder's PIN.
-- Android also serves as the RAPP reader for the other ReFineID platforms.
+- Android also serves as the RAPP reader for the other RefineID platforms.
 - User-facing UI is terse. Explanations, status, and diagnostics belong in
   documentation and developer tooling, not product copy.
 - Keep card transport, identity-card protocol, browser integration, and UI as
@@ -25,7 +25,7 @@
   JVM unit tests can use synthetic descriptors and byte sequences.
 - fineid-spec governs protocol behavior. Prefer refineid-core for reusable
   shipped logic; refineid-mono-internal is the implementation oracle and
-  ReFineID-Apple the product-behavior and UX reference.
+  RefineID-Apple the product-behavior and UX reference.
 
 ## Security
 
@@ -107,6 +107,6 @@
 
 ## Licensing
 
-- This repository and the referenced ReFineID sources are Apache-2.0.
+- This repository and the referenced RefineID sources are Apache-2.0.
 - Retain existing copyright and license notices when adapting source between
   repositories.
