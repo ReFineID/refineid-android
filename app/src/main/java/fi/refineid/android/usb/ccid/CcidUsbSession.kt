@@ -873,6 +873,7 @@ internal class CcidUsbSessionOpener(
                 interfaceNumber = endpoints.usbInterface.id,
                 vendorId = device.vendorId,
                 productId = device.productId,
+                productName = device.productName,
             )
             AppTrace.ccidEndpoints(
                 interfaceNumber = endpoints.usbInterface.id,
@@ -950,10 +951,11 @@ internal class CcidUsbSessionOpener(
     /** After a certificate is read successfully, check activation needs then PIN1 preflight. */
     private fun preparePastCertificate(session: CcidUsbSession): CcidSessionOpenResult {
         val healthResult = session.probeCredentialHealth()
-        if (healthResult is fi.refineid.android.core.CardManagementResult.Success &&
-            healthResult.value.activationNeeds.any
-        ) {
-            return CcidSessionOpenResult.ActivationRequired(session)
+        if (healthResult is fi.refineid.android.core.CardManagementResult.Success) {
+            AppTrace.credentialHealth(healthResult.value)
+            if (healthResult.value.activationNeeds.any) {
+                return CcidSessionOpenResult.ActivationRequired(session)
+            }
         }
         return when (val preflight = session.cachePin1Preflight()) {
             is NativePin1PreflightResult.Success -> {

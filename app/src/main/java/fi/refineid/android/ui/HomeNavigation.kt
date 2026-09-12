@@ -250,6 +250,8 @@ internal fun SectionHeader(title: String) {
 @Composable
 internal fun ActivationBanner(
     modifier: Modifier = Modifier,
+    cardLabel: String? = null,
+    isMultiple: Boolean = false,
     onActivate: (() -> Unit)? = null,
 ) {
     Card(
@@ -281,8 +283,22 @@ internal fun ActivationBanner(
                     modifier = Modifier.size(28.dp),
                 )
                 Column(modifier = Modifier.weight(1f)) {
+                    val title =
+                        when {
+                            !cardLabel.isNullOrBlank() && isMultiple -> {
+                                stringResource(R.string.cards_not_activated_multiple, cardLabel)
+                            }
+
+                            !cardLabel.isNullOrBlank() -> {
+                                stringResource(R.string.card_not_activated_named, cardLabel)
+                            }
+
+                            else -> {
+                                stringResource(R.string.card_not_activated)
+                            }
+                        }
                     Text(
-                        text = stringResource(R.string.card_not_activated),
+                        text = title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onErrorContainer,

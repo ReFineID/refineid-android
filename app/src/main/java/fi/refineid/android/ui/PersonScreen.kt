@@ -134,7 +134,11 @@ internal fun PersonScreen(
         verticalArrangement = Arrangement.spacedBy(SUBSCREEN_ITEM_SPACING),
     ) {
         if (activationRequired) {
-            ActivationBanner(onActivate = onActivate)
+            val label = details.holderName.ifBlank { details.fullName.ifBlank { details.documentNumber } }
+            ActivationBanner(
+                cardLabel = label,
+                onActivate = onActivate,
+            )
         }
 
         // Photo Card

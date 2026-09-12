@@ -6,6 +6,7 @@ import fi.refineid.android.browser.BrowserSignatureStatus
 import fi.refineid.android.core.AtrValidation
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
+import fi.refineid.android.core.CredentialHealth
 import fi.refineid.android.core.NativeAuthenticationCertificate
 import fi.refineid.android.core.NativeAuthenticationSignResult
 import fi.refineid.android.core.NativeCardAccessResult
@@ -14,6 +15,7 @@ import fi.refineid.android.core.NativeCardOperationResult
 import fi.refineid.android.core.NativeCertificateReadResult
 import fi.refineid.android.core.NativeContactlessOpenResult
 import fi.refineid.android.core.NativePin1PreflightResult
+import fi.refineid.android.core.NativePin1State
 import fi.refineid.android.core.NativePin2PreflightResult
 import fi.refineid.android.core.NativeQualifiedCertificate
 import fi.refineid.android.core.NativeQualifiedSignResult
@@ -793,6 +795,7 @@ internal object AppTrace {
         interfaceNumber: Int = -1,
         vendorId: Int = -1,
         productId: Int = -1,
+        productName: String? = null,
     ) {
         var line =
             "ccid:descriptor-accepted level=" + level +
@@ -803,7 +806,22 @@ internal object AppTrace {
         if (vendorId >= 0 && productId >= 0) {
             line += " vid=" + hexShort(vendorId) + " pid=" + hexShort(productId)
         }
+        if (!productName.isNullOrBlank()) {
+            line += " reader=" + productName.take(READER_NAME_TRACE_LIMIT)
+        }
         debug(line)
+    }
+
+    fun credentialHealth(health: CredentialHealth) {
+        debug(
+            "card:credential-health pin1=" + pinStateName(health.pin1State) +
+                " pin2=" + health.pin2State +
+                " puk=" + pinStateName(health.pukState) +
+                " scheme=" + health.scheme +
+                " activation-scheme=" + health.activationScheme +
+                " needs-pin1=" + health.activationNeeds.pin1 +
+                " needs-pin2=" + health.activationNeeds.pin2,
+        )
     }
 
     fun ccidClaimFailed() {
@@ -1096,6 +1114,15 @@ internal object AppTrace {
     private fun hexStatus(value: Int): String =
         value.and(UNSIGNED_SHORT_MASK).toString(HEX_RADIX).padStart(STATUS_HEX_DIGITS, '0')
 
+    private fun pinStateName(state: NativePin1State): String =
+        when (state) {
+            NativePin1State.Verified -> "verified"
+            is NativePin1State.Remaining -> "remaining-" + state.attempts
+            NativePin1State.Locked -> "locked"
+            NativePin1State.NoInformation -> "no-info"
+            NativePin1State.Unrecognized -> "unrecognized"
+        }
+
     fun uncaughtException(
         thread: Thread,
         throwable: Throwable,
@@ -1108,6 +1135,7 @@ internal object AppTrace {
     }
 
     private const val MAX_TRACE_LINES = 500
+    private const val READER_NAME_TRACE_LIMIT = 48
     private val traceLogBuffer = ArrayDeque<String>(MAX_TRACE_LINES)
 
     fun getTraceLog(): List<String> =
