@@ -1,3 +1,19 @@
+buildscript {
+    configurations.all {
+        resolutionStrategy {
+            force(
+                "org.jdom:jdom2:2.0.6.1",
+                "org.bitbucket.b_c:jose4j:0.9.6",
+                "org.apache.httpcomponents:httpclient:4.5.14",
+                "org.apache.commons:commons-lang3:3.18.0",
+                "org.bouncycastle:bcprov-jdk18on:1.84",
+                "org.bouncycastle:bcpkix-jdk18on:1.84",
+                "org.bouncycastle:bcutil-jdk18on:1.84",
+            )
+        }
+    }
+}
+
 plugins {
     base
     alias(libs.plugins.android.application) apply false
@@ -5,6 +21,26 @@ plugins {
     alias(libs.plugins.play.publisher) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.spotless)
+}
+
+allprojects {
+    configurations.matching { !it.name.contains("detekt", ignoreCase = true) }.all {
+        resolutionStrategy {
+            force(
+                "org.apache.httpcomponents:httpclient:4.5.14",
+                "org.apache.commons:commons-lang3:3.18.0",
+                "org.bouncycastle:bcprov-jdk18on:1.84",
+                "org.bouncycastle:bcpkix-jdk18on:1.84",
+                "org.bouncycastle:bcutil-jdk18on:1.84",
+            )
+            eachDependency {
+                if (requested.group == "io.netty" && !requested.name.startsWith("netty-bom")) {
+                    useVersion("4.1.138.Final")
+                    because("Fix Dependabot security vulnerabilities")
+                }
+            }
+        }
+    }
 }
 
 detekt {
