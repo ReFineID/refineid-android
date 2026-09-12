@@ -254,8 +254,10 @@ internal class NfcReaderController(
         }
         return withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine { continuation ->
-                val listener: (NfcReaderSnapshot) -> Unit = { snapshot ->
+                lateinit var listener: (NfcReaderSnapshot) -> Unit
+                listener = { snapshot ->
                     if (snapshot.status == NfcReaderStatus.CARD_READY && continuation.isActive) {
+                        removeStateListener(listener)
                         continuation.resume(true)
                     }
                 }
