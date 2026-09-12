@@ -14,6 +14,7 @@ import fi.refineid.android.core.AuthenticationSignFailure
 import fi.refineid.android.core.AuthenticationSignResult
 import fi.refineid.android.core.AuthenticationSigningAlgorithm
 import fi.refineid.android.core.AuthenticationSigningInputMode
+import fi.refineid.android.core.CanSessionStore
 import fi.refineid.android.core.CanSubmission
 import fi.refineid.android.core.CardPhotoStore
 import fi.refineid.android.core.CertificateHolderName
@@ -220,6 +221,7 @@ internal class UsbReaderController(
 
                     UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                         AppTrace.usbDeviceDetached()
+                        CanSessionStore.drop()
                         refresh()
                     }
                 }
@@ -278,6 +280,7 @@ internal class UsbReaderController(
         probeGeneration += 1
         ioExecutor.execute(::closeActiveSession)
         ioExecutor.shutdown()
+        CanSessionStore.drop()
         AppTrace.usbControllerStopped()
     }
 
@@ -287,6 +290,7 @@ internal class UsbReaderController(
             return
         }
         preferredDeviceId = deviceId
+        CanSessionStore.drop()
         refresh()
     }
 
@@ -313,6 +317,7 @@ internal class UsbReaderController(
             when {
                 device == null || match == null -> {
                     closeActiveSessionAsync()
+                    CanSessionStore.drop()
                     UsbReaderSnapshot()
                 }
 
@@ -469,8 +474,7 @@ internal class UsbReaderController(
                 return@execute
             }
             can.peekDigits()?.let {
-                fi.refineid.android.core.CanSessionStore
-                    .remember(it)
+                CanSessionStore.remember(it)
             }
             val canBytes = can.transfer()
             val result =
@@ -541,8 +545,7 @@ internal class UsbReaderController(
                         val status = result.kind.toContactlessConnectStatus()
                         if (status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER) {
                             val canDigits = can.peekDigits()
-                            fi.refineid.android.core.CanSessionStore
-                                .recordRejected(canDigits)
+                            CanSessionStore.recordRejected(canDigits)
                         }
                         UsbReaderSnapshot(
                             status = status,
@@ -578,7 +581,7 @@ internal class UsbReaderController(
             onResult(existingPhoto)
             return
         }
-        val storedCan = fi.refineid.android.core.CanSessionStore.currentCan
+        val storedCan = CanSessionStore.currentCan
         if (storedCan != null && activeSession != null && isStarted) {
             connect(CanSubmission.from(storedCan), onResult)
         } else {
@@ -828,13 +831,21 @@ internal class UsbReaderController(
                         // application: the face photo sits behind PACE. When
                         // the holder has already trusted this session with
                         // the card access number, fetch the photo once.
-                        val storedCan =
-                            fi.refineid.android.core.CanSessionStore.currentCan
+                        val storedCan = CanSessionStore.currentCan
                         if (
                             storedCan != null &&
                             holder != null &&
                             CardPhotoStore.getPhoto(holder) == null
                         ) {
+                            connect(CanSubmission.from(storedCan))
+                        }
+                    } else if (result is CcidSessionOpenResult.AccessNumberRequired) {
+                        // Contactless sessions on dual/contactless pads require
+                        // the card access number (PACE) before card applications
+                        // can be read. If CAN is already cached for this reader,
+                        // unlock immediately without re-prompting.
+                        val storedCan = CanSessionStore.currentCan
+                        if (storedCan != null) {
                             connect(CanSubmission.from(storedCan))
                         }
                     }
