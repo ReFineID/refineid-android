@@ -518,6 +518,8 @@ internal class RappPhoneProxyDispatcher(
                 deferred.complete(cert?.copyDer())
             } catch (_: Exception) {
                 deferred.complete(null)
+            } finally {
+                cert?.close()
             }
         } ?: deferred.complete(null)
         return try {

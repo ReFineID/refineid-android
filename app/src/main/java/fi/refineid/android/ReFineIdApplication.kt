@@ -14,6 +14,11 @@ import fi.refineid.android.nfc.NfcReaderController
 import fi.refineid.android.prime.PrimedCanStore
 import fi.refineid.android.settings.TimestampAuthorityStore
 import fi.refineid.android.usb.UsbReaderController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.selects.select
 
 class ReFineIdApplication : Application() {
     internal lateinit var readerController: UsbReaderController
@@ -105,18 +110,7 @@ class ReFineIdApplication : Application() {
                     ),
             )
         readerController.start()
-        rappProxyDispatcher =
-            fi.refineid.android.rapp.RappPhoneProxyDispatcher(
-                context = this,
-                scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default),
-                inbox = rappAuthorizationInbox,
-                pinCache = authenticationPinCache,
-                primedCanStore = primedStore,
-                authCardService = { nfcReaderController.authenticationCardService },
-                qualifiedCardService = { nfcReaderController.qualifiedCardService },
-                isCardReady = { nfcReaderController.isCardReady },
-                awaitCardReady = { nfcReaderController.awaitCardReady() },
-            )
+        rappProxyDispatcher = createRappProxyDispatcher(primedStore)
         val existingPairs = rappPairCatalog.listPairs()
         if (BuildConfig.DEBUG) {
             android.util.Log.i("APPLICATION", "existingPairs count=${existingPairs.size}")
@@ -154,6 +148,54 @@ class ReFineIdApplication : Application() {
         readerController.stop()
         super.onTerminate()
     }
+
+    private fun createRappProxyDispatcher(
+        primedStore: PrimedCanStore?,
+    ): fi.refineid.android.rapp.RappPhoneProxyDispatcher =
+        fi.refineid.android.rapp.RappPhoneProxyDispatcher(
+            context = this,
+            scope = CoroutineScope(Dispatchers.Default),
+            inbox = rappAuthorizationInbox,
+            pinCache = authenticationPinCache,
+            primedCanStore = primedStore,
+            authCardService = {
+                if (readerController.isCardReady) {
+                    readerController
+                } else {
+                    nfcReaderController.authenticationCardService
+                }
+            },
+            qualifiedCardService = {
+                if (readerController.isCardReady) {
+                    readerController.qualifiedCardService
+                } else {
+                    nfcReaderController.qualifiedCardService
+                }
+            },
+            isCardReady = {
+                readerController.isCardReady || nfcReaderController.isCardReady
+            },
+            awaitCardReady = {
+                if (readerController.isCardReady || nfcReaderController.isCardReady) {
+                    true
+                } else {
+                    coroutineScope {
+                        val usbWait = async { readerController.awaitCardReady() }
+                        val nfcWait = async { nfcReaderController.awaitCardReady() }
+                        select {
+                            usbWait.onAwait { ready ->
+                                nfcWait.cancel()
+                                ready
+                            }
+                            nfcWait.onAwait { ready ->
+                                usbWait.cancel()
+                                ready
+                            }
+                        }
+                    }
+                }
+            },
+        )
 
     // The CSCA trust anchors that close passive authentication's
     // DSC-to-CSCA hop. One DER certificate per file, grouped by issuing

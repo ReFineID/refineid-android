@@ -30,11 +30,14 @@ import fi.refineid.android.keychain.nextProviderGeneration
 import fi.refineid.android.usb.ccid.CcidSessionOpenResult
 import fi.refineid.android.usb.ccid.CcidUsbSession
 import fi.refineid.android.usb.ccid.CcidUsbSessionOpener
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import java.security.SecureRandom
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import kotlin.coroutines.resume
 
 internal enum class ReaderConnectionStatus {
     NOT_CONNECTED,
@@ -265,6 +268,50 @@ internal class UsbReaderController(
     fun removeStateListener(listener: (UsbReaderSnapshot) -> Unit) {
         checkMainThread()
         stateListeners -= listener
+    }
+
+    val isCardReady: Boolean
+        get() =
+            isStarted &&
+                latestSnapshot.status == ReaderConnectionStatus.READY &&
+                latestSnapshot.cardPresence == CardPresence.PRESENT
+
+    suspend fun awaitCardReady(timeoutMs: Long = 30_000L): Boolean {
+        if (isCardReady) {
+            return true
+        }
+        val storedCan = CanSessionStore.currentCan
+        if (
+            storedCan != null &&
+            (
+                latestSnapshot.status == ReaderConnectionStatus.ACCESS_NUMBER_REQUIRED ||
+                    latestSnapshot.status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER
+            )
+        ) {
+            mainHandler.post {
+                connect(CanSubmission.from(storedCan))
+            }
+        }
+        return withTimeoutOrNull(timeoutMs) {
+            suspendCancellableCoroutine { continuation ->
+                lateinit var listener: (UsbReaderSnapshot) -> Unit
+                listener = { snapshot ->
+                    if (
+                        isStarted &&
+                        snapshot.status == ReaderConnectionStatus.READY &&
+                        snapshot.cardPresence == CardPresence.PRESENT &&
+                        continuation.isActive
+                    ) {
+                        removeStateListener(listener)
+                        continuation.resume(true)
+                    }
+                }
+                mainHandler.post { addStateListener(listener) }
+                continuation.invokeOnCancellation {
+                    mainHandler.post { removeStateListener(listener) }
+                }
+            }
+        } ?: false
     }
 
     fun stop() {
