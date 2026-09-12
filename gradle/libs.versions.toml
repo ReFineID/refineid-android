@@ -2,7 +2,7 @@
 activity-compose = "1.13.0"
 agp = "9.4.0"
 compose-bom = "2026.06.00"
-detekt = "2.0.0-alpha.3"
+detekt = "2.0.0-alpha.6"
 jna = "5.19.1"
 junit = "4.13.2"
 kotlin = "2.4.20"
