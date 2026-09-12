@@ -12,11 +12,16 @@ internal object CcidWire {
     const val ERROR_OFFSET = 8
     const val RESPONSE_PARAMETER_OFFSET = 9
 
+    const val PC_TO_RDR_SET_PARAMETERS = 0x61
     const val PC_TO_RDR_ICC_POWER_ON = 0x62
     const val PC_TO_RDR_GET_SLOT_STATUS = 0x65
+    const val PC_TO_RDR_GET_PARAMETERS = 0x6C
     const val PC_TO_RDR_XFR_BLOCK = 0x6F
     const val RDR_TO_PC_DATA_BLOCK = 0x80
     const val RDR_TO_PC_SLOT_STATUS = 0x81
+    const val RDR_TO_PC_PARAMETERS = 0x82
+    const val RDR_TO_PC_NOTIFY_SLOT_CHANGE = 0x50
+    const val RDR_TO_PC_HARDWARE_ERROR = 0x51
 
     const val CARD_STATUS_ACTIVE = 0
     const val CARD_STATUS_INACTIVE = 1
@@ -59,6 +64,7 @@ internal enum class CcidResponseMessageType(
 ) {
     DATA_BLOCK(CcidWire.RDR_TO_PC_DATA_BLOCK),
     SLOT_STATUS(CcidWire.RDR_TO_PC_SLOT_STATUS),
+    PARAMETERS(CcidWire.RDR_TO_PC_PARAMETERS),
 }
 
 internal class CcidCommand private constructor(
@@ -150,6 +156,62 @@ internal class CcidCommand private constructor(
             )
         }
 
+        fun getParameters(
+            slot: Int,
+            sequence: Int,
+        ): CcidCommand =
+            commandWithoutPayload(
+                messageType = CcidWire.PC_TO_RDR_GET_PARAMETERS,
+                slot = slot,
+                sequence = sequence,
+                firstParameter = 0,
+                expectedResponse = CcidResponseMessageType.PARAMETERS,
+            )
+
+        fun setParametersT0(
+            slot: Int,
+            sequence: Int,
+            fiDi: Int = DEFAULT_T0_FIDI,
+            guardTime: Int = 0,
+            waitingInteger: Int = DEFAULT_T0_WAITING_INTEGER,
+            clockStop: Int = 0,
+            inverseConvention: Boolean = false,
+        ): CcidCommand {
+            requireUnsignedByte("slot", slot)
+            requireUnsignedByte("sequence", sequence)
+            requireUnsignedByte("fiDi", fiDi)
+            requireUnsignedByte("guardTime", guardTime)
+            requireUnsignedByte("waitingInteger", waitingInteger)
+            requireUnsignedByte("clockStop", clockStop)
+
+            val parameterLength = T0_PARAMETER_LENGTH
+            val bytes = ByteArray(CcidWire.HEADER_SIZE + parameterLength)
+            bytes[CcidWire.MESSAGE_TYPE_OFFSET] = CcidWire.PC_TO_RDR_SET_PARAMETERS.toByte()
+            writeUnsignedIntLittleEndian(
+                bytes = bytes,
+                offset = CcidWire.LENGTH_OFFSET,
+                value = parameterLength,
+            )
+            bytes[CcidWire.SLOT_OFFSET] = slot.toByte()
+            bytes[CcidWire.SEQUENCE_OFFSET] = sequence.toByte()
+            bytes[CcidWire.STATUS_OFFSET] = 0 // bProtocolNum = 0 (T=0)
+            bytes[CcidWire.HEADER_SIZE + T0_FIDI_OFFSET] = fiDi.toByte()
+            bytes[CcidWire.HEADER_SIZE + T0_CONVENTION_OFFSET] =
+                if (inverseConvention) T0_INVERSE_CONVENTION.toByte() else 0.toByte()
+            bytes[CcidWire.HEADER_SIZE + T0_GUARD_TIME_OFFSET] = guardTime.toByte()
+            bytes[CcidWire.HEADER_SIZE + T0_WAITING_INTEGER_OFFSET] = waitingInteger.toByte()
+            bytes[CcidWire.HEADER_SIZE + T0_CLOCK_STOP_OFFSET] = clockStop.toByte()
+
+            return CcidCommand(
+                slot = slot,
+                sequence = sequence,
+                expectedResponse = CcidResponseMessageType.PARAMETERS,
+                messageType = CcidWire.PC_TO_RDR_SET_PARAMETERS,
+                payloadLength = parameterLength,
+                wireBytes = bytes,
+            )
+        }
+
         private fun commandWithoutPayload(
             messageType: Int,
             slot: Int,
@@ -199,6 +261,15 @@ internal class CcidCommand private constructor(
         private const val UNSIGNED_INT_LENGTH = 4
         private const val MINIMUM_TRANSFER_BLOCK_LENGTH = 4
         private const val MAXIMUM_COMMAND_PAYLOAD_SIZE = 65_544
+        private const val DEFAULT_T0_FIDI = 0x11
+        private const val DEFAULT_T0_WAITING_INTEGER = 0x0A
+        private const val T0_PARAMETER_LENGTH = 5
+        private const val T0_INVERSE_CONVENTION = 0x02
+        private const val T0_FIDI_OFFSET = 0
+        private const val T0_CONVENTION_OFFSET = 1
+        private const val T0_GUARD_TIME_OFFSET = 2
+        private const val T0_WAITING_INTEGER_OFFSET = 3
+        private const val T0_CLOCK_STOP_OFFSET = 4
     }
 }
 
@@ -288,6 +359,36 @@ internal class CcidDataBlock(
     override fun toString(): String =
         "CcidDataBlock(cardStatus=" + cardStatus +
             ", chainParameter=" + chainParameter +
+            ", payloadLength=" + payloadLength + ")"
+}
+
+internal class CcidParameters(
+    override val cardStatus: CcidCardStatus,
+    val protocolNum: Int,
+    payload: ByteArray,
+) : CcidResponse,
+    AutoCloseable {
+    private val ownedPayload = payload.copyOf()
+    private var isClosed = false
+
+    val payloadLength: Int
+        get() = ownedPayload.size
+
+    fun copyPayload(): ByteArray {
+        check(!isClosed) {
+            "CCID parameters response is closed"
+        }
+        return ownedPayload.copyOf()
+    }
+
+    override fun close() {
+        ownedPayload.fill(0)
+        isClosed = true
+    }
+
+    override fun toString(): String =
+        "CcidParameters(cardStatus=" + cardStatus +
+            ", protocolNum=" + protocolNum +
             ", payloadLength=" + payloadLength + ")"
 }
 
@@ -463,7 +564,30 @@ internal object CcidResponseParser {
                     cardStatus = cardStatus,
                 )
             }
+
+            CcidResponseMessageType.PARAMETERS -> {
+                copyParameters(
+                    frame = frame,
+                    cardStatus = cardStatus,
+                )
+            }
         }
+
+    private fun copyParameters(
+        frame: ByteArray,
+        cardStatus: CcidCardStatus,
+    ): CcidParameters {
+        val payload = frame.copyOfRange(CcidWire.HEADER_SIZE, frame.size)
+        return try {
+            CcidParameters(
+                cardStatus = cardStatus,
+                protocolNum = frame.unsignedByte(CcidWire.RESPONSE_PARAMETER_OFFSET),
+                payload = payload,
+            )
+        } finally {
+            payload.fill(0)
+        }
+    }
 
     private fun copyDataBlock(
         frame: ByteArray,

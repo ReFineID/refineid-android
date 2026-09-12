@@ -40,10 +40,13 @@ Failures are typed and contain only metadata, never response bytes. A successful
 data block owns a defensive payload copy, has a redacted string form, and can be
 zeroized after consumption.
 
-The encoder supports get slot status, automatic-voltage power on, and one
-bounded `XfrBlock`. Transfer bytes are owned and zeroized; the descriptor
+The encoder supports get slot status, automatic-voltage power on, get/set
+parameters (`PC_to_RDR_GetParameters` / `PC_to_RDR_SetParameters`, ADR 0040),
+and one bounded `XfrBlock`. Transfer bytes are owned and zeroized; the descriptor
 selects whether they represent a TPDU or APDU. A separate credential entry
-point consumes its input once.
+point consumes its input once. Interrupt-IN slot notifications
+(`RDR_to_PC_NotifySlotChange`) provide asynchronous card removal signaling.
+
 
 ## Failure story
 

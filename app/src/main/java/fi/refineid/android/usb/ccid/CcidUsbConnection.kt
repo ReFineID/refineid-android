@@ -11,6 +11,7 @@ internal data class CcidUsbEndpoints(
     val usbInterface: UsbInterface,
     val bulkIn: UsbEndpoint,
     val bulkOut: UsbEndpoint,
+    val interruptIn: UsbEndpoint? = null,
 )
 
 internal object CcidUsbEndpointFinder {
@@ -31,12 +32,21 @@ internal object CcidUsbEndpointFinder {
 
             var bulkIn: UsbEndpoint? = null
             var bulkOut: UsbEndpoint? = null
+            var interruptIn: UsbEndpoint? = null
             repeat(usbInterface.endpointCount) { endpointIndex ->
                 val endpoint = usbInterface.getEndpoint(endpointIndex)
-                if (endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK) {
-                    when (endpoint.direction) {
-                        UsbConstants.USB_DIR_IN -> bulkIn = endpoint
-                        UsbConstants.USB_DIR_OUT -> bulkOut = endpoint
+                when (endpoint.type) {
+                    UsbConstants.USB_ENDPOINT_XFER_BULK -> {
+                        when (endpoint.direction) {
+                            UsbConstants.USB_DIR_IN -> bulkIn = endpoint
+                            UsbConstants.USB_DIR_OUT -> bulkOut = endpoint
+                        }
+                    }
+
+                    UsbConstants.USB_ENDPOINT_XFER_INT -> {
+                        if (endpoint.direction == UsbConstants.USB_DIR_IN) {
+                            interruptIn = endpoint
+                        }
                     }
                 }
             }
@@ -49,6 +59,7 @@ internal object CcidUsbEndpointFinder {
                         usbInterface = usbInterface,
                         bulkIn = foundIn,
                         bulkOut = foundOut,
+                        interruptIn = interruptIn,
                     ),
                 )
             }

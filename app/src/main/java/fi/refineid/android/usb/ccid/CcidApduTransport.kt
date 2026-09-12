@@ -410,7 +410,11 @@ internal class CcidBlockTransport(
 
             is CcidSlotStatus,
             is CcidTimeExtension,
+            is CcidParameters,
             -> {
+                if (response is CcidParameters) {
+                    response.close()
+                }
                 failure(CcidBlockFailureKind.PROTOCOL)
             }
         }

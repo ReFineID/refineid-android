@@ -287,6 +287,8 @@ internal object AppTrace {
         cardPresence: CardPresence?,
     ) = Unit
 
+    fun usbCardRemoved() = Unit
+
     fun nfcAdapterMissing() = Unit
 
     fun nfcAdapterStateChanged() = Unit
@@ -352,6 +354,7 @@ internal object AppTrace {
     fun ccidDescriptorAccepted(
         level: CcidExchangeLevel,
         maximumMessageLength: Int,
+        features: Long = 0L,
         interfaceNumber: Int = -1,
         vendorId: Int = -1,
         productId: Int = -1,
@@ -369,6 +372,20 @@ internal object AppTrace {
     fun ccidSlotExchangeFailed(kind: CcidExchangeFailureKind) = Unit
 
     fun ccidPowerExchangeFailed(kind: CcidExchangeFailureKind) = Unit
+
+    fun ccidParameters(
+        protocolNum: Int,
+        dataHex: String,
+    ) = Unit
+
+    fun ccidParametersFailure(errorCode: Int) = Unit
+
+    fun ccidParametersExchangeFailed(kind: CcidExchangeFailureKind) = Unit
+
+    fun ccidSetParametersResult(
+        succeeded: Boolean,
+        detail: String = "",
+    ) = Unit
 
     fun ccidCardState(state: CcidCardStatus) = Unit
 
@@ -426,6 +443,7 @@ internal object AppTrace {
         interfaceNumber: Int,
         bulkInMaxPacketSize: Int,
         bulkOutMaxPacketSize: Int,
+        interruptInMaxPacketSize: Int?,
     ) = Unit
 
     fun nfcAwaitingCard() = Unit
@@ -435,6 +453,8 @@ internal object AppTrace {
         chainParameter: String,
         payloadLength: Int,
     ) = Unit
+
+    fun ccidCardRemovalDetected() = Unit
 
     fun cardPublicCommandStarted(
         classByte: Int,

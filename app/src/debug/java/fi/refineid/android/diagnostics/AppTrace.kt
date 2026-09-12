@@ -659,6 +659,10 @@ internal object AppTrace {
         )
     }
 
+    fun usbCardRemoved() {
+        debug("usb:card-removed")
+    }
+
     fun nfcAdapterMissing() {
         debug("nfc:adapter-missing")
     }
@@ -792,6 +796,7 @@ internal object AppTrace {
     fun ccidDescriptorAccepted(
         level: CcidExchangeLevel,
         maximumMessageLength: Int,
+        features: Long = 0L,
         interfaceNumber: Int = -1,
         vendorId: Int = -1,
         productId: Int = -1,
@@ -800,6 +805,9 @@ internal object AppTrace {
         var line =
             "ccid:descriptor-accepted level=" + level +
                 " max-message=" + maximumMessageLength
+        if (features != 0L) {
+            line += " features=" + features.toString(HEX_RADIX)
+        }
         if (interfaceNumber >= 0) {
             line += " iface=" + interfaceNumber
         }
@@ -844,8 +852,35 @@ internal object AppTrace {
         debug("ccid:power-failed kind=" + kind)
     }
 
+    fun ccidParameters(
+        protocolNum: Int,
+        dataHex: String,
+    ) {
+        debug("ccid:parameters protocol=" + protocolNum + " data=" + dataHex)
+    }
+
+    fun ccidParametersFailure(errorCode: Int) {
+        debug("ccid:parameters-failure error=" + errorCode)
+    }
+
+    fun ccidParametersExchangeFailed(kind: CcidExchangeFailureKind) {
+        debug("ccid:parameters-exchange-failed kind=" + kind)
+    }
+
+    fun ccidSetParametersResult(
+        succeeded: Boolean,
+        detail: String = "",
+    ) {
+        val extra = if (detail.isNotEmpty()) " " + detail else ""
+        debug("ccid:set-parameters succeeded=" + succeeded + extra)
+    }
+
     fun ccidCardState(state: CcidCardStatus) {
         debug("ccid:card-state " + state)
+    }
+
+    fun ccidCardRemovalDetected() {
+        debug("ccid:card-removal-detected")
     }
 
     fun ccidCommandFailed(
@@ -978,11 +1013,13 @@ internal object AppTrace {
         interfaceNumber: Int,
         bulkInMaxPacketSize: Int,
         bulkOutMaxPacketSize: Int,
+        interruptInMaxPacketSize: Int?,
     ) {
         debug(
             "ccid:endpoints iface=" + interfaceNumber +
                 " in-max=" + bulkInMaxPacketSize +
-                " out-max=" + bulkOutMaxPacketSize,
+                " out-max=" + bulkOutMaxPacketSize +
+                " interrupt-max=" + interruptInMaxPacketSize,
         )
     }
 
