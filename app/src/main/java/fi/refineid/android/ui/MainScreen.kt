@@ -1117,7 +1117,6 @@ private fun ReaderCanDialog(
 ) {
     val initialCan = remember { CanSessionStore.currentCan ?: "" }
     val canState = remember { TextFieldState(initialCan) }
-    var lastSubmittedCan by remember { mutableStateOf<String?>(null) }
 
     var remainingCooldown by remember {
         mutableIntStateOf(
@@ -1135,14 +1134,13 @@ private fun ReaderCanDialog(
 
     val isCanBlocked = remainingCooldown > 0
     val isChecking = status == ReaderConnectionStatus.CHECKING
-    val isWrongCan =
-        status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER &&
-            (lastSubmittedCan == null || canState.text.contentEquals(lastSubmittedCan))
+    val rejectedCan = CanSessionStore.mostRecentRejectedCan
+    val isRejectedCanCurrent = rejectedCan != null && canState.text.contentEquals(rejectedCan)
+    val isWrongCan = status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER && isRejectedCanCurrent
     val canReady = CanSubmission.isComplete(canState.text) && !isCanBlocked && !isChecking
 
     val submit = {
         if (canReady) {
-            lastSubmittedCan = canState.text.toString()
             CanSessionStore.remember(canState.text)
             val can = CanSubmission.from(canState.text)
             onConnect(can)
@@ -1160,7 +1158,7 @@ private fun ReaderCanDialog(
             Text(
                 text =
                     stringResource(
-                        if (status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER) {
+                        if (status == ReaderConnectionStatus.WRONG_ACCESS_NUMBER && isRejectedCanCurrent) {
                             R.string.wrong_can
                         } else {
                             R.string.access_number_required
