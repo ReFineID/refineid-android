@@ -10,21 +10,48 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+    groups:
+      gradle-dependencies:
+        patterns:
+          - "*"
+    ignore:
+      # Suppress routine version-update nagging for transitive buildscript overrides.
+      # Dependabot security alerts and CVE fixes still trigger when vulnerabilities occur.
+      - dependency-name: "org.bouncycastle:*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "org.apache.commons:commons-lang3"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "org.apache.httpcomponents:httpclient"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "org.bitbucket.b_c:jose4j"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
 
   - package-ecosystem: "cargo"
     directory: "/native/refineid-android-core"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
 
   - package-ecosystem: "cargo"
     directory: "/native/refineid-rapp-android"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+    groups:
+      actions-dependencies:
+        patterns:
+          - "*"
