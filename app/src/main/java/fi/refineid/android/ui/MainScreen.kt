@@ -35,7 +35,6 @@ import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -93,7 +92,6 @@ import fi.refineid.android.nfc.NfcReaderSnapshot
 import fi.refineid.android.nfc.NfcReaderStatus
 import fi.refineid.android.rapp.RappAuthorizationInbox
 import fi.refineid.android.rapp.RappPairingModel
-import fi.refineid.android.settings.ThemePreference
 import fi.refineid.android.settings.TimestampAuthorityRepository
 import fi.refineid.android.usb.CardPresence
 import fi.refineid.android.usb.ReaderConnectionStatus
@@ -109,7 +107,6 @@ private enum class MainDestination {
     PERSON,
     CARD_MANAGEMENT,
     DIAGNOSTICS,
-    APPEARANCE,
 }
 
 @Suppress("CyclomaticComplexMethod", "FunctionName", "ktlint:standard:function-naming")
@@ -139,8 +136,6 @@ internal fun MainScreen(
     remoteCardModel: fi.refineid.android.rapp.RemoteCardModel? = null,
     onPin1Changed: () -> Unit = {},
     onReadPhoto: (((ByteArray?) -> Unit) -> Unit)? = null,
-    themePreference: ThemePreference = ThemePreference.SYSTEM,
-    onThemePreferenceSelected: (ThemePreference) -> Unit = {},
 ) {
     var showsPhotoReadNfcDialog by remember { mutableStateOf(false) }
     var pendingPhotoConsumer by remember { mutableStateOf<((ByteArray?) -> Unit)?>(null) }
@@ -362,7 +357,6 @@ internal fun MainScreen(
                 onWrongPin = performFullIdentityReset,
                 onOpenPerson = { destination = MainDestination.PERSON },
                 onOpenDiagnostics = { destination = MainDestination.DIAGNOSTICS },
-                onOpenAppearance = { destination = MainDestination.APPEARANCE },
                 browserCardService =
                     if (usbCardReady) {
                         browserCardService
@@ -562,19 +556,6 @@ internal fun MainScreen(
                 )
             }
         }
-
-        MainDestination.APPEARANCE -> {
-            SubScreen(
-                title = stringResource(R.string.appearance),
-                tag = UiAutomationIds.APPEARANCE_SCREEN,
-                onBack = { destination = MainDestination.HOME },
-            ) {
-                AppearanceScreen(
-                    selected = themePreference,
-                    onSelected = onThemePreferenceSelected,
-                )
-            }
-        }
     }
 
     if (showsPhotoReadNfcDialog) {
@@ -633,7 +614,6 @@ private fun HomeScreen(
     onWrongPin: (() -> Unit)? = null,
     onOpenPerson: () -> Unit,
     onOpenDiagnostics: () -> Unit = {},
-    onOpenAppearance: () -> Unit = {},
     browserCardService: AuthenticationCardService?,
     pinCache: AuthenticationPinCache?,
     nfcStatus: NfcReaderStatus?,
@@ -723,7 +703,7 @@ private fun HomeScreen(
                         )
                         HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
                         NavigationRow(
-                            icon = Icons.Outlined.Share,
+                            icon = painterResource(R.drawable.ic_satellite_alt),
                             label = stringResource(R.string.pair_computer),
                             tag = "RappPairingRow",
                             onClick = onOpenPairing,
@@ -751,17 +731,6 @@ private fun HomeScreen(
                 cards = cards,
                 onOpenPersonForCard = onOpenPersonForCard,
             )
-
-            Section(stringResource(R.string.settings)) {
-                NavigationGroup {
-                    NavigationRow(
-                        icon = Icons.Outlined.Settings,
-                        label = stringResource(R.string.appearance),
-                        tag = UiAutomationIds.APPEARANCE_ROW,
-                        onClick = onOpenAppearance,
-                    )
-                }
-            }
 
             if (BuildDiagnostics.TIMESTAMP_SETTINGS_ENABLED) {
                 TimestampSettingsRow(timestampAuthorityRepository)
@@ -792,7 +761,7 @@ private fun DiagnosticsFooter(onOpenDiagnostics: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_stethoscope),
+                painter = painterResource(R.drawable.ic_android),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),

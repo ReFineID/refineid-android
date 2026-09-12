@@ -8,7 +8,6 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,7 +38,6 @@ import androidx.compose.ui.unit.dp
 import fi.refineid.android.R
 import fi.refineid.android.ReFineIdApplication
 import fi.refineid.android.core.Pin1Submission
-import fi.refineid.android.settings.ThemeStore
 import fi.refineid.android.ui.Pin1InputTransformation
 import fi.refineid.android.ui.ReFineIdTheme
 import fi.refineid.android.ui.UiAutomationIds
@@ -85,8 +83,7 @@ class ExternalKeyPinActivity : ComponentActivity() {
             },
         )
         setContent {
-            val themePreference = remember { ThemeStore(this).read() }
-            ReFineIdTheme(darkTheme = themePreference.resolve(isSystemInDarkTheme())) {
+            ReFineIdTheme {
                 ExternalKeyPinScreen(
                     callerLabel = prompt.callerLabel,
                     onSubmit = ::submitPin,

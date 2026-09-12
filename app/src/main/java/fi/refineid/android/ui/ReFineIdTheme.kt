@@ -43,7 +43,7 @@ private val ReFineIdColors =
  */
 private val ReFineIdDarkColors = darkColorScheme()
 
-/** Effective dark flag for status colors, following the in-app override. */
+/** Effective dark flag for status colors, following the system theme. */
 internal val LocalRefineIdDarkTheme = compositionLocalOf { false }
 
 @Suppress("FunctionName", "ktlint:standard:function-naming")

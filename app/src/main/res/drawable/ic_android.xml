@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbol: android (outlined) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:fillColor="#FF000000"
+      android:pathData="M 1 18 q 0.225 -2.675 1.6375 -4.925 T 6.4 9.5 l -1.85 -3.2 q -0.15 -0.225 -0.075 -0.475 t 0.325 -0.375 q 0.2 -0.125 0.45 -0.05 t 0.4 0.3 l 1.85 3.2 q 2.15 -0.9 4.5 -0.9 t 4.5 0.9 l 1.85 -3.2 q 0.15 -0.225 0.4 -0.3 t 0.45 0.05 q 0.25 0.125 0.325 0.375 t -0.075 0.475 l -1.85 3.2 q 2.35 1.325 3.7625 3.575 T 23 18 H 1 Z m 6 -2.75 q 0.525 0 0.8875 -0.3625 T 8.25 14 q 0 -0.525 -0.3625 -0.8875 T 7 12.75 q -0.525 0 -0.8875 0.3625 T 5.75 14 q 0 0.525 0.3625 0.8875 T 7 15.25 Z m 10 0 q 0.525 0 0.8875 -0.3625 T 18.25 14 q 0 -0.525 -0.3625 -0.8875 T 17 12.75 q -0.525 0 -0.8875 0.3625 T 15.75 14 q 0 0.525 0.3625 0.8875 T 17 15.25 Z"/>
+</vector>

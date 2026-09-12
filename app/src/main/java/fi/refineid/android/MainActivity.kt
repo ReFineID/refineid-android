@@ -9,16 +9,13 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import fi.refineid.android.diagnostics.AppTrace
 import fi.refineid.android.diagnostics.BuildDiagnostics
 import fi.refineid.android.nfc.NfcReaderController
 import fi.refineid.android.nfc.NfcReaderSnapshot
-import fi.refineid.android.settings.ThemeStore
 import fi.refineid.android.ui.MainScreen
 import fi.refineid.android.ui.ReFineIdTheme
 import fi.refineid.android.usb.CardPresence
@@ -72,15 +69,8 @@ class MainActivity : ComponentActivity() {
         handlePairIntent(intent)
 
         setContent {
-            val themeStore = remember { ThemeStore(this) }
-            var themePreference by remember { mutableStateOf(themeStore.read()) }
-            ReFineIdTheme(darkTheme = themePreference.resolve(isSystemInDarkTheme())) {
+            ReFineIdTheme {
                 MainScreen(
-                    themePreference = themePreference,
-                    onThemePreferenceSelected = { selected ->
-                        themeStore.write(selected)
-                        themePreference = selected
-                    },
                     snapshot = readerSnapshot,
                     onRequestPermission = readerController::requestPermission,
                     onSelectUsbDevice = readerController::selectDevice,
