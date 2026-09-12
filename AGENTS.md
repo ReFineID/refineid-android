@@ -44,6 +44,16 @@
   retry count are known.
 - Disable application backup and screen capture wherever sensitive data can
   appear.
+- Dependency & supply-chain audits:
+  - Push-time gates stay fast: pre-push runs `./gradlew check` and locked `cargo audit`.
+    Never wire slow vulnerability scanners (like OWASP Dependency-Check) into git hooks
+    due to NVD API rate limits and long database sync times.
+  - Periodic deep vulnerability scans: Run `Scripts/audit-dependencies.sh` (which runs
+    `cargo audit`, `osv-scanner`, and OWASP `dependency-check`) whenever:
+    1. Adding or modifying dependencies in `gradle/libs.versions.toml` or `build.gradle.kts`.
+    2. Modifying native Rust dependencies in `Cargo.toml` or `Cargo.lock`.
+    3. Preparing a production release (`Scripts/build-release-apk.sh` or `Scripts/release-play-store.sh`).
+    4. Explicitly asked to audit dependencies or investigate supply-chain vulnerabilities.
 
 ## Engineering
 

@@ -78,6 +78,7 @@ val repositoryShellScripts =
         ".githooks/pre-push",
         "Scripts/apply-aosp-patches.sh",
         "Scripts/audit-aosp-patches.sh",
+        "Scripts/audit-dependencies.sh",
         "Scripts/bootstrap-macos.sh",
         "Scripts/build-aosp-flame.sh",
         "Scripts/build-release-apk.sh",

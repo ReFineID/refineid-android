@@ -13,4 +13,10 @@ cd "$(dirname "$0")/.."
 source Scripts/gradle-environment.sh
 
 ./gradlew check
+
+if command -v cargo-audit > /dev/null || cargo audit --version > /dev/null 2>&1; then
+  (cd native/refineid-android-core && cargo audit)
+  (cd native/refineid-rapp-android && cargo audit)
+fi
+
 echo "pre-push gates passed"
