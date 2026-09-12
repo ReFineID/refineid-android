@@ -63,4 +63,21 @@ class CanSessionStoreTest {
         assertNull(CanSessionStore.currentCan)
         assertNull(CanSessionStore.canBytes())
     }
+
+    @Test
+    fun retainsCanAcrossCardRemovalUntilReaderDisconnect() {
+        CanSessionStore.remember("123456")
+        assertTrue(CanSessionStore.hasCan)
+        assertEquals("123456", CanSessionStore.currentCan)
+
+        // Card removal from reader: CAN stays cached for subsequent taps
+        assertTrue(CanSessionStore.hasCan)
+        assertEquals("123456", CanSessionStore.currentCan)
+
+        // Reader disconnects from device: CAN cache drops
+        CanSessionStore.drop()
+        assertFalse(CanSessionStore.hasCan)
+        assertNull(CanSessionStore.currentCan)
+        assertNull(CanSessionStore.canBytes())
+    }
 }

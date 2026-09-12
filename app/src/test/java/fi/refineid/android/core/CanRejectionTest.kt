@@ -97,4 +97,20 @@ class CanRejectionTest {
         assertTrue(CanSessionStore.hasCan)
         assertEquals("987654", CanSessionStore.currentCan)
     }
+
+    @Test
+    fun clearsCanOnReaderDetachedAndPreservesBlocklist() {
+        val baseTime = 2_000_000L
+        CanSessionStore.remember("987654", now = baseTime)
+        CanSessionStore.recordRejected("987654", now = baseTime)
+        CanSessionStore.remember("123456", now = baseTime)
+        assertTrue(CanSessionStore.hasCan)
+        assertEquals("123456", CanSessionStore.currentCan)
+
+        // Detaching reader clears the active CAN cache, but blocklist cooldown remains intact
+        CanSessionStore.drop()
+        assertFalse(CanSessionStore.hasCan)
+        assertNull(CanSessionStore.currentCan)
+        assertTrue(CanSessionStore.isBlocked("987654", now = baseTime))
+    }
 }
