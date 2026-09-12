@@ -94,6 +94,12 @@
 - Commit often when the build and lint are clean. Push when a feature is
   ready. Subject and body only: no AI attribution, co-author, sign-off, or
   review trailers.
+- One task, one worktree (`../refineid-android-<topic>`) on one
+  `agent/<topic>` branch, one pull request per branch. Each worktree carries
+  a `WHATSUP.md` work log; run `Scripts/agent-housekeeping.sh` when starting
+  and keep the house clean. Merge the pull request once CI is green, then
+  remove the worktree and branch and fast-forward `main`. Full workflow:
+  `doc/process/agent-worktrees.md`.
 - Never put a git worktree under `/tmp`; keep worktrees beside the repository.
 - Never poll background commands or set rapid check timers (e.g. 10s-30s). When running builds, tests, or async tasks, execute asynchronously and wait strictly for system completion notifications.
 - When stuck, research with fellow AI available.

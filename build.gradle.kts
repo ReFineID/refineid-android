@@ -76,6 +76,7 @@ val repositoryShellScripts =
     listOf(
         ".githooks/pre-commit",
         ".githooks/pre-push",
+        "Scripts/agent-housekeeping.sh",
         "Scripts/apply-aosp-patches.sh",
         "Scripts/audit-aosp-patches.sh",
         "Scripts/audit-dependencies.sh",
