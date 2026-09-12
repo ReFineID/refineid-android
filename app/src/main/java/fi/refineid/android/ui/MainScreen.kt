@@ -761,7 +761,7 @@ private fun DiagnosticsFooter(onOpenDiagnostics: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_stethoscope),
+                painter = painterResource(R.drawable.ic_android),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),
