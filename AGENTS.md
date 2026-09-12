@@ -69,9 +69,9 @@
 - Add tests for malformed and truncated inputs, not just successful paths.
 - No magic codes: name every protocol code, size, offset, and limit, or derive
   it from a named domain constant.
-- Comments describe what the code does or the constraint it honors, never why
-  it changed. A past bug, a deprecation, the reasoning for a fix belongs in
-  the git commit message, not the source.
+- Comments explain what the code does now and the constraints it honors.
+  Past bugs, previous implementations, and explanations of what a fix changed
+  belong in commit messages, not source comments.
 - Record findings and durable knowledge as repository documentation under
   `doc/`, written for public distribution, not in private or per-session
   assistant memory. A committed document is the shared source of truth; redact
@@ -110,3 +110,12 @@
 - This repository and the referenced RefineID sources are Apache-2.0.
 - Retain existing copyright and license notices when adapting source between
   repositories.
+
+## Commits and integration
+
+- Commits are cheap backups. Make small, focused commits often, without
+  asking for permission, once the required commit checks pass.
+- Complete the integration without waiting for another instruction: push
+  the task branch, open a pull request, and merge it into `main` once the
+  required checks pass. Sync local `main` with the merged remote.
+  Use merge commits to preserve the branch history; do not squash it.
