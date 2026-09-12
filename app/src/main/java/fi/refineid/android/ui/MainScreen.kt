@@ -35,7 +35,6 @@ import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -704,7 +703,7 @@ private fun HomeScreen(
                         )
                         HorizontalDivider(modifier = Modifier.padding(start = GROUP_DIVIDER_INSET))
                         NavigationRow(
-                            icon = Icons.Outlined.Share,
+                            icon = painterResource(R.drawable.ic_satellite_alt),
                             label = stringResource(R.string.pair_computer),
                             tag = "RappPairingRow",
                             onClick = onOpenPairing,
