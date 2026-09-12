@@ -87,6 +87,9 @@ while IFS= read -r line; do
       fi
       size="$(du -sh "${path}" 2>/dev/null | cut -f1)"
       echo "--- ${path} [${size}]"
+      if [[ "${path}" != *"/src/wt/"* ]]; then
+        echo "  policy: NON-COMPLIANT (worktree must live under ~/src/wt/)"
+      fi
       echo "  branch: ${branch} (merged: ${merged}, dirty: ${dirty}, unpushed: ${unpushed})"
       echo "  claim: ${claim_state}"
       [[ -n "${purpose}" ]] && echo "  purpose: ${purpose}"
